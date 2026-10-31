@@ -8,7 +8,26 @@ dello Studio di [minori](minori.md) (dati e piano del 4.1, banco del 28/10). Dec
 (§ 5, cap. 7 e 8); analisi del passo 4 nella issue #243. Chi lavora su quest'area aggiorna questo
 file; in CLAUDE.md al più una riga.*
 
-**Stato al 29/10.** Dati e piano a giorni (4.1, #280) e **pagine dei materiali** (4.2, #281): dallo
+**Stato al 31/10 (tappa dell'epic #251 su main).** Lo Studio è fatto per tutti i passi del progetto
+(4–10) più gli esercizi guidati (#278), la libreria con le mini-app (#297), i premi (#296) e
+l'importazione dei materiali con la condivisione dal telefono (#298, senza il Takeout). **Cosa c'è**:
+verifiche con la data e i materiali (foto, PDF, file e ZIP), lettura e argomenti col lettore qwen3.6
+quando la DGX è libera, piano a giorni del codice, home sul telefono e sul PC, tool `studio` e altri
+sette, resoconto e riepilogo, carte, mappa (anche libera), verifica finta e interrogazione simulata
+con l'esito dal codice, ripasso da ascoltare, vista e indicazioni del tutore, serie e stelle.
+**Di serie**: `studio_modo` spento; con lo Studio acceso sono accese la lettura e gli argomenti
+(`studio_lettura`, `studio_argomenti`: gli argomenti arrivano proposti e li conferma la persona) e
+le parti senza modello (`studio_mappa_libera`, `studio_ascolta`, `studio_libreria`,
+`studio_indicazioni`, `studio_importa`, `studio_serie`, `studio_stelle`); in **ombra** le
+generazioni del modello e ciò che è da misurare (`studio_padronanza`, `studio_carte_genera`, `studio_mappa_genera`,
+`studio_domande_genera`, `studio_mappa_consigli`, `studio_esercizi`, `studio_preparazione`);
+`studio_duelli` spento. Sulla DGX `studio_modo: attivo` e `studio_mappa_genera: attiva` (tabella
+«Interruttori sulla DGX» di [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)). **Restano**: il
+Takeout di Classroom (#298, passo manuale), la condivisione da Android con Family Link, le foto e lo
+scritto a mano veri, i banchi sulla DGX prima di accendere le generazioni, #359, #365, #370; la
+decisione 0035 è ancora «proposta». Le voci datate sono sotto, la più nuova in alto.
+
+*Stato dal 29/10 al 31/10, voce per voce (storico):* Dati e piano a giorni (4.1, #280) e **pagine dei materiali** (4.2, #281): dallo
 schermo personale `POST /api/studio/pagina` prende foto (bordi trovati dal telefono con `bordi.js`
 e ricontrollati dal server, raddrizzate a 1600 px, nitidezza) e PDF (divisi con pypdfium2), dentro
 gli orari, fuori dalla conversazione; le pagine restano «da leggere». La pagina minima del telefono

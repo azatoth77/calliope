@@ -5,8 +5,14 @@
 In alto lo stato e i prossimi passi; poi le proposte delle analisi, ciò che resta da fare per
 area e, in fondo, la roadmap com'era, con le voci fatte segnate. Nessuna data promessa.*
 
-## Stato (18/10/2026)
+## Stato (18/10/2026; telefono e Studio al 31/10)
 
+- **Telefono a sezioni e Studio** (epic #251, 27–31/10, sezione «Fatto dal 27 al 31/10» qui sotto):
+  fatti tutti i passi del progetto
+  [`ricerche/2026-10-27-telefono-sezioni-e-studio.md`](ricerche/2026-10-27-telefono-sezioni-e-studio.md)
+  (1–3 del telefono, 4–10 dello Studio) più gli esercizi guidati, la libreria, i premi e
+  l'importazione dei file; resta aperta la parte del Takeout della #298. Lo Studio è spento di serie
+  e acceso sulla DGX; le generazioni del lettore restano in ombra fino ai banchi.
 - **Conversazione di stanza** (decisione [0029](decisioni/0029-conversazione-di-stanza.md)): fatti
   i passi 0–6 del piano (il passo 3, corsia lenta, il 14/10 sera), la tenuta su disco e i conoscenti
   (decisione [0030](decisioni/0030-conoscenti.md)), ognuno dietro il suo interruttore e spento di
@@ -50,6 +56,24 @@ area e, in fondo, la roadmap com'era, con le voci fatte segnate. Nessuna data pr
 - **Politica per valore** accesa dal 09/10 sera; la fase 5 (giudice sui compiti) non si fa ora (S8).
 - Trascrizione: confronto A / B / B2 / C chiuso il 07/10, si resta su A (correzione spenta)
   ([`aree/stt-tts.md`](aree/stt-tts.md)).
+
+### Fatto dal 27 al 31/10 (epic #251)
+
+Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md), [schermi-telefono](aree/schermi-telefono.md) e
+[studio](aree/studio.md).
+
+- **Telefono a sezioni** (passi 1, 1b, 1c: #238–#240): barra, voce sopra la barra, Io, «In auto»,
+  accento personale, sezioni per età, lo schermo personale del PC a sezioni; layout compatto (#277).
+- **Le mie cose** (passo 2: #241, #256–#260) con le pagine per tipo e il canale «tocco» (#266);
+  **Conversazione** con le schede dentro e i filtri (passo 3: #242), le miniature delle foto
+  (decisione [0034](decisioni/0034-miniature-nella-conversazione.md), #272), scrivere nella
+  Conversazione (#301).
+- **Studio** (decisione [0035](decisioni/0035-studio.md)): passo 4 (#243, #279–#284), 4b (#244),
+  5 padronanza in ombra (#245), 6 carte (#246), 7 mappa (#247, #328), 8 verifica finta e
+  interrogazione (#248), 9 ripasso da ascoltare (#249), 10 vista del tutore (#250, #285); esercizi
+  guidati (#278), libreria e mini-app (#297), premi (#296), importazione e condivisione (#298, senza
+  il Takeout). Questo prende il posto delle voci S1–S5 della coda del 12/10 (storiche, sezione 4).
+- Restano aperte #298 (Takeout), #359, #365, #370 e #264 (il tocco sul vero).
 
 ### Fatto dal 15 al 17/10
 
@@ -471,7 +495,8 @@ e nelle issue #243–#250, #278, #280–#285.]*
    fotografato; giudizio a parole senza voto numerico; l'audio non si salva. *Da approfondire* ·
    dipende da: il progetto (anche un ascolto lungo senza nome, come nei giochi) *[storico: giudizio
    del 12/10; dal 12/10 sera c'è la prima versione e resta da approfondire solo l'ascolto lungo senza
-   nome (#50)]*. *(12/10 sera:
+   nome (#50)]*. *[31/10: l'interrogazione simulata a voce dai materiali è nello Studio (passo 8,
+   #248), con l'esito deciso dal codice e mai un voto]*. *(12/10 sera:
    prima versione come modalità degli esercizi, `esercizi azione=interroga`: domande aperte
    dall'indice con criteri e giudizio del modello, «da guardare» per i tutori, conti dal codice,
    pagina del libro chiesta se manca; resta l'ascolto lungo senza nome, [minori](aree/minori.md).)*
@@ -504,7 +529,8 @@ e nelle issue #243–#250, #278, #280–#285.]*
     accenderlo di serie.]*
 11. **Documenti degli agenti al satellite**: fatto in gran parte dal 07/10 (il risultato va al
     portatile con «Lo apro?»); restano il telefono e più satelliti personali della stessa persona.
-    *Quasi*.
+    *Quasi*. *[28/10: il telefono ha la pagina Documenti con «Scarica» (#259); restano più
+    satelliti personali della stessa persona.]*
 12. **Isolamento vero della sandbox su Windows** (S12: resta): utente dedicato, AppContainer o
     WSL2; serve alla taglia ridotta su un PC. *Da approfondire* · dipende da: la taglia ridotta
     (0.3).
