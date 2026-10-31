@@ -25,6 +25,9 @@ giorni calcolato dal codice. Rifatto da capo dopo aver tolto il vecchio processo
 
 - `mappa.py`, `mappe.py`, `mappa_pdf.py` (30/10, passo 7, #247): la mappa concettuale (lo
   scheletro, la mia mappa, a memoria), il controllo del codice, i metodi di `Studio` e il PDF.
+
+- `ascolta.py` (31/10, passo 9, #249): il ripasso da ascoltare, un copione composto dal codice
+  (le pagine del piano e le carte), letto a voce dal ciclo e preparato in WAV per lo schermo.
 """
 
 from .servizio import (ATTIVO, CONOSCENZA, FRASI_LETTURA, MODI, OMBRA, SPENTO, UMORI,

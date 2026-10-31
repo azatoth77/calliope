@@ -795,6 +795,28 @@ class Avvio:
                 s.studio.avvia_lettura(getattr(s, "lavori", None))
             except Exception as e:  # noqa: BLE001 — la lettura non ferma l'avvio
                 print(f"[STUDIO] lettura non avviata: {type(e).__name__}: {e}", flush=True)
+            self._ripasso_da_ascoltare()
+
+    def _ripasso_da_ascoltare(self):
+        """Il ripasso da ascoltare (31/10, passo 9, #249): la «voce del libro» caricata in secondo
+        piano, e la sintesi dell'audio per lo schermo con le voci e la pronuncia dello Speaker,
+        che cede alla voce dal vivo (studio/ascolta.py, `Sintesi`)."""
+        cfg, s = self.cfg, self.s
+        speaker = getattr(self, "speaker", None)
+        if s.studio is None or not s.studio.per_modello() or speaker is None:
+            return
+        from .studio import ascolta as _ascolta
+        if _ascolta.modo(cfg) != "attiva":
+            return
+        libro = str(getattr(cfg, "studio_ascolta_voce", "") or "")
+        libro = libro if libro and Path(libro).is_file() else None
+        if libro:
+            speaker.preload([libro])
+        s.studio.sintesi = _ascolta.Sintesi(
+            speaker.voce_per, cfg.piper_voice, libro, pronuncia=getattr(speaker, "pronuncia", None),
+            attivita=getattr(speaker, "_attivita", None), log=lambda m: print(m, flush=True))
+        print(f"[STUDIO] ripasso da ascoltare: voce del libro "
+              f"{Path(libro).name if libro else 'quella di Calliope'}", flush=True)
         # Gli avvisi di pericolo (14/10 sera): l'audio nel cassetto del tutore, la trascrizione
         # di un avviso di prima ricostruita dalla stanza o dalla conversazione del minore, e
         # `calliope conserva --svuota` che li toglie

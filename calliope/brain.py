@@ -6360,12 +6360,16 @@ class Brain:
             riga = vista.riga(self.tool_ctx, st)
             chi = chi_di(self.tool_ctx)
             sess = st.nota_sessione(chi.id) if chi is not None else ""
+            # Il ripasso da ascoltare in pausa (31/10, passo 9, #249): solo numeri
+            ascolto = (st.nota_ascolto(chi.id) if chi is not None
+                       and hasattr(st, "nota_ascolto") else "")
         except Exception:  # noqa: BLE001 — lo Studio non ferma la risposta
             return ""
-        for nome, x in (("studio_vista", riga), ("studio_sessione", sess)):
+        for nome, x in (("studio_vista", riga), ("studio_sessione", sess),
+                        ("studio_ascolta_pausa", ascolto)):
             if x and nome not in (getattr(self, "last_rules", None) or ()):
                 self._rule(nome)
-        return " ".join(x for x in (riga, sess) if x)
+        return " ".join(x for x in (riga, sess, ascolto) if x)
 
     def _minor_note(self, name: str | None) -> str:
         """Il preset di un minore come dato del turno (minori.dato_turno), "" per un adulto;

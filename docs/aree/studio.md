@@ -32,7 +32,9 @@ dal codice a «Ho finito», gli indicatori del metodo per giro), lo **scheletro 
 composti, radice, seconda passata per le isole) e **«Parliamone»** (`studio_mappa_consigli`, ombra di
 serie; sezione sotto). Dal 31/10 le **prove** (8, #248): il tipo della prova vera (scritta o
 interrogazione «dal»), la verifica finta scritta e l'interrogazione simulata a voce, sempre tutte e
-due, con l'esito deciso dal codice e le domande dal lettore in ombra di serie (sezione sotto). Lo
+due, con l'esito deciso dal codice e le domande dal lettore in ombra di serie (sezione sotto). Dal
+31/10 il **ripasso da ascoltare** (9, #249): le pagine lette del piano e le carte, lette da Piper a
+voce e sullo schermo, con un copione scritto dal codice e la «voce del libro» (sezione sotto). Lo
 Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
@@ -50,6 +52,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Scheletro della mappa generato dalle pagine lette: le triple controllate dal codice, proposte da confermare (dal 30/10 sera, passo 7, seconda parte, #247; `studio_mappa_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato | `calliope/studio/mappa_genera.py` → `corpo`, `messaggi`, `firma`, `leggi`, `scheletro`, `modo`, `collega_isole` e `parti_fondate` (dal 31/10, #344); `prove/studio_vllm_finto.py` (le uscite del banco del 31/10); `calliope/studio/lettura.py` → `Lettore.genera_mappa`; `calliope/studio/mappe.py` → `verifiche_per_mappa`, `proponi_mappa`; `prove/manuali/banco_studio.py` (fase «mappa»); prova `prove/prova_studio_mappa_genera.py` |
 | Mappa libera: da zero con lo scheletro nascosto, «Un indizio» e «Mostra», «Ho finito» col confronto del codice e i tentativi una volta per giro, gli indicatori del metodo per giro; scheletro connesso (doppioni, composti, radice, seconda passata per le isole); «Parliamone» (dal 30/10 notte, passo 7c, #328; schema «studio» alla versione 9; `studio_mappa_libera` attiva, `studio_mappa_consigli` ombra di serie) | SQLite (`studio_mappe` tipo «libera», `giri`, `visti`); per la seconda passata qwen3.6 col client e la guardia del lettore; per «Parliamone» il modello della voce, dati in busta | `calliope/studio/mappa.py` → `chiave_insieme`, `parti`, `componenti`, `radice`, `concetti_chiave`, `forma`, `voci_riferimento`, `confronta`, `indicatori`, `rispetto_a_prima`, `tentativo_libera`, `svelati`; `calliope/studio/mappa_genera.py` → `corpo_connessione`, `connetti`; `calliope/studio/mappe.py` → `inizia_libera`, `indizio_libera`, `mostra_concetto`, `finisci_libera`, `consigli_mappa`, `misura_consigli`; `calliope/tools/studio.py` → `studio_mappa_consigli`; `calliope/brain.py` → `_consigli_chiudi`, `_consigli_ombra`; prove `prove/prova_studio_mappa_libera.py`, `prove/prova_studio_mappa_libera_pagina.py` |
 | Prove: il tipo della prova vera e la finestra «dal», le domande (scelta multipla, vero o falso, numero con l'unità, parole chiave, aperta; anche le carte), la verifica finta scritta e l'interrogazione simulata a voce, l'esito del codice, «da rivedere» della persona o del tutore, la generazione delle domande dal lettore (dal 31/10, passo 8, #248; schema «studio» alla versione 10; `studio_domande_genera` ombra di serie) | SQLite (`studio_domande`, `studio_prove`); qwen3.6 col client e la guardia del lettore per la generazione; libreria standard per l'esito | `calliope/studio/risposte.py` → `prepara`, `valuta`, `attesa_detta`; `calliope/studio/unita.py` → `leggi`, `una_misura`, `confronta`; `calliope/studio/prove.py` → `Prove` (in `Studio`): `aggiungi_domanda`, `domande`, `conferma_domande`, `inizia_prova`, `rispondi_prova`, `consegna_prova`, `rivedi_voce`, `orale_inizia`, `orale_risposta`, `orale_basta`, `_chiudi_prove`, `_conto_prove`; `calliope/studio/domande_genera.py` → `corpo`, `proposte`, `firma`; `calliope/studio/lettura.py` → `Lettore.genera_domande`; `calliope/studio/servizio.py` → `conclusa`, `_fine`; `calliope/tools/studio.py` → `studio_interroga`, azioni `tipo`, `conclusa`, `prove`; `calliope/schermi/server.py` → `POST /api/studio/prova`; `calliope/schermi/pagina/studio.js` (la sezione «Prove»); prove `prove/prova_studio_prove.py`, `prove/prova_studio_domande_genera.py`, `prove/prova_studio_prove_pagina.py` |
+| Ripasso da ascoltare: il copione a parti composto dal codice (le pagine del piano ripulite per la voce, le carte con la pausa per pensare), la lettura a voce dopo la risposta col barge-in, riprendi e ripeti, l'audio delle parti per lo schermo, la tenuta della cache (dal 31/10, passo 9, #249; schema «studio» invariato, alla versione 10; `studio_ascolta` attiva di serie con lo Studio, `studio_ascolta_voce`, `studio_ascolta_giorni`) | Piper con le voci dello Speaker (la voce di Calliope e la «voce del libro»), `wave` della libreria standard; niente modello | `calliope/studio/ascolta.py` → `paragrafi`, `frasi`, `scarto`, `frasi_pagina`, `componi`, `Copione`, `pezzi`, `sentite`, `da_ripetere`, `leggi`, `Sintesi`, `togli_audio`, `Ascolti` (in `Studio`): `ascolto_prepara`, `ascolto_vale`, `ascolto_fermo`, `nota_ascolto`, `ascolto_parti`, `ascolto_audio`; `calliope/pronuncia.py` → `per_ripasso`, `formule_dette`, `sigle_dette`, `romani_detti`, `simboli_detti`; `calliope/tts.py` → `sintesi_pcm`, `Speaker.say(spezza, voce)`, `silenzio`, `voce_per`; `calliope/eventi/uscita.py` → `turno_lettura`, `leggi`, `pausa`; `calliope/ciclo.py` → `_leggi_ripasso`; `calliope/tools/studio.py` → `studio_ascolta`; `calliope/schermi/server.py` → `POST /api/studio/ascolta`; `calliope/schermi/pagina/studio.js` («Ascolta»); prove `prove/prova_studio_ascolta.py`, `prove/prova_studio_ascolta_pagina.py`, `prove/prova_valore.py` (il ripasso attraverso Brain) |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
@@ -221,8 +224,10 @@ ha i suoi casi nelle prove.
 2. **Sullo schermo non si distingueva.** La vista passa `debole` e l'autore «codice»; nel disegno
    SVG la linea è tratteggiata, nell'elenco al posto di «non lo trovo nelle pagine che cita» c'è
    «legame aggiunto da Calliope per unire le parti: non è nelle pagine», senza «Tieni» (righe del
-   debole in `studio.js`; il numero di versione della pagina non è cambiato, per non scontrarsi
-   con la PR #345 aperta). Controllo in `prova_studio_mappa_pagina.py`.
+   debole in `studio.js`; *[storico fino all'unione della #345 nel ramo: «il numero di versione
+   della pagina non è cambiato»]*: dopo l'unione la pagina e il service worker del telefono sono
+   alla **v33**, altrimenti il telefono continuava a servire la pagina vecchia). Controllo in
+   `prova_studio_mappa_pagina.py`.
 3. **La conversione dei codici inventava fatti puliti** («A4», il formato del foglio, diventava
    «Le proiezioni ortogonali», l'argomento 4). Ora un codice d'argomento si converte solo se più di
    metà dei capi della risposta sono codici (il caso del banco, A1…A8) o se è l'argomento della sua
@@ -254,6 +259,269 @@ ha i suoi casi nelle prove.
 Misure col vLLM finto dopo la revisione: mappa come sopra (matematica 8/8 nelle pagine, tutti da
 controllare; una parte sola 67 %, coi deboli 100 %); domande fondate 17/22, 21/23, 24/28,
 `auto_sbagliate` 0, 0, 0.
+
+## Il ripasso da ascoltare (31/10, issue #249, ramo `issue-249-studio-ripasso-ascolto`)
+
+*Passo 9 dell'epic #251. Decisione [0035](../decisioni/0035-studio.md), punto 42. L'analisi è nel
+commento della #249. Viene da Studio 6 del progetto (§ 5, § 5.10) e dalla decisione 7 del 27/10:
+Piper con le voci italiane; i motori più espressivi si provano a parte.*
+
+**Il testo lo scrive il codice, non un modello.** Il copione di una verifica si compone da ciò che
+la persona ha già confermato:
+- le **pagine** degli argomenti del piano (tenuti e aggiunti), nell'ordine dell'elenco; ogni
+  pagina va al primo argomento che la cita, così non si legge due volte;
+- le **carte** attive del piano: «Domanda 1», la domanda, 4 secondi per pensare, «Risposta», la
+  risposta.
+
+Il riassunto del lettore (qwen3.6 in ombra, con la guardia e una fase del banco) resta per una
+seconda parte. Un errore detto con sicurezza mentre si ripassa è il più difficile da accorgersene.
+Le pagine lette ad alta voce sono anche lo strumento compensativo classico (la sintesi vocale del
+libro per i DSA). Quindi qui **niente generazione e niente fase del banco**.
+
+Il copione è a **parti**:
+- una parte per argomento, divisa fra due pagine quando passa `PARTE_MAX_CAR` (6000 caratteri,
+  circa 7 minuti);
+- l'ultima parte sono le carte.
+
+Ogni parte comincia con una frase di Calliope: «Parte 2 di 8: argomento 2, pagina 113.». Le
+pagine si dicono col numero stampato solo se è fatto di cifre, altrimenti «P3». Una pagina non
+ancora letta si dice e si salta.
+
+A voce si sceglie cosa ascoltare:
+- «oggi» (di serie): le pagine del giorno del piano; nei giorni di ripasso, o senza pagine oggi,
+  le carte;
+- «tutto»;
+- un argomento per numero (anche quello che in «tutto» divide la pagina con un altro);
+- le carte.
+
+Lo schermo ha sempre «tutto», con «oggi» segnato sulle parti di oggi.
+
+**Il testo per la voce** (`frasi_pagina`). Si tolgono:
+- i numeri di pagina e di paragrafo («7.1 »);
+- i segni degli elenchi e del markdown;
+- le tabelle, che diventano righe con le virgole;
+- i `[[ ]]` (sarebbero fonemi per Piper) e «[?]».
+
+Le parole spezzate a fine riga si ricuciono, e un titolo prende il punto. Le frasi oltre 280
+caratteri si tagliano su «;» e «,». **Non si dicono mai**:
+- le frasi con un indirizzo (principio 5);
+- quelle col nome di Calliope: la voce si interromperebbe da sola, ed è un ordine rivolto a lei;
+- i messaggi per un assistente («per l'assistente», «assistente vocale», «ignora le regole»,
+  «istruzioni precedenti»);
+- gli annunci della scuola (`argomenti._ANNUNCIO`);
+- sulle pagine con «ISTRUZIONI: sì», le frasi che cominciano con un ordine (`_ORDINE`): sulle altre
+  «Scrivi…» e «Rispondi…» sono gli esercizi.
+
+Al loro posto Calliope dice una volta per pagina «Qui c'è un messaggio per un assistente: lo salto»
+o «Qui c'è un indirizzo: non lo leggo». Nel registro vanno solo i conti. Sono forme, non significati
+(principio 10), coi contrari nella prova: «l'assistente di laboratorio» e «la verifica è giovedì»
+si dicono.
+
+**Formule, sigle e unità** (`pronuncia.per_ripasso`). Valgono solo per il testo del ripasso: la
+voce dal vivo non cambia.
+- Formule chimiche lettera per lettera all'italiana: «CO₂» → «ci o due», «NaCl» → «enne a ci
+  elle». È una formula solo con simboli di elementi, e con un numero o un simbolo di due lettere:
+  «Il», «In», «PC» restano.
+- Le sigle che non si leggono come una parola si compitano: «DNA» → «di enne a», «TV» → «ti vu»;
+  «ONU», «USA», «ISTAT» restano.
+- I numeri romani davanti a «secolo» o dopo un nome diventano ordinali; «vitamina C» resta.
+- I simboli matematici solo fra due termini: «a² + b² = c²». Il trattino fra due parole è una
+  pausa; una data resta una data.
+- Le unità dopo un numero, prima dei simboli: «m²» resta «metri quadrati».
+
+**Due voci di Piper.** Le frasi del codice vanno nella voce di Calliope. Il materiale (pagine,
+titoli, carte) va nella «voce del libro», `studio_ascolta_voce`, di serie
+`voices/it_IT-paola-medium.onnx`. Così chi ascolta distingue sempre Calliope dalla pagina, e
+nessuna frase del codice contiene testo delle pagine. Se la voce del libro manca o ha un'altra
+frequenza, tutto va nella voce di Calliope.
+
+`riferire` non serve: controlla ciò che un modello dice a partire da dati non fidati, e qui nessun
+modello scrive.
+
+**A voce.** Il tool è `studio_ascolta`, con le azioni `inizia`, `riprendi`, `ripeti` e `ferma`:
+- classe «sicuro» **senza fonte non fidata**, non `non_fidato`, mai toccabile;
+- il risultato ha solo conti e la frase del codice («Comincio: 8 parti, circa 5 minuti. Per
+  fermarmi di' «Calliope, basta».»), mai testo né titoli;
+- per iscritto, o con la voce muta, rimanda a «Ascolta» sullo schermo.
+
+La lettura la fa il ciclo **dopo la risposta** (`Ciclo._leggi_ripasso` e `ascolta.leggi`):
+- a pezzi di 3 frasi, ognuno in un turno della voce suo (`Uscita.turno_lettura`);
+- col guardiano del nome della risposta (`_ascolta_il_nome`, livelli A e B), quindi l'half-duplex
+  resta: mentre legge si ascolta solo il nome, niente trascrizioni;
+- prima di ogni pezzo la fermano una prova aperta, gli orari del minore, lo Studio spento o un
+  annuncio in coda (un timer), con la frase del codice; la posizione resta.
+
+`Uscita.leggi` non dà niente all'osservatore (eventi) né alla risposta scritta sullo schermo, e
+`turno_lettura` non dice all'osservatore le frasi sentite. Quindi il testo delle pagine non entra
+nella storia, negli eventi né nel registro dei turni, dove va solo `ripasso` coi conti. Un
+barge-in a metà pezzo non apre un turno nuovo (lo cancellerebbe). La pausa delle carte è un
+silenzio vero in coda alla voce (`tts._Silenzio`), nell'ordine delle frasi.
+
+**Stop, pausa, «ripeti»** col barge-in di oggi:
+- «Calliope, basta» è la regola dello stop: la posizione (la prima frase non sentita per intero,
+  da `played`, anche dal satellite) resta in memoria per 2 ore, mai su disco;
+- «riprendi» riparte da lì con «Riprendo dalla parte N»;
+- «ripeti» riparte dall'inizio del paragrafo (o da quello prima, se non era cominciato);
+- «ferma» chiude;
+- un ripasso cambiato intanto riparte dalla stessa parte e lo dice;
+- nei dati del turno una riga del codice, solo numeri: «ripasso da ascoltare in pausa alla parte 2
+  di 8…» (regola `studio_ascolta_pausa`);
+- «dimentica» toglie la posizione.
+
+**Sullo schermo («Ascolta»)** c'è la sezione nella home, sotto la mappa:
+- le parti col titolo (un dato: textContent), le pagine, la durata e «oggi»;
+- il lettore con l'avanzamento, −15 s, Ascolta e Pausa, la velocità (0,75–1,5×), la parte prima e
+  la parte dopo, «Scarica».
+
+`POST /api/studio/ascolta`:
+- senza azione dà le parti;
+- `audio` dà il WAV di una parte, oppure 202 «la preparo»; intanto prepara la parte dopo;
+- `suona` è il battito ogni 30 s.
+
+La pagina prende il WAV con la sessione nell'intestazione e lo suona da un URL blob, con un
+elemento Audio fuori dal DOM: la home si ridisegna e l'audio non si ferma. La CSP del PC ora ha
+`media-src 'self' blob:`, come quella del telefono. L'audio lo prepara un thread (`Sintesi`) con le
+voci e la pronuncia dello Speaker. Il thread **cede alla voce dal vivo**: aspetta che le voci siano
+ferme da 1,5 s, al più 60 s per frase. Fra le frasi mette 0,35 s, fra i paragrafi 0,8 s, dopo la
+frase della parte 1,2 s.
+
+**Half-duplex sullo schermo:**
+- sul telefono, mentre il ripasso suona, la stanza vale «Calliope parla» (`calliope:ripasso`: i
+  segmenti si buttano);
+- il ripasso si ferma quando il telefono ascolta, pensa o parla (`calliope:voce`), così il nome lo
+  interrompe e la domanda non si mescola all'audio;
+- riparte da solo, 2 s indietro, se Calliope torna a dormire entro 2 minuti: «la domanda va al
+  tutor e poi si riprende»;
+- sul PC personale lo stato viene dalla voce degli schermi;
+- se il PC è legato a un satellite, la sua stanza va in pausa col motivo «ripasso» (2 minuti,
+  rinnovata dal battito quando ne restano meno di 75 s) e si riprende solo se la pausa è ancora
+  quella del ripasso e nessun altro schermo dello stesso satellite suona.
+  *[storico fino alla revisione della PR #345: «5 minuti», mentre l'analisi diceva 2]* **La pausa
+  scelta da una persona non si tocca mai.**
+
+**Durante una prova aperta** della verifica, scritta o orale, **il ripasso si blocca per tutti**,
+anche per il tutore: l'audio si sente nella stanza.
+- Il tool rifiuta, e «riprendi» pure.
+- La lettura a voce si ferma al pezzo dopo (al più 3 frasi).
+- Le parti tornano vuote con «prova», e l'audio dà 409.
+- Il battito lo dice: la pagina ferma il lettore e butta gli audio in memoria.
+
+Alla consegna torna tutto. Un file già salvato con «Scarica» resta sul dispositivo, come il
+libro: la prova si fa a casa.
+
+**L'audio è una cache del testo**, in `studio_cartella/ascolta/<verifica>/<firma>-<parte>.wav`:
+- la firma cambia col copione e con le voci;
+- a ogni ascolto si tocca la data del file;
+- va via con la verifica (tenuta, «dimentica», `--svuota`, in `dati.cancella`);
+- la rotazione toglie quello non ascoltato da `studio_ascolta_giorni` (7) e quello di verifiche
+  che non ci sono più;
+- un file finito dopo che la verifica è andata via non si tiene;
+- le verifiche archiviate restano col loro audio recente, come le pagine.
+
+I minori di casa si conservano come gli adulti (0031). Gli ospiti non hanno lo Studio. L'audio a
+voce non si salva mai.
+
+**Dati e versioni.** Lo schema «studio» resta alla versione 10. Il service worker e
+`PAGINA_VERSIONE` passano a 32. Gli interruttori nuovi sono in `Config`, e `calliope.yaml` è
+rigenerato:
+- `studio_ascolta` (attiva | spenta; attiva di serie con lo Studio, perché non c'è modello);
+- `studio_ascolta_voce`;
+- `studio_ascolta_giorni` (7).
+
+**Le soglie** (iniziali, prudenti):
+- la parte: 6000 caratteri;
+- la frase: 280 caratteri;
+- il pezzo della voce: 3 frasi;
+- la posizione: 2 ore;
+- la pausa delle carte: 4 s;
+- la ripresa sullo schermo: entro 2 minuti;
+- il battito: 30 s, la pausa della stanza 2 minuti (*storico fino alla revisione della PR #345:
+  5*);
+- la cache: 7 giorni.
+
+**Prove** (tutte verdi il 31/10):
+- `prova_studio_ascolta.py`, a secco;
+- `prova_studio_ascolta_pagina.py`: il telefono a 390 e 320 (anche al 125 %) e il PC legato a un
+  satellite;
+- in `prova_valore.py`, `prova_ascolta` attraverso `Brain`: con la pagina ostile fra i materiali
+  niente testo nella storia, «archivia» e «togli» non partono nella stessa risposta, e «riprendi»
+  con la riga dei dati del turno.
+
+**Da provare sul vero:**
+- l'ascolto delle due voci (paola-medium col serena-high della voce) sulla DGX;
+- la riproduzione nella PWA dell'iPhone, con la sessione audio in play-and-record del microfono
+  (dove esce il suono, la ripresa senza un tocco dopo la pausa per la voce);
+- il tempo di sintesi di una parte sulla DGX mentre la voce lavora;
+- la prova d'ascolto dei motori più espressivi (§ 5.10), che resta a parte.
+
+**Limiti noti:**
+- il ripasso a voce occupa la corsia per tutta la lettura (gli annunci lo fermano);
+- il nome di Calliope in una pagina (la musa!) fa saltare quella frase;
+- la taratura della voce attribuisce alla voce di Calliope anche le frasi della voce del libro, che
+  ha costi simili.
+
+### 31/10: la revisione della PR #345
+
+Lo script del revisore (frasi ostili da una pagina, contro `scarto` e `per_ripasso`) è nei casi di
+`prova_studio_ascolta.py`, sezione «la revisione della PR #345».
+
+1. **Il nome storpiato.** Una pagina con «Caliope», «Callíope», «Kalliope», «C a l l i o p e» o
+   «Calliopea» faceva interrompere la voce da sola: il rilevatore della parola sente la storpiatura,
+   ma il controllo cercava il nome esatto. Ora `nome_dentro` toglie gli accenti, legge la k come c,
+   semplifica le doppie, unisce le lettere staccate e tiene una lettera di tolleranza dalle 6
+   lettere, mai sulla prima. Contrari: «Callisto», «Callimaco», «la calle» restano.
+2. **Il nome detto dal libro non diventa un turno.** Prima un'interruzione durante la lettura
+   passava sempre il suo audio al giro dopo (`barge_seed`), e l'audio era quello del libro. Ora il
+   seme vale solo se `known_voice` vi riconosce una persona registrata, come il barge-in di livello
+   B; altrimenti la lettura si ferma e basta (regola `studio_ripasso_fermato_senza_voce`). Col
+   satellite decide lui: vedi la seconda revisione, punto 5.
+3. **Lo scritto non aspetta.** Fra un pezzo e l'altro anche un messaggio scritto da uno schermo
+   (`ingresso`) o la sveglia del ciclo fermano la lettura, come un timer: «Metto in pausa il
+   ripasso: è arrivato un messaggio.» La posizione resta.
+4. **La sintesi per lo schermo si fa vedere.** Ogni frase è fra `attivita.inizio()` e `fine()`,
+   dopo l'attesa della voce dal vivo: la taratura della voce non parte mentre lavora. La sua
+   attività non la fa aspettare da sola (si ricorda l'ultimo segno di vita suo).
+5. **Le parole che svegliano in uso**, non solo il nome: in startrek anche «computer».
+
+Le minori:
+- non si dicono le frasi rivolte ad assistenti di altre marche, in testa o dopo un segno («Alexa,
+  …», «Ok Google», «Ehi Google», «Ehi Siri», «Siri, …», «Hey Cortana», «Ehi assistente»,
+  «Assistente, …»), né «per l'IA»; «Google ha comprato YouTube» si dice;
+- un indirizzo detto a parole («w w w punto sito punto it», «chiocciola», «punto com») è un
+  indirizzo;
+- la pausa della stanza del satellite è di 2 minuti, come nell'analisi;
+- con due schermi sullo stesso satellite la stanza riprende solo quando nessuno dei due suona;
+- i file di una firma vecchia vanno via subito: quando si ascolta, e nella rotazione;
+- `prova_studio_prove_pagina.py` cadeva a volte su «Scrivi una domanda»: controllava la pagina
+  prima che si ridisegnasse. Ora aspetta, e se cade il dettaglio dice cosa manca (salvata, nella
+  pagina, modulo, esito, inizio e fine del testo). Tre giri di fila verdi.
+
+### 31/10: la seconda revisione della PR #345
+
+Gli script del revisore (`falsi.py`, `seme.py`, `filtri.py`) sono nei casi di
+`prova_studio_ascolta.py`.
+
+5. **Il seme del satellite.** Sul satellite il barge-in torna come `SeedRemoto`: un segnale senza
+   audio, che resta sul satellite. La correzione di prima lo passava a `known_voice` come un array
+   di un booleano, e lo buttava sempre: «Calliope, ripeti» fermava la lettura ma «ripeti» non
+   arrivava, sulla DGX a ogni interruzione. *[storico per un commit: «Col satellite il seme non ha
+   audio: nel dubbio non vale»]* Ora `SeedRemoto` porta il motivo e l'esito dell'impronta della
+   voce chiesta nella stessa veglia (livello B; «Parla» toccato vale una persona), e decide quello.
+   Senza esito il seme si tiene: il libro non dice più il nome (`nome_dentro`) e il satellite che
+   suona ignora già il proprio. `known_voice` non riceve più il segnale.
+6. **I confini di parola** dopo «alexa», «siri» e «cortana»: «Siria, Libano e Giordania»,
+   «Alexander Fleming», «Sirio», «Siriani» si dicono.
+7. **«chiocciola» da sola non è un indirizzo**: vale solo fra due parole e con «punto» dopo
+   («mario chiocciola gmail punto com»); «punto it» solo dopo «w w w» o «sito …». «La chiocciola
+   è un mollusco», «il punto com è finito», «al punto 3» si dicono. «Per l'IA» conta solo con i due
+   punti o la virgola dopo.
+
+Le minori:
+- le parole che svegliano comuni (in startrek «computer») valgono solo dove chiamano: in testa alla
+  frase o dopo un segno di punteggiatura. Il nome di Calliope vale dovunque. «Il computer elabora i
+  dati» si dice;
+- una pausa per la sveglia del ciclo (un avviso di un'altra corsia, un tocco) dice solo «Metto in
+  pausa il ripasso.»; «è arrivato un messaggio» resta per lo scritto.
 
 ## Le prove: verifica finta e interrogazione simulata (31/10, issue #248, ramo `issue-248-studio-verifica-finta`)
 

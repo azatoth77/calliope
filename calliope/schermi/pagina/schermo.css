@@ -1340,3 +1340,17 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
    colonne delle pagine, che a 320 px col testo grande li stringeva sotto i 44 px (30/10, #247) */
 .studio-c-voce .studio-tasti { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .studio-c-voce .studio-tasti .tasto { flex: 1 1 auto; min-width: 2.75rem; }
+/* Il ripasso da ascoltare dello Studio (31/10, passo 9, #249, studio.js): il lettore della parte
+   (titolo, barra, tempo, −15 s, Ascolta/Pausa, velocità, parte prima e dopo, Scarica) e l'elenco
+   delle parti; il titolo è un dato e va sempre a capo */
+.studio-a { display: flex; flex-direction: column; gap: 0.55rem; }
+.studio-a-player { display: flex; flex-direction: column; gap: 0.45rem; padding: 0.8rem 0.9rem; border-radius: 0.8rem;
+  border: 1px solid var(--accento-bordo); background: var(--accento-fondo); min-width: 0; }
+.studio-a-titolo { margin: 0; display: flex; flex-direction: column; gap: 0.15rem; color: var(--testo); overflow-wrap: anywhere; }
+.studio-a-dato { display: block; color: var(--tenue); overflow-wrap: anywhere; }
+.studio-a-barra { width: 100%; min-height: 2.75rem; margin: 0; accent-color: var(--accento); }
+.studio-a-tempo { font-variant-numeric: tabular-nums; font-size: 0.9rem; color: var(--tenue); }
+.studio-a-tasti .studio-h-tasto { flex: 1 1 6.5rem; min-width: 2.75rem; }
+.studio-a-scarica { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; box-sizing: border-box; }
+.studio-a-corrente .studio-testo b { color: var(--accento-chiaro); }
+.studio-a-barra:focus-visible, .studio-a-scarica:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; }

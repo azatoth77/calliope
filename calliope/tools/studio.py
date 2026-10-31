@@ -41,6 +41,13 @@ il tool non c'è: dipende dall'installazione, come `stanza_cerca`):
   serie) la voce dice solo la frase del codice e la risposta del modello si misura in secondo
   piano; a risposta finita il codice conta i concetti svelati (Brain, `Studio.misura_consigli`).
 
+- `studio_ascolta` (31/10, passo 9, #249, decisione 0035 punto 42), classe «sicuro» **senza
+  fonte non fidata**, mai toccabile: il ripasso da ascoltare a voce («fammi ascoltare il ripasso»).
+  Il risultato ha solo conti e una frase del codice; il testo (le pagine lette e le carte) lo legge
+  il ciclo dopo la risposta con la voce del libro, fuori dalla conversazione
+  (`ToolContext.ascolta`, `studio/ascolta.py`). `riprendi` e `ripeti` dopo «Calliope, basta»,
+  `ferma` chiude. Durante una prova aperta rifiuta; per iscritto rimanda alla pagina «Ascolta».
+
 **Chi.** Il profilo di chi parla (o del proprietario dello schermo per lo scritto e i tocchi);
 `None` per un ospite e per la zona grigia (voce incerta da un dispositivo non suo), come dice il
 docstring di `studio/servizio.py`: lo Studio di una persona non si apre su un'identità incerta.
@@ -1206,6 +1213,120 @@ PARAMETRI_INTERROGA = {"type": "object", "properties": {
     "required": ["parte"]}
 
 
+# ─────────────────────────── studio_ascolta ───────────────────────────
+# Il ripasso da ascoltare a voce (31/10, passo 9, #249, decisione 0035 punto 42): una lettura,
+# classe «sicuro» **senza fonte non fidata**: il risultato ha solo conti e frasi del codice, mai
+# testo delle pagine né titoli. Il testo lo legge il ciclo dopo la risposta (`ToolContext.ascolta`,
+# `Ciclo._leggi_ripasso`, `studio/ascolta.leggi`), con la voce del libro, fuori dalla conversazione.
+# Mai toccabile: sullo schermo c'è «Ascolta»
+
+AZIONI_ASCOLTA = ("inizia", "riprendi", "ripeti", "ferma")
+PROVA_ASCOLTA = ("C'è una prova in corso su questa verifica: il ripasso torna dopo la consegna.")
+DOVE_ASCOLTA = ("Il ripasso da ascoltare lo trovi nello Studio sul telefono o sul PC: Le mie cose, "
+                "Studio, Ascolta.")
+
+
+def _ascolta(ctx: ToolContext, azione: str = "", cosa: str = "", numero=None, verifica=None,
+             materia: str = "", per: str = "") -> dict:
+    svc = _svc(ctx)
+    if svc is None:
+        return _f(SPENTO, ok=False)
+    if not svc.ascolto_acceso():
+        return _f("Il ripasso da ascoltare qui non è acceso.", ok=False)
+    chi = chi_di(ctx)
+    if chi is None:
+        note_rule(ctx, "studio_chi_incerto")
+        return _f(CHI_NO, ok=False)
+    azione = str(azione or "inizia").strip().lower()
+    if azione not in AZIONI_ASCOLTA:
+        return {"ok": False, "errore": f"azione sconosciuta: {azione}",
+                "cosa_fare": "azione è «inizia», «riprendi», «ripeti» o «ferma»."}
+    ctx.ascolta = None
+    if azione == "ferma":
+        chiuso = svc.ascolto_chiudi(chi.id)
+        return _f("Ho chiuso il ripasso." if chiuso else "Non c'è un ripasso in pausa.")
+    from .spec import scritto
+    if scritto(ctx) or getattr(getattr(ctx, "speaker", None), "muto", False):
+        # Per iscritto, o con la voce muta: niente lettura a voce, c'è la pagina
+        note_rule(ctx, "studio_ascolta_scritto")
+        return _f(DOVE_ASCOLTA)
+    from ..studio import NonPermesso, NonTrovata
+    from ..studio.ascolta import ProvaAperta
+    cosa = str(cosa or "oggi").strip().lower()
+    if cosa not in ("oggi", "tutto", "argomento", "carte"):
+        cosa = "oggi"
+    try:
+        if azione in ("riprendi", "ripeti"):
+            try:
+                lett = svc.ascolto_prepara(chi, come=azione)
+            except LookupError:
+                return _f("Non c'è un ripasso in pausa: se vuoi lo comincio da capo.", ok=False)
+        else:
+            if per and not verifica:
+                pid, err = _persona(ctx, chi, per)
+                if err:
+                    return _f(err, ok=False)
+                vv = [x for x in svc.verifiche(chi, persona=pid)
+                      if x["stato"] in ("bozza", "aperta")]
+                v = svc.verifica(chi, vv[0]["id"]) if vv else None
+                if v is None and pid != str(chi.id):
+                    nome = getattr(svc._profilo(pid), "name", None) or str(per)
+                    return _f(f"{nome} non ha verifiche aperte nello Studio.", ok=False)
+            else:
+                v = _verifica(svc, ctx, chi, verifica, materia)
+            if v is None:
+                return _f(NON_CE if verifica else
+                          "Non hai verifiche aperte nello Studio. Dimmi quando è la prossima.",
+                          ok=False)
+            n = None
+            if cosa == "argomento":
+                try:
+                    n = int(numero)
+                except (TypeError, ValueError):
+                    return {"ok": False, "errore": "manca il numero dell'argomento",
+                            "cosa_fare": "Chiedi il numero dell'argomento, oppure usa cosa "
+                                         "«oggi» o «tutto»."}
+            lett = svc.ascolto_prepara(chi, v["id"], cosa, n, "inizia")
+    except ProvaAperta:
+        note_rule(ctx, "studio_ascolta_prova")
+        # In terza persona: lo può chiedere anche il tutore del ragazzo che fa la prova
+        return _f(PROVA_ASCOLTA, ok=False)
+    except ValueError as e:
+        if str(e) == "argomento":
+            return _f(f"L'argomento {numero} non è nel piano: dimmi un altro numero.", ok=False)
+        return _f("Non c'è ancora niente da ascoltare: servono le pagine lette degli argomenti "
+                  "confermati, o delle carte.", ok=False)
+    except (NonTrovata, NonPermesso):
+        return _f(NON_CE, ok=False)
+    ctx.ascolta = lett
+    note_rule(ctx, "studio_ascolta")
+    minuti = max(1, int(round(lett["secondi"] / 60)))
+    nome = str(getattr(getattr(ctx, "cfg", None), "name", "") or "Calliope")
+    resta = lett["parti"] - lett["parte"] + 1
+    inizio = {"inizia": "Comincio", "riprendi": "Riprendo", "ripeti": "Ripeto"}[azione]
+    parti = "una parte" if resta == 1 else f"{resta} parti"
+    durata = "un minuto" if minuti == 1 else f"{minuti} minuti"
+    frase = f"{inizio}: {parti}, circa {durata}. Per fermarmi di' «{nome}, basta»."
+    return _f(frase, ripasso={"parti": lett["parti"], "dalla_parte": lett["parte"],
+                              "minuti": minuti, "verifica": lett["verifica"]})
+
+
+DESCRIZIONE_ASCOLTA = (
+    "Il ripasso da ascoltare dello Studio, letto ad alta voce («fammi ascoltare il ripasso», "
+    "«leggimi le pagine di oggi», «ripassiamo le carte ascoltando»): Calliope legge le pagine "
+    "lette dei suoi argomenti e le carte, da sola, dopo la tua risposta. azione «inizia» con cosa "
+    "«oggi» (le pagine di oggi del piano, di serie), «tutto», «argomento» (con numero = la "
+    "posizione nell'elenco) o «carte»; dopo «Calliope, basta»: «riprendi», «ripeti» (dall'inizio "
+    "del paragrafo) o «ferma» (chiude). verifica = l'id o materia; per = il nome del ragazzo se lo "
+    "chiede il tutore. Non leggere tu il testo: lo legge il codice.")
+PARAMETRI_ASCOLTA = {"type": "object", "properties": {
+    "azione": {"type": "string", "enum": list(AZIONI_ASCOLTA)},
+    "cosa": {"type": "string", "enum": ["oggi", "tutto", "argomento", "carte"]},
+    "numero": {"type": "integer"}, "verifica": {"type": "integer"},
+    "materia": {"type": "string"}, "per": {"type": "string"}},
+    "required": ["azione"]}
+
+
 # ─────────────────────────── studio_mappa_consigli ───────────────────────────
 # «Parliamone» dopo la mappa libera (30/10, passo 7c, #328): una lettura, i dati in busta (fonte
 # «foto», non fidati come il testo delle carte, chiunque li abbia scritti), mai toccabile. Il
@@ -1374,6 +1495,7 @@ def studio_specs(cfg=None) -> list[ToolSpec]:
         extra.append(ToolSpec(name="studio_mappa_consigli", description=DESCRIZIONE_CONSIGLI,
                               parameters=PARAMETRI_CONSIGLI, func=_mappa_consigli,
                               risk="lettura", levels=FAMILIARI, non_fidato=True))
+    ascolta = _spec_ascolta(cfg)
     return [
         ToolSpec(name="studio", description=DESCRIZIONE, parameters=PARAMETRI, func=_studio,
                  risk="azione", levels=FAMILIARI, classe=None,
@@ -1396,4 +1518,16 @@ def studio_specs(cfg=None) -> list[ToolSpec]:
         ToolSpec(name="studio_interroga", description=DESCRIZIONE_INTERROGA,
                  parameters=PARAMETRI_INTERROGA, func=_interroga, risk="lettura",
                  levels=FAMILIARI, non_fidato=True),
-    ] + extra
+    ] + extra + ascolta
+
+
+def _spec_ascolta(cfg=None) -> list[ToolSpec]:
+    """Il ripasso da ascoltare (passo 9, #249): c'è con `studio_ascolta: attiva` (e senza `cfg`,
+    come `studio_mappa_consigli`: spento risponde che non è acceso). Una lettura senza fonte non
+    fidata: il risultato ha solo conti e frasi del codice."""
+    from ..studio import ascolta as A
+    if cfg is not None and A.modo(cfg) != "attiva":
+        return []
+    return [ToolSpec(name="studio_ascolta", description=DESCRIZIONE_ASCOLTA,
+                     parameters=PARAMETRI_ASCOLTA, func=_ascolta, risk="lettura",
+                     levels=FAMILIARI)]

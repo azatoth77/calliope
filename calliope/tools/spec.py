@@ -120,6 +120,10 @@ class ToolContext:
     # Lo Studio (30/10, passo 4.5, calliope/studio/: Studio), o None se spento: i tool
     # studio e studio_pagina_leggi, che lavorano solo con `studio_modo: attivo`
     studio: Any = None
+    # Il ripasso da ascoltare chiesto in questa risposta (31/10, passo 9, #249: lo imposta
+    # studio_ascolta, lo legge e lo azzera il ciclo dopo la risposta, Ciclo._leggi_ripasso): la
+    # lettura di studio/ascolta.py, o None
+    ascolta: Any = None
 
 
 

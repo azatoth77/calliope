@@ -548,14 +548,17 @@ def togli_orfani(cartella, conosciuti: set | None = None, piu_vecchi_di_s: float
 
 def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool = False,
              scadute_prima: datetime.date | None = None, archiviate: bool = True,
-             cartella=None) -> dict:
+             cartella=None, ascolta_giorni: int = 7) -> dict:
     """Il solo posto che cancella lo Studio, con `secure_delete` e in una transazione:
     - `tutto`: ogni verifica e ogni giorno (`svuota` di tutti);
     - `persona`: le verifiche di una persona e i suoi giorni; con `archiviate=False` quelle
       archiviate restano («dimentica»);
     - `scadute_prima`: le verifiche non archiviate con la data prima di quel giorno e i giorni
       segnati delle persone prima di quel giorno (la tenuta).
-    Restituisce quante verifiche e quanti file. Senza le tabelle (Studio mai usato) niente."""
+    Restituisce quante verifiche e quanti file. Senza le tabelle (Studio mai usato) niente.
+    Dal 31/10 (passo 9, #249) anche l'audio del ripasso da ascoltare (`ascolta.togli_audio`,
+    una cache del testo): via con le verifiche tolte, con «svuota» e, nella rotazione, quello di
+    verifiche che non ci sono più e quello non ascoltato da `ascolta_giorni`."""
     out = {"verifiche": 0, "file": 0}
     if not _c_e(db):
         return out
@@ -618,6 +621,18 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
     out["verifiche"] = len(ids)
     out["giorni"] = giorni
     out["file"] = togli_file(file, cartella)
+    if cartella:
+        # L'audio del ripasso da ascoltare (31/10, #249): una cache del testo, legata alla verifica
+        from .ascolta import togli_audio
+        if tutto:
+            out["audio"] = togli_audio(cartella)
+        else:
+            out["audio"] = togli_audio(cartella, solo=list(ids)) if ids else 0
+            if scadute_prima is not None:
+                vive = {r[0] for r in db.execute("SELECT id FROM studio_verifiche")}
+                out["audio"] += togli_audio(cartella, verifiche_vive=vive,
+                                            piu_vecchi_di_s=max(1, int(ascolta_giorni)) * 86400.0)
+        out["file"] += out["audio"]
     if tutto and cartella:
         # «svuota» di tutti: anche i file rimasti senza riga (un invio a metà)
         out["file"] += togli_orfani(cartella)

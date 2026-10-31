@@ -91,6 +91,10 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     # L'interrogazione a voce (passo 8, #248): una lettura (E0) come le carte; la verifica è un
     # bersaglio, la proposta del modello solo una misura
     "studio_interroga": {"parte": Z, "verifica": B, "materia": C, "proposta": S},
+    # Il ripasso da ascoltare (31/10, passo 9, #249): una lettura (E0) come le carte; la verifica
+    # e il ragazzo di cui si parla sono bersagli, cosa e il numero dell'argomento una scelta
+    "studio_ascolta": {"azione": Z, "cosa": S, "numero": S, "verifica": B, "materia": C,
+                       "per": B},
     # «Parliamone» (30/10, passo 7c, #328): una lettura (E0); la verifica è un bersaglio come
     # per `studio`, la materia un contenuto
     "studio_mappa_consigli": {"verifica": B, "materia": C},

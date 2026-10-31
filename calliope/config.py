@@ -2241,6 +2241,19 @@ class Config:
     # «proposte», da confermare; «spenta» niente. Si passa ad «attiva» col banco delle domande
     # (prove/manuali/banco_studio.py, fase «domande») e la rilettura delle domande in ombra
     studio_domande_genera: str = "ombra"
+    # Il ripasso da ascoltare (31/10, passo 9, #249, calliope/studio/ascolta.py): le pagine lette
+    # degli argomenti del piano e le carte, lette da Piper, a voce («fammi ascoltare il ripasso»,
+    # tool studio_ascolta, fermato da «Calliope, basta») e sullo schermo («Ascolta», con pausa,
+    # −15 s e velocità). Il testo lo compone il codice, senza modello: per questo attiva di serie
+    # con lo Studio. «spenta» toglie il tool e la sezione
+    studio_ascolta: str = "attiva"
+    # La «voce del libro»: il materiale (pagine e carte) si legge con questa voce di Piper, le
+    # frasi di Calliope con la sua, così chi ascolta le distingue. Vuoto, un file che manca o una
+    # voce con un'altra frequenza: tutto con la voce di Calliope
+    studio_ascolta_voce: str = "voices/it_IT-paola-medium.onnx"
+    # L'audio del ripasso per lo schermo è una cache del testo (studio_cartella/ascolta/): si toglie
+    # dopo tanti giorni dall'ultimo ascolto, e sempre con la verifica, «dimentica» e --svuota
+    studio_ascolta_giorni: int = 7
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -3537,7 +3550,8 @@ SEZIONI: dict[str, list[str]] = {
                "studio_argomenti", "studio_padronanza", "studio_carte_genera",
                "studio_mappa_nodi_max", "studio_mappa_genera", "studio_mappa_libera",
                "studio_mappa_consigli", "studio_prova_domande", "studio_prova_minuti",
-               "studio_finestra_giorni", "studio_domande_genera"],
+               "studio_finestra_giorni", "studio_domande_genera", "studio_ascolta",
+               "studio_ascolta_voce", "studio_ascolta_giorni"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -3899,7 +3913,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "studio_pagine_max": (1, 1000), "studio_pagine_al_minuto": (1, 600),
     "studio_nitidezza_min": (0.0, 100_000.0), "studio_mappa_nodi_max": (4, 30),
     "studio_prova_domande": (3, 40), "studio_prova_minuti": (2, 180),
-    "studio_finestra_giorni": (1, 90),
+    "studio_finestra_giorni": (1, 90), "studio_ascolta_giorni": (1, 365),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),
@@ -4151,6 +4165,8 @@ _MODI_NUOVI = {
     # Le domande generate (31/10, #248): come le carte generate
     "studio_domande_genera": _modi("studio_domande_genera", ("spenta", "ombra", "attiva"),
                                    falso="spenta"),
+    # Il ripasso da ascoltare (31/10, #249): come la mappa libera
+    "studio_ascolta": _modi("studio_ascolta", ("spenta", "attiva"), falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},
