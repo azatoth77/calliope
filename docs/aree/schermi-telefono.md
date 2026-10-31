@@ -2176,5 +2176,5 @@ dell'importazione); il service worker prende il POST, tiene i file in IndexedDB 
 scegliere la verifica e manda i file con `studioImporta` (`POST /api/studio/importa`). Il server ha
 solo un ripiego: `POST /telefono/condividi` arrivato a lui torna 303 a «?condividi=0» senza leggere
 il corpo. Solo Android con la PWA installata; iOS no. Cache del service worker
-`calliope-telefono-pagina-v39` (era v38), con `condividi.js`; `PAGINA_VERSIONE` uguale. Dettagli e
+`calliope-telefono-pagina-v40` (era v39, degli esercizi guidati #278), con `condividi.js`; `PAGINA_VERSIONE` uguale. Dettagli e
 Family Link nel documento [studio](studio.md).

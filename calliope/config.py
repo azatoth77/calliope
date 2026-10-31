@@ -2271,6 +2271,16 @@ class Config:
     # con lo Studio. «ombra» calcola le proposte e le conta nel registro senza mostrarle; «spenta»
     # niente
     studio_libreria: str = "attiva"
+    # Gli esercizi guidati (31/10, issue #278, calliope/studio/esercizi.py): un problema portato
+    # dalla persona (una foto, «Foto di un problema», o il testo scritto) dentro una sua verifica;
+    # il lettore delle pagine legge la foto e chiede a qwen3.6 una guida a passi (domande guida e
+    # indizi), che il codice controlla (mai la risposta di un passo nella sua domanda o nel suo
+    # indizio, mai il risultato). L'esito di ogni passo lo decide il codice; la soluzione intera
+    # non si dice mai, e mentre un esercizio è in corso la voce non la dice (la guardia di Brain).
+    # «ombra» (di serie): li usa solo chi amministra, per provarli, e il registro conta passi,
+    # esiti e frasi tolte; «attiva»: tutte le persone di casa; «spenta»: niente. Si passa ad
+    # «attiva» dopo la rilettura delle misure
+    studio_esercizi: str = "ombra"
     # I premi dello Studio (31/10, issue #296, calliope/studio/premi.py): un rinforzo positivo e
     # al minimo, calcolato dal codice dai soli dati della pratica (sessioni misurate fra «Inizia»
     # e «Fatto», carte ripassate, prove consegnate, esiti decisi dal codice o dal tutore), mai
@@ -3615,7 +3625,7 @@ SEZIONI: dict[str, list[str]] = {
                 "studio_stelle", "studio_duelli", "studio_libreria", "studio_importa",
                 "studio_importa_max_mb", "studio_importa_file_max", "studio_importa_voce_max_mb",
                 "studio_importa_totale_max_mb", "studio_importa_passo_s",
-                "studio_importa_tempo_max_s", "studio_importa_coda"],
+                "studio_importa_tempo_max_s", "studio_importa_coda", "studio_esercizi"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -4238,6 +4248,8 @@ _MODI_NUOVI = {
     "studio_ascolta": _modi("studio_ascolta", ("spenta", "attiva"), falso="spenta"),
     # La libreria dello Studio (31/10, #297)
     "studio_libreria": _modi("studio_libreria", ("spenta", "ombra", "attiva"), falso="spenta"),
+    # Gli esercizi guidati (31/10, #278): come le domande generate
+    "studio_esercizi": _modi("studio_esercizi", ("spenta", "ombra", "attiva"), falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},

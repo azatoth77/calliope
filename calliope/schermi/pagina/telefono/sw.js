@@ -5,15 +5,18 @@
 // schede non passano mai di qui.
 "use strict";
 
-// v39 (31/10, #298 parte 3): la condivisione dal telefono (share target, condividi.js)
-const CACHE = "calliope-telefono-pagina-v39";
+// v38 (31/10, #298): studio_importa.js, «Aggiungi materiali» dello Studio (dopo le mini-app, v37)
+// v39 (31/10, #278): esercizio.js, gli esercizi guidati dello Studio (dopo l'importazione, v38)
+// v40 (31/10, #298 parte 3): la condivisione dal telefono (share target, condividi.js)
+const CACHE = "calliope-telefono-pagina-v40";
 const PAGINA = [
   "/telefono/", "/telefono/telefono.js", "/telefono/voce.js", "/telefono/microfono.js",
   "/telefono/schermo-acceso.js",
   "/telefono/telefono.css", "/telefono/manifest.webmanifest", "/telefono/icona.svg",
   "/telefono/icona-180.png", "/telefono/icona-192.png", "/telefono/icona-512.png",
   "/schermo.js", "/schermo.css", "/sezioni.js", "/bordi.js", "/studio.js",
-  "/libreria.js", "/studio_importa.js", "/telefono/condividi.js",
+  "/libreria.js", "/studio_importa.js",
+  "/esercizio.js", "/telefono/condividi.js",
 ];
 
 // La condivisione da un'altra app (31/10, #298 parte 3: share_target nel manifest, solo Android

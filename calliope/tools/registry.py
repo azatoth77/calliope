@@ -303,6 +303,16 @@ class ToolRegistry:
             except Exception:  # noqa: BLE001 — nel dubbio, gli argomenti come sono
                 pass
         sc = getattr(ctx, "speaker_ctx", None)
+        # La soluzione di un esercizio guidato vivo di chi parla negli argomenti (31/10, #278,
+        # revisione della PR #367: «ricorda» la ripeteva nella sua conferma): non si scrive né
+        # si mostra, con una frase del codice
+        from ..studio.esercizi import guardia_argomenti, guardia_risultato
+        fermo = guardia_argomenti(name, arguments, ctx)
+        if fermo is not None:
+            note_rule(ctx, "studio_esercizio_svelato")
+            print(f"   [STUDIO] {name}: la soluzione di un esercizio guidato negli argomenti, "
+                  f"non lo eseguo", flush=True)
+            return json.dumps(fermo, ensure_ascii=False)
         # Dopo un dato non fidato letto in questa risposta, solo letture (politica.DOPO_DATO)
         fermo = politica.bloccata(name, ctx, arguments)
         if fermo is not None:
@@ -436,6 +446,12 @@ class ToolRegistry:
             result = spec.func(ctx, **(arguments or {}))
             if result is None:
                 result = {"ok": True}
+            # Le frasi pronte del risultato con la soluzione di un esercizio vivo (#278): la
+            # frase del codice al loro posto (non passano dalla guardia della voce di Brain)
+            pulito = guardia_risultato(name, result, ctx)
+            if pulito is not result:
+                note_rule(ctx, "studio_esercizio_svelato")
+                result = pulito
             return json.dumps(dialogo.uniforma(result), ensure_ascii=False, default=str)
         except Exception as e:  # noqa: BLE001 — l'errore torna al modello, mai la traccia
             # Gli argomenti sono già stati controllati: un'eccezione qui è del tool (09/10:

@@ -726,13 +726,15 @@ TABELLE_MEMORIA = (("richieste_tutori", "minore", "creata"),)
 # testo letto e i loro file, argomenti, piano, misure, giorni e, dal 30/10 (#244), gli eventi
 # delle sessioni; dal 30/10, #245 e #246, i tentativi e le carte; dal 31/10, #248, le domande e le
 # prove; dal 31/10, #250, le indicazioni dei tutori; dal 31/10, #296, le stelle, gli interruttori
-# dei premi e i duelli; dal 31/10, #298, le importazioni dei materiali), dalla rotazione e da
-# «svuota»; «dimentica le nostre conversazioni» le toglie tranne le verifiche archiviate (main.py)
+# dei premi e i duelli; dal 31/10, #298, le importazioni dei materiali; dal 31/10, #278, gli
+# esercizi guidati), dalla rotazione e da «svuota»; «dimentica le nostre conversazioni» le
+# toglie tranne le verifiche archiviate (main.py)
 TABELLE_STUDIO = ("studio_verifiche", "studio_materiali", "studio_pagine", "studio_argomenti",
                   "studio_piano", "studio_giorni", "studio_misure", "studio_eventi",
                   "studio_tentativi", "studio_carte", "studio_mappe", "studio_domande",
                   "studio_prove", "studio_indicazioni", "studio_stelle", "studio_premi",
-                  "studio_duelli", "studio_pratica", "studio_importazioni")
+                  "studio_duelli", "studio_pratica", "studio_importazioni",
+                  "studio_esercizi")
 # Le preferenze che non scadono col tempo ma vanno via con i dati della persona (27/10):
 # (tabella, colonna della persona). L'accento scelto in Io › Aspetto (schermi/aspetto.py)
 TABELLE_PREFERENZE = (("aspetto_preferenze", "persona"),)

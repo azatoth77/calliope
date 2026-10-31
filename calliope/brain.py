@@ -1429,8 +1429,13 @@ INTERROGA_TOLTA = ("{\"ok\": true, \"nota\": \"la domanda e la risposta attesa s
 # «testo» e «argomenti»: studio_pagina_leggi (30/10, seconda revisione della PR #317)
 # «domanda» e «risposta»: studio_carte (30/10, passo 6, #246)
 # «mappa_tua»: studio_mappa_consigli (30/10, passo 7c, #328)
+# «indizio»: studio_esercizio (31/10, #278)
 _CHIAVI_DATO = ('"risultati"', '"fatti"', '"notizia"', '"testo"', '"argomenti"', '"domanda"',
-                '"risposta"', '"mappa_tua"')
+                '"risposta"', '"mappa_tua"', '"indizio"')
+# La domanda e l'indizio dell'esercizio guidato (studio_esercizio, 31/10, #278), tolti allo
+# stesso modo
+ESERCIZIO_TOLTO = ("{\"ok\": true, \"nota\": \"la domanda del passo è stata tolta: il passo in "
+                   "corso lo ritrovi con studio_esercizio parte passo\"}")
 # La mappa e lo scheletro di «Parliamone» (studio_mappa_consigli, passo 7c, #328), tolti allo
 # stesso modo
 MAPPA_TOLTA = ("{\"ok\": true, \"nota\": \"la mappa e lo scheletro sono stati tolti: per "
@@ -2652,6 +2657,11 @@ class Brain:
         from .ciclo_ripetuto import CicloRipetuto
         ciclo = CicloRipetuto(self._net("ciclo_ripetuto"))
         self._ciclo_fermato = None
+        # La guardia della soluzione (31/10, #278): con un esercizio guidato in corso per chi
+        # parla, le frasi che dicono il risultato o la risposta di un passo non si dicono
+        from .studio.esercizi import FRASE_SVELATO
+        from .studio.esercizi_genera import GuardiaSoluzione
+        sol = GuardiaSoluzione(self._vietati_esercizio(), FRASE_SVELATO)
         out, calls, waiting = [], [], []
         # Il testo generato di questa passata, anche se la risposta viene interrotta (passo 3: la
         # parte non detta nel promemoria del turno dopo, § 11.4)
@@ -2668,8 +2678,8 @@ class Brain:
             if kind == "usage":
                 self._note_usage(payload)
                 continue
-            piece = names.feed(hold.feed(guard.feed(qui.feed(echo.feed(capito.feed(
-                ciclo.feed(think.feed(payload))))))))
+            piece = sol.feed(names.feed(hold.feed(guard.feed(qui.feed(echo.feed(capito.feed(
+                ciclo.feed(think.feed(payload)))))))))
             if piece and not hold_request:
                 self._voce_detta(piece)
             if capito.capito is not None:
@@ -2700,6 +2710,12 @@ class Brain:
         if capito.scartata:
             print(f"   [STT] riga «capito» non chiusa, non la dico", flush=True)
         piece += names.flush()
+        piece = sol.feed(piece) + sol.flush()
+        if sol.tolte:
+            self._rule("studio_esercizio_svelato")
+            self._marca(FRASE_SVELATO, "atto", "esercizio_svelato")
+            print(f"   [STUDIO] esercizio guidato: {sol.tolte} frasi del modello con la soluzione, "
+                  f"non le dico", flush=True)
         if piece:
             out.append(piece)
             if hold_request:
@@ -4174,7 +4190,8 @@ class Brain:
         for m in self.history:
             if m.get("role") != "tool" or m.get("content") in (WEB_TOLTO, PAGINA_TOLTA,
                                                                 CARTA_TOLTA, MAPPA_TOLTA,
-                                                                INTERROGA_TOLTA):
+                                                                INTERROGA_TOLTA,
+                                                                ESERCIZIO_TOLTO):
                 continue
             spec = self.tools.get(m.get("name") or "")
             if (spec is not None and getattr(spec, "non_fidato", False)
@@ -4183,6 +4200,7 @@ class Brain:
                                 else CARTA_TOLTA if m.get("name") == "studio_carte"
                                 else MAPPA_TOLTA if m.get("name") == "studio_mappa_consigli"
                                 else INTERROGA_TOLTA if m.get("name") == "studio_interroga"
+                                else ESERCIZIO_TOLTO if m.get("name") == "studio_esercizio"
                                 else WEB_TOLTO)
 
     def rules_fired(self) -> list[str]:
@@ -6172,6 +6190,13 @@ class Brain:
             return "…"
         return str(testo or "")[:n]
 
+    def _vietati_esercizio(self) -> dict | None:
+        """Cosa la voce non dice a chi parla mentre ha un esercizio guidato vivo (#278,
+        `esercizi.vietati_per_ctx`: i suoi, o con la voce incerta quelli dei minori che potrebbero
+        essere chi parla); None senza Studio o senza esercizi vivi."""
+        from .studio.esercizi import vietati_per_ctx
+        return vietati_per_ctx(getattr(self, "tool_ctx", None))
+
     def _marca(self, testo: str, autore: str, atto: str | None = None) -> str:
         """Una frase della risposta che non è contenuto del modello: la frase pronta di un tool
         (`esito`), un ripiego o la riga dello sviluppo (`atto`). La legge l'uscita unica quando
@@ -7050,6 +7075,10 @@ class Brain:
             result = self.tools.call(call["name"], args, self.tool_ctx, level)
         finally:
             self._set_ctx("politica", None)
+        # La guardia degli esercizi guidati scattata nel registro dei tool (#278, seconda revisione
+        # della PR #367): anche nelle regole di Brain, come quando scatta sulla voce
+        if "studio_esercizio_svelato" in (getattr(self.tool_ctx, "regole", None) or ())                 and "studio_esercizio_svelato" not in (getattr(self, "last_rules", None) or ()):
+            self._rule("studio_esercizio_svelato")
         # La decisione della politica per questa chiamata: intenzione e ombra (08/10)
         esito_pol = getattr(self.tool_ctx, "politica_esito", None)
         self._set_ctx("politica_esito", None)
