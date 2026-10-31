@@ -99,6 +99,15 @@ _EXE_NON_SCRITTO_NOMI = frozenset((
     "cscript", "mshta", "python", "pythonw", "py", "pyw", "node", "deno", "bun", "perl", "ruby",
     "php", "lua", "tclsh", "java", "javaw", "jshell", "dotnet", "csi", "fsi", "msbuild",
     "installutil", "regasm", "regsvcs", "csc", "vbc", "jsc", "ilasm",
+    # Dalla revisione della PR #310 (#311): le shell di MSYS2 (aprono una shell come git-bash) e
+    # altri interpreti e REPL (R, Julia, Erlang ed Elixir, Haskell, Racket, Scala, Groovy, Dart)
+    "msys2", "mingw32", "mingw64", "ucrt64", "clang32", "clang64", "clangarm64",
+    "r", "rscript", "rterm", "rgui", "erl", "werl", "escript", "iex", "elixir", "ghc", "ghci",
+    "runghc", "runhaskell", "racket", "raco", "scala", "scala-cli", "groovy", "groovysh", "dart",
+    # Dalla revisione della PR #334: altri interpreti e i terminali di terze parti
+    "gracket", "julialauncher", "tclkit", "tclkitsh", "jruby", "jrubyw", "bunx",
+    "conemu", "conemu64", "cmder", "alacritty", "wezterm", "wezterm-gui", "tabby", "nu", "fish",
+    "cygwin",
     # strumenti di sistema
     "rundll32", "regsvr32", "msiexec", "cmstp", "wmic", "regedit", "regedt32", "reg", "mmc",
     "control", "schtasks", "at", "sc", "net", "net1", "netsh", "bitsadmin", "certutil", "forfiles",
@@ -114,10 +123,31 @@ _EXE_NON_SCRITTO_NOMI = frozenset((
 # AutoIt3_x64, Ahk2Exe: seconda revisione della PR #309; AutoHotkey senza argomenti esegue da solo
 # lo script di serie); le sigle brevi (py, lua, sh…) solo una versione, per non prendere nomi di
 # app che cominciano così
+# Dalla revisione della PR #310 (#311): Tcl col «t» dei thread e la «g» delle build di debug
+# (tclsh86t, tclsh86tg, wish86t), tclkit in tutte le varianti (tclkitsh, tclkit-gui); deno, bun,
+# bunx, julia, ghc e i suoi, racket e gracket con qualunque coda dopo un separatore o una cifra
+# (deno1.40, bun-windows-x64, julia-1.10, ghc-9.4.8), per non prendere «bunny» o «bundle»;
+# jruby come ruby (jrubyw)
 _EXE_NON_SCRITTO_RE = re.compile(
-    r"(python|pypy|ipython|jython|pwsh|powershell|java|node|perl|ruby|php|bash|ubuntu|debian"
-    r"|autohotkey|autoit|ahk2exe|aut2exe)[\w.-]*"
-    r"|(py|pyw|lua|luajit|tcl|wish|sh|zsh|osascript)[\d._-]*")
+    r"(python|pypy|ipython|jython|pwsh|powershell|java|node|perl|ruby|jruby|php|bash|ubuntu"
+    r"|debian|autohotkey|autoit|ahk2exe|aut2exe|tclkit)[\w.-]*"
+    r"|(deno|bun|bunx|julia|ghc|ghci|runghc|runhaskell|racket|gracket)([\d._-][\w.-]*)?"
+    r"|(tcl|tclsh|wish)[\d._-]*t?g?"
+    r"|(py|pyw|lua|luajit|sh|zsh|osascript)[\d._-]*")
+
+
+def _unita_di_rete(lettera: str) -> bool:
+    """La lettera è un'unità di rete mappata («Z:» su una condivisione)? Si sa solo sul Windows
+    che esegue (il satellite ricontrolla l'«avvia» col segno scritto): altrove False. Come un
+    percorso UNC, cambia senza che chi amministra lo veda (#311)."""
+    import sys
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        return ctypes.windll.kernel32.GetDriveTypeW(f"{lettera}:\\") == 4     # DRIVE_REMOTE
+    except Exception:  # noqa: BLE001 — nel dubbio come un'unità locale
+        return False
 
 
 def nome_windows(percorso: str) -> str:
@@ -149,7 +179,18 @@ def ammessa_per_iscritto(comando: str) -> bool:
     m = re.fullmatch(r"([A-Za-z][A-Za-z0-9.+-]+):([A-Za-z0-9/_.-]*)", c)
     if m and len(m.group(1)) > 1:            # un protocollo (una lettera sola è un'unità: «C:»)
         return m.group(1).lower() in PROTOCOLLI_SCRITTO
-    senza_unita = c[2:] if re.match(r"^[A-Za-z]:", c) else c
+    unita = re.match(r"^([A-Za-z]):", c)
+    senza_unita = c[2:] if unita else c
+    # Dalla radice senza l'unità («\app.exe», «/app.exe»): dipende dall'unità corrente, non si sa
+    # (#311); un'unità di rete mappata è come un percorso di rete
+    if senza_unita.startswith(("\\", "/")) and not unita:
+        return False
+    # Con l'unità ma senza la radice («C:app.exe», «C:..\x\app.exe»): relativo alla cartella
+    # corrente di quell'unità, non si sa (revisione della PR #334)
+    if unita and not senza_unita.startswith(("\\", "/")):
+        return False
+    if unita and _unita_di_rete(unita.group(1)):
+        return False
     if ":" in senza_unita:
         return False                         # uno stream («calc.exe:x», «x.bat::$DATA»): non si sa
     n = nome_windows(c)                      # i punti e gli spazi finali come li toglie Windows
