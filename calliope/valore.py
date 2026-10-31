@@ -481,6 +481,26 @@ def data_della_persona(valore, t, ctx=None) -> bool:
         return False
 
 
+def data_dai_dati(valore, t, ctx=None) -> str | None:
+    """La fonte del dato non fidato della conversazione (una pagina, un titolo, una foto) che
+    nomina la stessa data risolta di `valore` (`tools/studio.date_dette`); None se nessuno
+    (31/10, #320: la proposta di una data letta solo lì). Nel dubbio la data viene dal dato."""
+    import datetime as _dt
+    from .tools.studio import _data_detta, date_dette
+    st = getattr(ctx, "studio", None)
+    try:
+        oggi = st._oggi() if st is not None else _dt.date.today()
+        d = _data_detta(valore, oggi)
+        if d is None:
+            return None
+        for fonte, testo in reversed(list(getattr(t, "esterni", None) or ())):
+            if d in date_dette(testo, oggi):
+                return fonte or "dato"
+    except Exception:  # noqa: BLE001
+        return "dato"
+    return None
+
+
 # Gli argomenti che sono una posizione in un elenco detta a voce («tieni il secondo»)
 POSIZIONI = frozenset({("studio", "numero")})
 
@@ -980,6 +1000,30 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
     # La risposta al dato chiesto dal tool stesso (#98) passa dall'ancora anche se comincia con
     # un consenso («Sì, è nata il 12 ottobre»): il «sì» non è alla domanda della politica
     risposta = risposta_al_sospeso(name, args, t)
+    # Il «sì» alla proposta di un tool con una data (31/10, #320, «proponi_data» di studio): la
+    # persona ha sentito la data, ma se viene solo da una pagina o da un titolo, e non l'ha detta
+    # lei, la domanda dice da dove viene prima di eseguire (mai la proposta da sola)
+    if proposta and not risposta and not getattr(t, "sospeso_politica", False):
+        sosp = t.args_sospeso if isinstance(t.args_sospeso, dict) else {}
+        for k, v in args.items():
+            if (name, k) not in DATE_DETTE:
+                continue
+            # La stessa data della proposta, esatta (`pol._uguali` guarda le parole lunghe:
+            # «2026-11-19» valeva come «2026-11-12»)
+            if k in sosp and _esatto(v) != _esatto(sosp[k]):
+                return pol.Decisione(
+                    "conferma", "valore_proposta_data_diversa",
+                    f"«{_mostra(v)}» non è la data che ti ho proposto: vuoi davvero che {cosa}?",
+                    fonte), det
+            # La data risolta, non i numeri: una data calcolata dal modello non diventa «dal
+            # dato» perché una pagina ha un «12» qualunque
+            da = data_dai_dati(v, t, ctx)
+            if da and not data_della_persona(v, t, ctx):
+                det["argomenti"] = {k: f"{(tipi or {}).get(k, BERSAGLIO)}/{DATO}"}
+                return pol.Decisione(
+                    "conferma", "valore_proposta_data_dato",
+                    f"«{_mostra(v)}» viene {prov.da(da)}, non da te: vuoi davvero che {cosa}?",
+                    da), det
     if proposta and not risposta:
         # Il «sì» breve della persona della conversazione a una domanda su un'azione E1–E2
         # (09/10, caso vero della DGX delle 20:39: «Sì.» a «vuoi che spenga la luce della

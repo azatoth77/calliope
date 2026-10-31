@@ -69,7 +69,12 @@ from .spec import ToolContext, ToolSpec, note_rule
 FAMILIARI = frozenset({"familiare", "amministra"})
 AZIONI = ("crea", "stato", "piano", "oggi", "fatto", "salta_oggi", "sposta", "archivia", "tieni",
           "togli", "riprova", "sessione", "resoconto", "riepilogo", "carte", "mappa", "tipo",
-          "conclusa", "prove", "indica", "indicazioni", "indicazioni_togli")
+          "conclusa", "prove", "indica", "indicazioni", "indicazioni_togli", "proponi_data")
+# «proponi_data» (31/10, #320): quando è Calliope a proporre la data nuova di una verifica (letta
+# in una pagina, calcolata), la domanda la scrive il codice con la data esatta e resta in sospeso
+# (tool `studio`, azione «sposta», gli stessi argomenti): il «sì» della persona alla stessa chiamata
+# vale come consenso. Non cambia niente; una data che viene solo da una pagina o da un titolo la
+# politica la chiede ancora al «sì», dicendo da dove viene (valore._matrice)
 # «indica», «indicazioni», «indicazioni_togli» (31/10, passo 10, #250 e #285): le indicazioni di
 # un tutore per lo studio del suo minore (studio/tutore.py). Il testo di «indica» deve venire dalle
 # parole del tutore in questa frase (`_detta_dal_tutore`); la lettura dà solo il conto (il testo
@@ -226,19 +231,37 @@ def date_dette(testo, oggi: datetime.date) -> set:
 
 
 # Una frase che parla della verifica o della data (terza revisione della PR #319): solo lì una
-# data detta vale per lo Studio («venerdì ho calcetto» no)
-_TEMA_DATA = re.compile(r"verific|interrogaz|compit|esam|spost|rimand|anticip|slitt|rinvi|"
-                        r"\bdata\b", re.I)
+# data detta vale per lo Studio («venerdì ho calcetto» no). Più stretta dal 31/10 (#320, quarta
+# revisione della PR #319): «verifica» e «verifiche» intere (non «verificato»), «compito in classe»
+# o «compito di <materia>» (non «compito di casa»), «esame di <materia>» (non «esame del sangue»),
+# «data» ma non «data di nascita»; le parole dello spostamento («spostata», «rimanda», «slitta»…)
+# da sole solo nella frase del turno (`_TEMA_SPOSTA`), e la data nello stesso pezzo di frase
+_TEMA_DATA = re.compile(
+    rf"\bverific(?:a|he)\b|\binterrogaz|\bcompit[oi]\s+in\s+classe\b"
+    rf"|\bcompit[oi]\s+(?:di|d')\s*(?:{_MATERIE_RX})\b"
+    rf"|\besam[ei]\s+(?:di|d')\s*(?:{_MATERIE_RX})\b"
+    rf"|\bdata\b(?!\s+di\s+nascita)", re.I)
+_TEMA_SPOSTA = re.compile(r"\b(?:spost|rimand|anticip|slitt|rinvi)", re.I)
+# I pezzi di una frase: una data vale solo nel pezzo che parla della verifica («il compito di
+# casa è per venerdì, la verifica slitta?» no)
+_PEZZI_FRASE = re.compile(r"[,;:.!?]+|\s+(?:ma|però|invece)\s+", re.I)
 
 
 def data_detta_dalla_persona(valore, testi, oggi: datetime.date) -> bool:
     """La data del tool (`valore`: AAAA-MM-GG o il nome di un giorno) è una di quelle che la
-    persona ha detto nei `testi`: la frase del turno e, se Calliope aveva chiuso con una domanda,
-    la frase di prima; solo quelle che parlano della verifica o della data."""
+    persona ha detto nei `testi`: il primo è la frase del turno, il secondo (se Calliope aveva
+    chiuso con una domanda) la frase di prima; solo nei pezzi di frase che parlano della verifica
+    o della data (`_TEMA_DATA`; le parole dello spostamento solo nella frase del turno)."""
     d = _data_detta(valore, oggi)
     if d is None:
         return False
-    return any(d in date_dette(x, oggi) for x in testi if x and _TEMA_DATA.search(x))
+    for i, x in enumerate(testi):
+        for pezzo in _PEZZI_FRASE.split(str(x or "")):
+            if not (_TEMA_DATA.search(pezzo) or (i == 0 and _TEMA_SPOSTA.search(pezzo))):
+                continue
+            if d in date_dette(pezzo, oggi):
+                return True
+    return False
 
 
 def _persona(ctx, chi, per) -> tuple[str | None, str | None]:
@@ -687,6 +710,29 @@ def _sposta(ctx, svc, chi, v, data) -> dict:
               "piano.", verifica=v["id"])
 
 
+def _proponi_data(ctx, svc, chi, v, data) -> dict:
+    """La proposta di Calliope per la data nuova (#320): la domanda con la data scritta dal codice
+    e la chiamata in sospeso («sposta» con la stessa verifica e la stessa data in AAAA-MM-GG).
+    Niente cambia finché la persona non dice di sì."""
+    d = _data_detta(data, svc._oggi())
+    if d is None:
+        return {"ok": False, "errore": "manca la data da proporre",
+                "cosa_fare": "Chiedi a quando è spostata la verifica."}
+    if d < svc._oggi():
+        return _f("Quella data è già passata: a quando è spostata?", ok=False)
+    if d > svc._oggi() + datetime.timedelta(days=OLTRE_GIORNI):
+        return _f("Quella data è oltre un anno da oggi: a quando è spostata?", ok=False)
+    materia = str(v["materia"]).lower()
+    if v["data"] == d.isoformat():
+        return _f(f"La verifica di {materia} è già {detta(d)}.", verifica=v["id"])
+    domanda = f"Vuoi che sposti la verifica di {materia} da {detta(v['data'])} a {detta(d)}?"
+    return _f(domanda, verifica=v["id"],
+              in_sospeso={"tool": "studio", "domanda": domanda,
+                          "cosa": f"spostare la verifica di {materia} a {detta(d)}",
+                          "argomenti": {"azione": "sposta", "verifica": v["id"],
+                                        "data": d.isoformat()}})
+
+
 def _archivia(ctx, svc, chi, v) -> dict:
     svc.archivia(chi, v["id"])
     return _f(f"Ho archiviato {_nome_verifica(v)}: resta fra le tue cose anche dopo.")
@@ -994,6 +1040,8 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
             return _salta(ctx, svc, chi, v)
         if azione == "sposta":
             return _sposta(ctx, svc, chi, v, data)
+        if azione == "proponi_data":
+            return _proponi_data(ctx, svc, chi, v, data)
         if azione == "archivia":
             return _archivia(ctx, svc, chi, v)
         if azione in ("tieni", "togli"):
@@ -1620,7 +1668,10 @@ DESCRIZIONE = (
     "cosa parla e a che punto è; «piano»; «oggi» («cosa devo studiare oggi?»); «fatto» il giorno "
     "di oggi fatto; «salta_oggi» per lo studio di oggi («oggi non ce la faccio», «salta lo studio "
     "di oggi»: le pagine passano ai giorni che restano); «sposta» la data della verifica («la verifica è stata spostata a "
-    "venerdì», con data); se non è chiaro quale dei due, chiedilo; «archivia»; «tieni» o «togli» un "
+    "venerdì», con data); se non è chiaro quale dei due, chiedilo; «proponi_data» quando sei tu a "
+    "proporre la data nuova che la persona non ha detto (letta in una pagina, calcolata: data e "
+    "verifica), al posto di chiederlo con parole tue: la domanda la fa il codice, e al «sì» chiami "
+    "«sposta» con la stessa verifica e la stessa data; «archivia»; «tieni» o «togli» un "
     "argomento (numero = la posizione nell'elenco, o titolo); «riprova» una pagina messa da parte; «sessione» con le risposte "
     "a «quanto conosci l'argomento?» (conoscenza 1–5) e «come ti senti oggi?» (umore); "
     "«resoconto» di un giorno di studio («cosa ho fatto oggi?», «com'è andata ieri?», giorno "
