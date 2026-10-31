@@ -57,6 +57,7 @@ from .tools.dialogo import FRASI_CORREZIONE
 from .config import Config, DEEPEN_WORDS, SEARCH_PROMISE
 from .immagini import FOTO_IN_ATTESA, FOTO_NON_VISTA, FOTO_PERSA, Immagine
 from .schermi import schede as schede_foto
+from .schermi.archivio import di_quale_schermo
 from .schermi import tocchi
 from .schermi.moduli import annuncio_lavoro, completa as completa_modulo, oscura, oscura_tutto
 from .speaker_id import estimate_gender
@@ -1545,7 +1546,7 @@ class Ciclo:
         # aspettava in coda («esci» detto un attimo prima). Niente al ciclo. Dal 28/10 (#301)
         # dallo schermo personale la casella, le foto e i file valgono sempre (al più
         # familiare, con gli orari di un minore: _fuori_orario); i moduli no
-        schermo = schermi.schermo(scritto.get("schermo_id"))
+        schermo = schermi.schermo(scritto.get("schermo_id"), **di_quale_schermo(scritto))
         consentito = getattr(schermi, "scritto_consentito", None)
         ok, motivo = (consentito(schermo, scritto.get("tipo") or "scritto") if consentito
                       else schermi.scrittura_consentita(schermo))
@@ -1644,7 +1645,8 @@ class Ciclo:
               f"{round(att.dimensione / 1024)} kB): aspetto la domanda", flush=True)
         if schermi is not None and scritto.get("schermo_id") is not None:
             try:
-                schermi.invia_a(scritto["schermo_id"], schede_foto.allegato(att))
+                schermi.invia_a(scritto["schermo_id"], schede_foto.allegato(att),
+                                **di_quale_schermo(scritto))
             except Exception as e:  # noqa: BLE001 — lo schermo non ferma la voce
                 print(f"   [SCHERMI] file non mostrato: {e}", flush=True)
         return self._senza_domanda(t, frase)
@@ -1666,7 +1668,8 @@ class Ciclo:
               f"({img.larghezza}×{img.altezza}): aspetto la domanda", flush=True)
         if schermi is not None and scritto.get("schermo_id") is not None:
             try:
-                schermi.invia_a(scritto["schermo_id"], schede_foto.foto(img))
+                schermi.invia_a(scritto["schermo_id"], schede_foto.foto(img),
+                                **di_quale_schermo(scritto))
             except Exception as e:  # noqa: BLE001 — lo schermo non ferma la voce
                 print(f"   [SCHERMI] foto non mostrata: {e}", flush=True)
         return self._senza_domanda(t, self._frase_pieno(FOTO_IN_ATTESA) if pieno
@@ -1951,13 +1954,18 @@ class Ciclo:
         hub, sid = self.s.schermi, scritto.get("schermo_id")
         if hub is None or sid is None:
             return
+        quale = di_quale_schermo(scritto)
+        if quale and hub.schermo(sid, **quale) is None:
+            # Lo schermo del tocco è stato revocato e il numero riabbinato mentre il tocco
+            # aspettava (#275): le sue schede non vanno allo schermo nuovo
+            return
         for card in [c for c in (res.get("scheda"), res.get("schede")) if c]:
             for c in (card if isinstance(card, list) else [card]):
                 try:
                     if c.get("visibilita") == schede_foto.PUBBLICA:
                         self._scheda_pubblica_del_tocco(hub, sid, c, scritto, livello)
                     else:
-                        hub.invia_a(sid, c)
+                        hub.invia_a(sid, c, **quale)
                 except Exception as e:  # noqa: BLE001 — lo schermo non ferma il ciclo
                     print(f"   [SCHERMI] scheda del tocco non inviata: {type(e).__name__}",
                           flush=True)
@@ -2010,7 +2018,7 @@ class Ciclo:
         if not ok:
             dati["errore"] = errore or "Non ci sono riuscita: riprova o chiedimelo a voce."
         try:
-            hub.evento_a(sid, "tocco", dati)
+            hub.evento_a(sid, "tocco", dati, **di_quale_schermo(scritto))
         except Exception:  # noqa: BLE001 — lo schermo non ferma il ciclo
             pass
 
@@ -2984,7 +2992,7 @@ class Ciclo:
             try:
                 hub = getattr(self.s, "schermi", None)
                 sid = (t.scritto or {}).get("schermo_id")
-                di = ((hub.schermo(sid) or {}).get("proprietario")
+                di = ((hub.schermo(sid, **di_quale_schermo(t.scritto)) or {}).get("proprietario")
                       if hub is not None and sid is not None else None)
             except Exception:  # noqa: BLE001 — nel dubbio uno schermo qualunque
                 di = None

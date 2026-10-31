@@ -357,7 +357,8 @@ class Giochi:
                        persona=mitt.nome)
         dove = s.get("nome") or "schermo"
         if not nuova:
-            altri = [self._nome_schermo(x) for x in p.posti if x != sid]
+            # Su una copia (#275): l'hub può togliere un posto mentre si legge il nome
+            altri = [self._nome_schermo(x) for x in list(p.posti) if x != sid]
             frase = (f"Sei nella partita di «{titolo}»" + (f" con {', '.join(altri)}"
                                                            if altri else "") + ".")
         elif p.condivisa:
@@ -1102,8 +1103,10 @@ class Giochi:
                 # schermo, i nomi degli altri schermi della partita e i segni delle voci (per
                 # «tocca a te» e «quanti punti ho?»: restano dentro Calliope)
                 "massimo": p.massimo, "posto": posto.giocatore,
+                # Su una copia, fuori dal lock (#275): se la cache dell'hub scade proprio qui,
+                # `schermi_via` toglie un posto durante il giro («dictionary changed size»)
                 "schermi": {x.giocatore: (self.hub.schermo(x.sid) or {}).get("nome") or ""
-                            for x in p.posti.values() if x.giocatore},
+                            for x in list(p.posti.values()) if x.giocatore},
                 "voci": dict(p.voci)}
 
     def turno_altrui(self, partita: str, schermo, comando: str,

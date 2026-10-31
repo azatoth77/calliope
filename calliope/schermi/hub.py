@@ -772,10 +772,12 @@ class Schermi:
                        and mittente.certo and mittente.persona)
         with self._lock:
             for s in dest:
+                if not self._stesso(s):
+                    continue                    # il numero è di un altro schermo, da adesso
                 self._in_storia(s["id"], storia)
                 if scaricabile and s.get("proprietario") == mittente.persona:
                     registra_scaricabili(self.scaricamenti, s["id"], scheda, mittente.persona)
-                for c in self._conn.get(s["id"], []):
+                for c in self._sue(s):
                     if c.consegna(("scheda", msg)):
                         raggiunti.append(s["nome"])
         # La cronologia su disco della persona (08/10): solo le schede personali di chi è
@@ -790,24 +792,28 @@ class Schermi:
                 "destinatari": [s["nome"] for s in dest], "motivo": motivo,
                 "abbinati": len(tutti), "ms": round((time.perf_counter() - t0) * 1000, 2)}
 
-    def invia_a(self, sid: int, scheda: dict) -> bool:
+    def invia_a(self, sid: int, scheda: dict, creato=None) -> bool:
         """La scheda a uno schermo preciso, senza scegliere i destinatari: la risposta a una
         frase scritta torna sullo schermo da cui è arrivata (04/10). True se una sua pagina è
-        collegata (altrimenti resta nella sua cronologia)."""
-        if not self.valido(sid):
+        collegata (altrimenti resta nella sua cronologia). Con `creato` (l'istante
+        dell'abbinamento, #275) solo se lo schermo è ancora quello: un elemento rimasto in coda
+        mentre lo schermo veniva revocato e il numero riabbinato non va allo schermo nuovo."""
+        s = self.schermo(sid, creato)
+        if s is None:
             return False
         pub = pubblica(scheda)
         msg = json.dumps(pub, ensure_ascii=False, default=str)
         ok = False
-        s = self.schermo(sid) or {}
         if "_scarica" in scheda or "_registro" in scheda:
             # Lo schermo da cui è stata scritta la richiesta: il suo proprietario (se è personale)
             if s.get("proprietario"):
                 registra_scaricabili(self.scaricamenti, sid, scheda, s["proprietario"])
         storia = per_storia(scheda, pub)
         with self._lock:
+            if not self._stesso(s):
+                return False
             self._in_storia(sid, storia)
-            for c in self._conn.get(sid, []):
+            for c in self._sue(s):
                 ok = c.consegna(("scheda", msg)) or ok
         # Una scheda personale a uno schermo personale (la risposta scritta da lì, lo sviluppo,
         # il cassetto): nella cronologia su disco del suo proprietario (08/10)
@@ -815,14 +821,18 @@ class Schermi:
             self._salva_persona(s["proprietario"], scheda, storia)
         return ok
 
-    def evento_a(self, sid: int, tipo: str, dati: dict) -> int:
+    def evento_a(self, sid: int, tipo: str, dati: dict, creato=None) -> int:
         """Un evento SSE a tutte le pagine aperte di uno schermo (05/10: i messaggi dei giochi
-        verso il loro riquadro). Non entra nella cronologia; non blocca. Quante pagine."""
+        verso il loro riquadro). Non entra nella cronologia; non blocca. Quante pagine. Con
+        `creato` (#275) solo le pagine dello schermo con quell'abbinamento."""
+        if creato is not None and self.schermo(sid, creato) is None:
+            return 0
         msg = json.dumps(dati, ensure_ascii=False, default=str)
         n = 0
         with self._lock:
             for c in self._conn.get(sid, []):
-                n += c.consegna((tipo, msg))
+                if creato is None or (c.schermo or {}).get("creato") == creato:
+                    n += c.consegna((tipo, msg))
         return n
 
     # ── l'aspetto dei satelliti personali (27/10, aspetto.py) ──
@@ -884,8 +894,24 @@ class Schermi:
             c.consegna(("aspetto", msg))
         return {"ok": True, "aspetto": dati}
 
-    def schermo(self, sid) -> dict | None:
-        return next((s for s in self.abbinati() if s["id"] == sid), None)
+    def schermo(self, sid, creato=None) -> dict | None:
+        """Lo schermo col numero `sid`; con `creato`, solo se è proprio quello (non un altro col
+        numero riusato dopo una revoca, #275)."""
+        return next((s for s in self.abbinati() if s["id"] == sid
+                     and (creato is None or s.get("creato") == creato)), None)
+
+    def _stesso(self, s: dict) -> bool:
+        """Chiamare col lock: lo schermo `s` (letto da `abbinati()` prima del lock) è ancora
+        quello che l'hub conosce con quel numero (#275, punto 2: fra `abbinati()` e il lock una
+        revoca e un riabbinamento da terminale possono dare il numero a un altro schermo)."""
+        sid = s.get("id")
+        return sid not in self._identita or self._identita[sid] == s.get("creato")
+
+    def _sue(self, s: dict) -> list:
+        """Chiamare col lock: le pagine collegate dello schermo `s`, solo quelle con la sua
+        identità (una pagina dello schermo di prima col numero riusato non conta)."""
+        ident = self.identita(s)
+        return [c for c in self._conn.get(s.get("id"), []) if self.identita(c.schermo) == ident]
 
     def collegato(self, sid, locale: bool | None = None) -> bool:
         """Lo schermo ha una pagina aperta (con `locale`: aperta su questo computer)."""
@@ -979,7 +1005,7 @@ class Schermi:
                                   + mie + gia))
         self.ricorda(scheda, mittente)
         for sid in dest:
-            self.invia_a(sid, scheda)
+            self.invia_a(sid, scheda, creato=per_id[sid].get("creato"))
         return {"schermi": [per_id[i]["nome"] for i in dest]}
 
     # ── stato della voce ──

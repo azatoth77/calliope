@@ -39,7 +39,7 @@ chi ha chiesto, muto) è della corsia, cioè del thread, e la voce è quella del
 import threading
 
 from . import corsie
-from .schermi.archivio import norm_stanza
+from .schermi.archivio import di_quale_schermo, norm_stanza
 
 # Origini ricordate per gli annunci: oltre, le più vecchie si dimenticano
 MAX_ORIGINI = 500
@@ -120,6 +120,9 @@ class Instradamento:
         voce: «satellite» (dal satellite di quello schermo), «stanza» (dal satellite attivo,
         che è nella stessa stanza, o dalle casse di qui), «muta» (solo scritta)."""
         sid = item.get("schermo_id")
+        quale = di_quale_schermo(item)
+        if quale and self.schermi is not None and self.schermi.schermo(sid, **quale) is None:
+            sid = None      # lo schermo è stato revocato e il numero riabbinato (#275)
         stanza = norm_stanza(item.get("stanza") or "") or None
         coll = self.satelliti.per_schermo(sid) if self.satelliti is not None else None
         self._scritto = {"satellite": coll.satellite.get("id") if coll is not None else None,
@@ -168,10 +171,14 @@ class Instradamento:
         if hub is None or sid is None or not testo:
             return False
         from .schermi import schede
-        s = hub.schermo(sid) or {}
+        quale = di_quale_schermo(item)
+        s = hub.schermo(sid, **quale)
+        if s is None and quale:
+            return False    # revocato e riabbinato mentre la frase aspettava (#275)
+        s = s or {}
         vis = schede.PERSONALE if s.get("proprietario") else schede.PUBBLICA
         chiave = f"risposta:{item.setdefault('_chiave', id(item))}"
-        return hub.invia_a(sid, schede.risposta(domanda or "", testo, vis, chiave=chiave))
+        return hub.invia_a(sid, schede.risposta(domanda or "", testo, vis, chiave=chiave), **quale)
 
     # ── annunci ──
     def segna(self, chiave):
