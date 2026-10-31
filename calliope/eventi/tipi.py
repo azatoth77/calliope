@@ -118,6 +118,9 @@ ATTI: dict[str, tuple[str, bool, str]] = {
     "onesta": ("risposta", False, "1c"),
     # La frase pronta dopo una risposta che girava in tondo (14/10 notte, ciclo_ripetuto)
     "incartata": ("risposta", False, "1c"),
+    # La frase del codice al posto di una frase del modello che diceva la soluzione di un
+    # esercizio guidato (31/10, #278, la guardia di Brain)
+    "esercizio_svelato": ("risposta", False, "1c"),
     "riga_sviluppo": ("risposta", False, "1f"),
     "sfida": ("risposta", False, "1g"),
     # La mezza frase fissa al cambio d'argomento (§ 13, passo 3): «Metto da parte lo sviluppo

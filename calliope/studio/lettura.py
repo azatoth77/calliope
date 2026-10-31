@@ -572,7 +572,13 @@ class Lettore:
                                    "da_controllare": 0, "pagina_con_istruzioni": 0,
                                    "testo_ordine": 0, "rotte": 0, "vuote": 0, "cambiate": 0,
                                    "cedute": 0, "secondi": 0.0, "token_in": 0, "token_out": 0,
-                                   "tipi": {}}}
+                                   "tipi": {}},
+                       # Gli esercizi guidati (#278): foto lette e guide, conti e avvisi, mai
+                       # il testo del problema né i passi
+                       "esercizi": {"letti": 0, "illeggibili": 0, "guide": 0, "senza_guida": 0,
+                                    "passi": 0, "scartati": 0, "indizi_tolti": 0, "rotte": 0,
+                                    "cedute": 0, "secondi": 0.0, "token_in": 0,
+                                    "token_out": 0}}
 
     # ── ciclo ──
     def avvia(self):
@@ -623,6 +629,11 @@ class Lettore:
         n = d.scrivi("UPDATE studio_pagine SET stato = 'da_leggere' WHERE stato = 'in_lettura'")
         if n:
             self._registra(f"{n} pagine riprese dopo un riavvio")
+        # Le foto degli esercizi guidati (#278) rimaste a metà
+        try:
+            self.studio.riprendi_esercizi()
+        except Exception:  # noqa: BLE001 — un db di prima senza la tabella
+            pass
         # Le pagine messe da parte da un'altra versione (dopo un aggiornamento) si riprovano
         ver = versione_codice()
         ids = [r["id"] for r in d.tutti("SELECT id, metodo FROM studio_pagine WHERE stato = "
@@ -673,6 +684,14 @@ class Lettore:
             if time.monotonic() < self._riprova_dopo:
                 # Dopo un errore si aspetta, anche se una pagina nuova sveglia il lettore
                 return {"fatte": fatte, "aspetta": "errore"}
+            # Gli esercizi guidati (#278), con la stessa guardia: la foto da leggere, poi la guida
+            # a passi; per primi: la persona sta aspettando il suo problema, il resto è di sfondo
+            esito = self._esercizi_del_giro()
+            if esito == "fatto":
+                fatte += 1
+                continue
+            if esito is not None:
+                return {"fatte": fatte, "aspetta": esito}
             # Gli argomenti di una verifica con le pagine tutte lette (passo 4.4, #283), prima
             # delle pagine di un'altra: la verifica più vicina è già pronta per la conferma
             pronte = self.studio.verifiche_per_argomenti()
@@ -763,6 +782,148 @@ class Lettore:
                 return {"fatte": fatte, "aspetta": esito}
             fatte += 1
         return {"fatte": fatte}
+
+    # ── gli esercizi guidati (31/10, issue #278, studio/esercizi.py) ──
+    def _esercizi_del_giro(self) -> str | None:
+        """Un passo sugli esercizi: «fatto» (una foto letta o una guida chiesta), None (niente da
+        fare), o il motivo per cui aspettare (la guardia, un errore del server)."""
+        try:
+            da_leggere = self.studio.esercizi_da_leggere()
+            per_guida = [] if da_leggere else self.studio.esercizi_per_guida()
+        except Exception:  # noqa: BLE001 — un db di prima senza la tabella
+            return None
+        if not da_leggere and not per_guida:
+            return None
+        motivo = self.guardia.motivo()
+        if motivo is not None:
+            if motivo != self.in_attesa:
+                self._registra(f"esercizi in attesa: {motivo}")
+            self.in_attesa = motivo
+            self.misure["attese"] += 1
+            return motivo
+        self.in_attesa = None
+        esito = (self.leggi_esercizio(da_leggere[0]) if da_leggere
+                 else self.genera_guida(per_guida[0]))
+        if esito in ("ceduta", "giu", "errore", "errore_server"):
+            return esito
+        return "fatto"
+
+    def leggi_esercizio(self, riga: dict) -> str:
+        """La foto di un esercizio con l'harness delle pagine: il testo (un dato) e gli avvisi;
+        «letto», «illeggibile», «ceduta», «giu», «errore_server», «errore» o «persa»."""
+        from PIL import Image, ImageOps
+        m = self.misure["esercizi"]
+        eid = int(riga["id"])
+        if not self.studio.prendi_esercizio(eid):
+            return "persa"
+        chiave = -eid                  # le cadute e gli errori, separati da quelli delle pagine
+        t0 = time.monotonic()
+        try:
+            path = self._file({"file": riga.get("file")})
+            if path is None:
+                self.studio.esercizio_letto(eid, None, ["file"])
+                m["illeggibili"] += 1
+                return "illeggibile"
+            with Image.open(path) as im:
+                img = ImageOps.exif_transpose(im).convert("RGB")
+            letto = self._ocr(img, chiave)
+            if letto is not None and letto["capovolta"]:
+                girata = self._ocr(img.rotate(180), chiave)
+                if girata is not None and not girata["capovolta"]:
+                    letto = girata
+        except Ceduta:
+            m["cedute"] += 1
+            self.studio.rilascia_esercizio(eid)
+            return "ceduta"
+        except _Giu:
+            self.studio.rilascia_esercizio(eid)
+            return "giu"
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            self.studio.rilascia_esercizio(eid)
+            attesa = self._attendi_errore()
+            self._registra(f"esercizio {eid}: errore del server ({e}), riprovo fra "
+                           f"{attesa:.0f} s")
+            return "errore_server"
+        except Exception as e:  # noqa: BLE001
+            self.misure["errori"] += 1
+            n = self._errori.get(chiave, 0) + 1
+            self._errori[chiave] = n
+            self._registra(f"esercizio {eid}: errore nella lettura ({type(e).__name__})")
+            if n >= ERRORI_MAX:
+                self._errori.pop(chiave, None)
+                self.studio.esercizio_letto(eid, None, ["errore"])
+                return "illeggibile"
+            self.studio.rilascia_esercizio(eid)
+            self._attendi_errore()
+            return "errore"
+        if letto is None:
+            m["illeggibili"] += 1
+            self.studio.esercizio_letto(eid, None, ["in_tondo"])
+            return "illeggibile"
+        testo = "\n".join(p["testo"] for p in letto["pagine"]).strip()
+        avvisi = avvisi_lettura(letto, testo, D.da_j(riga.get("avvisi")))
+        self.studio.esercizio_letto(eid, testo, avvisi)
+        m["letti"] += 1
+        m["secondi"] = round(m["secondi"] + time.monotonic() - t0, 2)
+        return "letto"
+
+    def genera_guida(self, riga: dict) -> str:
+        """La guida a passi di un esercizio letto (`esercizi_genera.py`): una richiesta col solo
+        testo in busta, il controllo del codice, la guida scritta («pronto» o «senza_guida»)."""
+        from . import esercizi_genera as EG
+        m = self.misure["esercizi"]
+        eid = int(riga["id"])
+        testo = riga.get("testo") or ""
+        firma = EG.firma(testo, "guida")
+        t0 = time.monotonic()
+        grezzi = None
+        try:
+            for prova in range(2):
+                r = self._chiedi_corpo(EG.corpo(self.modello, testo, riga.get("materia") or "",
+                                                riga.get("livello")))
+                m["token_in"] += int(r.get("prompt") or 0)
+                m["token_out"] += int(r.get("eval") or 0)
+                if not r.get("fine"):
+                    raise ErroreServer("stream senza fine")
+                self._errori_di_fila = 0
+                self._riprova_dopo = 0.0
+                self._risposte_ok += 1
+                if r.get("fine") != "length":
+                    grezzi = EG.leggi(r.get("content") or "")
+                    break
+                self._registra(f"esercizio {eid}: guida in tondo fino a max_tokens"
+                               + (", la richiedo" if not prova else ""))
+        except Ceduta:
+            m["cedute"] += 1
+            return "ceduta"
+        except _Giu:
+            return "giu"
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            attesa = self._attendi_errore()
+            self._registra(f"esercizio {eid}: guida, errore del server ({e}), riprovo fra "
+                           f"{attesa:.0f} s")
+            return "errore_server"
+        except Exception as e:  # noqa: BLE001
+            self.misure["errori"] += 1
+            self._registra(f"esercizio {eid}: guida non riuscita ({type(e).__name__})")
+            self.studio.scrivi_guida(eid, firma, [], None, ["errore"], EG.ERRORE)
+            self._attendi_errore()
+            return "errore"
+        m["secondi"] = round(m["secondi"] + time.monotonic() - t0, 2)
+        if grezzi is None:
+            m["rotte"] += 1
+            self.studio.scrivi_guida(eid, firma, [], None, ["guida_illeggibile"], EG.ROTTO)
+            return "rotto"
+        passi, risultato, avvisi = EG.proposte(grezzi, testo)
+        m["scartati"] += max(0, len(grezzi.get("passi") or ()) - len(passi))
+        m["indizi_tolti"] += sum(EG.INDIZIO_TOLTO in p["avvisi"] for p in passi)
+        esito = EG.PRONTA if len(passi) >= EG.PASSI_MIN else EG.SENZA_GUIDA
+        if self.studio.scrivi_guida(eid, firma, passi, risultato, avvisi, esito):
+            m["guide" if esito == EG.PRONTA else "senza_guida"] += 1
+            m["passi"] += len(passi) if esito == EG.PRONTA else 0
+        return esito
 
     # ── una pagina ──
     def _prendi(self, pid: int) -> bool:

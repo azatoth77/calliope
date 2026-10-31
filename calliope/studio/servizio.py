@@ -71,6 +71,7 @@ from . import piano as P
 from . import padronanza as PD
 from . import resoconto as R
 from .ascolta import Ascolti
+from .esercizi import Esercizi
 from .importa import Importazioni
 from .libreria.studio import DallaLibreria
 from .mappe import Mappe
@@ -225,7 +226,7 @@ def _data(valore) -> datetime.date:
     return datetime.date.fromisoformat(str(valore).strip()[:10])
 
 
-class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni):
+class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, Esercizi):
     """Lo Studio di questa installazione: un oggetto per processo. Le mappe concettuali (passo 7,
     #247) sono in `mappe.py`, le domande e le prove (passo 8, #248) in `prove.py`, il ripasso da
     ascoltare (passo 9, #249) in `ascolta.py`, la vista del tutore e le indicazioni (passo 10,
@@ -2208,6 +2209,9 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni):
                 "libreria": self._libreria_home(chi, v),
                 # La mappa (passo 7, #247): solo conti e stati; il testo lo dà /api/studio/mappa
                 "mappa": self._conto_mappa(v),
+                # Gli esercizi guidati (#278): solo conti (None se spenti per chi guarda); il
+                # testo lo dà /api/studio/esercizio
+                "esercizi": self.conto_esercizi(chi, v),
                 # Il riepilogo e le sessioni (passo 4b, #244): righe scritte dal codice dai dati
                 "riepilogo": self._riepilogo_schermo(v, pi) if pi is not None else None,
                 # Fuori dal piano: i tolti (non gli uniti a un altro), per rimetterli con un tocco

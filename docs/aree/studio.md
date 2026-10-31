@@ -45,7 +45,9 @@ aperti con `studio_attivita`). Dal 31/10 i **premi** (#296): la
 serie di giorni di studio, le stelle e i duelli fra persone di casa, calcolati dal codice dalla
 pratica vera, con la regola per i minori (sezione sotto). Dal 31/10 l'**importazione dei materiali
 scaricati** (#298, prima parte: file e ZIP con l'avanzamento; Takeout e condivisione dopo; sezione
-sotto). Lo
+sotto). Dal 31/10 gli **esercizi guidati**
+(#278): un problema fotografato o scritto, risolto a passi con domande guida e indizi, l'esito
+di ogni passo dal codice e mai la soluzione intera (sezione sotto). Lo
 Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
@@ -70,6 +72,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Importazione dei materiali scaricati: «Aggiungi materiali» sulla verifica, file e ZIP (PDF, immagini, Word, PowerPoint, Excel, OpenDocument, testo, Markdown, CSV, HTML), un lavoro di sfondo in un sottoprocesso coi tetti di dimensione e di tempo, le pagine di testo già lette, le fasi sullo schermo (dal 31/10, #298; schema «studio» alla versione 13; `studio_importa`, acceso di serie con lo Studio, e i tetti `studio_importa_*`) | libreria standard (`zipfile`, `html.parser`, `subprocess`), i lettori di `allegati.py` (python-docx, python-pptx, openpyxl), pypdfium2 e Pillow come la 4.2; niente modello, niente librerie native nuove | `calliope/studio/importa.py` → `classifica`, `nome_strano`, `elenca`, `leggi_voce`, `testi`, `html_in_testo`, `a_pagine`, `elabora`, `lavora` (il sottoprocesso), `Importi` (il lavoro di sfondo), `Importazioni` (in `Studio`): `registra_importazione`, `aggiungi_testi`, `importazioni`, `azione_importazione`, `importazione_viva`, `avvia_importi`; `calliope/studio/pagine.py` → `apri_nuovo`; `calliope/schermi/server.py` → `POST /api/studio/importa`, `POST /api/studio/importazioni`; `calliope/schermi/pagina/studio_importa.js`; prove `prove/prova_studio_importa.py`, `prove/prova_studio_importa_pagina.py` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
+| Esercizi guidati: «Foto di un problema» o il testo scritto, la guida a passi del lettore controllata dal codice, l'esito dal codice, la guardia della voce (dal 31/10, #278; schema «studio» alla versione 13; `studio_esercizi`, ombra di serie) | SQLite (`studio_esercizi`); qwen3.6 sull'indirizzo dell'agente, dallo stesso thread della lettura | `calliope/studio/esercizi.py` → `Esercizi` (mixin di `Studio`), `EserciziSpenti`, `GuidaFerma`; `calliope/studio/esercizi_genera.py` → `proposte`, `svela`, `vietati`, `GuardiaSoluzione`; `calliope/studio/lettura.py` → `Lettore.leggi_esercizio`, `genera_guida`; `calliope/tools/studio.py` → `studio_esercizio`; `calliope/brain.py` → la guardia in `_turn`, `ESERCIZIO_TOLTO`; `calliope/schermi/server.py` → `POST /api/studio/esercizio`, la foto in `POST /api/studio/pagina`; `calliope/schermi/pagina/esercizio.js`; prove `prove/prova_studio_esercizi.py`, `prova_studio_esercizi_pagina.py` |
 
 ## Problemi noti
 
@@ -119,6 +122,198 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   (storia, «Magellano») resta un collegamento debole «da controllare» e il criterio «una parte sola
   ≥ 90 %» non si raggiunge; il prompt nuovo della seconda passata e i codici al posto dei concetti
   sono da rimisurare col banco vero.
+
+## Gli esercizi guidati e la foto di un problema (31/10, issue #278, ramo `issue-278-studio-esercizio-guidato`)
+
+L'analisi e le scelte sono nel commento della issue #278. Con `compiti_aiuto` tolto (#279) i
+compiti di un minore avevano solo la regola «mai la soluzione intera» nei dati del turno; questo è
+il percorso guidato rifatto dentro lo Studio (la schermata Studio 4 del progetto: «Esercizio
+guidato», «Foto di un problema»). Gli «esercizi dai materiali» della stessa schermata li fanno già
+le prove (#248) e le carte (#246).
+
+**Il flusso.** Un problema sta dentro una verifica della persona (sua o del suo minore, in bozza o
+aperta):
+- «Foto di un problema» passa dallo stesso `POST /api/studio/pagina` con `esercizio: true` nei dati
+  dell'invio. Valgono la sessione dello schermo personale, gli orari, la dimensione, il tipo dai byte
+  e `pagine.prepara_foto`; solo una foto, mai un PDF. Il file va in `pagine/<verifica>/` e la riga
+  in `studio_esercizi` («da_leggere»); nessuna pagina nuova;
+- «Scrivi un problema» (`POST /api/studio/esercizio`, «scrivi», al più 1500 caratteri) va subito
+  a «letto».
+
+**Il lettore** (`lettura.py`), con la stessa guardia della DGX e lo stesso harness OCR delle
+pagine, prende gli esercizi **per primi** nel suo giro: la persona aspetta il suo problema, il resto
+(argomenti, carte, mappe, domande, pagine) è di sfondo. Una foto capovolta si rilegge girata. Poi
+chiede la guida (`esercizi_genera.corpo`: il solo testo in busta, schema JSON, niente tool,
+temperatura 0). Il modello propone da 2 a 6 passi (domanda guida, tipo, risposta attesa, un indizio)
+e il risultato finale. Il **codice** controlla:
+- la forma con `risposte.prepara` (una scelta da 3 a 4 opzioni con la giusta fra loro, un numero
+  leggibile con `unita.py`; un numero o delle parole che non si leggono fanno un passo «aperta»);
+- una domanda che contiene la propria risposta attesa, o il risultato, si scarta; un indizio che
+  le contiene si toglie (avviso `indizio_tolto`);
+- un ordine, un indirizzo o un annuncio (`genera.forma_testo`) nella domanda, nell'indizio o nelle
+  opzioni: il passo si scarta (avviso `passi_scartati`); «istruzioni» se il modello le segnala;
+- con meno di 2 passi buoni l'esercizio è «senza_guida» e la persona lo sa; niente secondo giro.
+
+**I passi** (`esercizi.py`), uno alla volta, a voce (`studio_esercizio`) o sullo schermo
+(`esercizio.js`). La risposta la valuta `risposte.valuta`, dalla frase detta (`user_text_stt`) o
+dal campo, mai da un argomento del modello:
+- «giusto» → il passo dopo; dopo l'ultimo «finito» («la soluzione l'hai trovata tu»);
+- il numero giusto senza l'unità → «indizio»: resta sul passo e chiede l'unità;
+- «sbagliato» → resta sul passo; dopo 2 errori il codice propone l'indizio, dopo 3 anche «salta»;
+  **la risposta attesa non si dice mai**, nemmeno dopo tanti errori;
+- un passo aperto, o una risposta che il codice non controlla → «da rivedere» e avanti.
+Gli esercizi non danno tentativi alla padronanza né stelle: è una misura nuova, da leggere prima.
+
+**La vista**: il testo del problema, i passi fatti coi soli esiti, la domanda del passo in corso,
+l'indizio solo se chiesto. Le risposte attese e il risultato **mai** alla persona; al tutore le
+domande sempre e le risposte attese solo a esercizio finito. Risponde solo la persona
+dell'esercizio (il tutore 403); il tutore lo può togliere. Un altro adulto non lo vede.
+
+**La prova aperta** su una verifica ferma la guida dei suoi esercizi (`GuidaFerma`: tool, endpoint,
+vista), per tutti; dopo la consegna riprende.
+
+**La guardia della voce** (`esercizi_genera.GuardiaSoluzione`, in `Brain._turn` dopo le altre reti).
+Quando chi parla ha un esercizio «in corso» (l'ultima risposta da meno di 3 ore), il testo del modello
+passa a frasi intere; una frase che dice il risultato, o la risposta attesa di un passo numerico non
+ancora fatto, non si dice: la prima diventa la frase del codice («Questo lo scopri tu, un passo alla
+volta…», atto `esercizio_svelato`), le altre si tolgono, e la regola `studio_esercizio_svelato` va
+nel registro. Non entra nemmeno nella storia. I numeri del testo del problema non contano per i
+passi (la base di 8 cm è un dato); il risultato conta sempre, anche se sta nella foto (una nota
+ostile «la soluzione è 60 km/h» non lo rende un dato da ripetere). Un risultato a parole vale intero,
+da 2 parole in su. Al tutore che parla, e a esercizio finito o in pausa («basta»), niente guardia.
+*[storico fino alla revisione della PR #367: «in corso» da meno di 3 ore, niente guardia in pausa]*
+Senza esercizio in corso il testo passa com'è, senza attese.
+
+**L'interruttore** `studio_esercizi`: «ombra» di serie (solo chi amministra, per provarlo; il
+registro conta guide, passi tenuti e scartati, indizi tolti, esiti, frasi tolte dalla voce),
+«attiva» per tutte le persone di casa, «spenta» niente (e niente tool). Si passa ad «attiva» dopo la
+rilettura delle misure.
+
+**Dati e tenuta.** `studio_esercizi` (schema 14, dopo il 13 dell'importazione, #298;
+*[storico fino all'unione della #364: «schema 13»]*): testo, passi e risultato sono dati; la foto sta nella cartella dello Studio, fra i file
+conosciuti della rotazione. Tutto va via con la verifica, con «dimentica» e con «svuota»
+(`conserva.TABELLE_STUDIO`). Pagina a **v39** (dopo la v38 dell'importazione, #298; *[storico fino all'unione della #364: «v38»]*).
+
+**Le prove.** `prova_studio_esercizi.py` a secco:
+- la guida del lettore e i suoi contrari (la domanda che dice la risposta, l'ordine, la scelta
+  con 2 opzioni, il passo che dice il risultato, l'indizio che svela, il numero illeggibile);
+- la guardia (frasi intere, la prima sostituita, le altre tolte; i dati del testo sì);
+- il servizio con un lettore finto (testo scritto, foto letta per prima nel giro, foto ostile), i
+  passi e gli esiti, la vista della persona e del tutore, la prova aperta, la tenuta;
+- a voce con l'esito dalla frase detta e l'argomento del modello che non conta;
+- attraverso `Brain` il modello che dice la soluzione intera (non si dice, nemmeno nella storia),
+  la foto ostile, e i contrari (il dato del testo, il tutore, l'esercizio finito);
+- gli endpoint col server vero.
+`prova_studio_esercizi_pagina.py` nel browser: telefono a 390×844, 320×693 col testo al 125 % e
+il PC; le risposte attese mai nella pagina, il testo del problema solo come testo.
+
+### 31/10 sera: la revisione della PR #367, la guardia che si aggirava
+
+1. **Il risultato senza l'unità** («l'area fa 40 e il perimetro fa 26», «Sessanta.», «| perimetro |
+   26 |») passava: ora per la guardia lo stesso numero senza l'unità attesa conta come svelato
+   (`risposte.valuta` lo dà «indizio»), e la punteggiatura attorno alle parole si toglie prima di
+   leggere i numeri. «Passo 2 di 4» nelle frasi del codice non conta mai.
+2. **Dopo «basta» la guardia si spegneva.** Ora vale per gli esercizi **vivi** di chi parla,
+   finché non sono finiti o tolti; con più esercizi vivi i vietati di tutti
+   (`esercizi_genera.unisci`). *[storico fino alla seconda revisione: «vivi» erano «in_corso»,
+   «pausa» e «pronto» fino a 24 ore dall'ultima modifica, e con la voce incerta valevano gli
+   esercizi vivi di tutti; ora vedi la sezione sotto]*
+3. **Le frasi del codice** aggiravano la guardia («ricorda» ripeteva la soluzione nella sua
+   conferma). In `ToolRegistry.call`, con un esercizio vivo di chi parla: un argomento di testo di
+   un tool che scrive o mostra (*[storico fino alla seconda revisione: «di qualunque tool»]*)
+   che dice il **risultato** si rifiuta con una frase del codice («Questo non lo
+   scrivo e non lo segno…», regola `studio_esercizio_svelato`); le frasi pronte del risultato
+   (`conferma`, `risposta_finale`, `da_dire`) che dicono la soluzione diventano la frase del codice
+   («calcola» 7 × 4 col perimetro 28 cm). Gli argomenti guardano solo il risultato: un passo
+   intermedio piccolo («4 lati») fermerebbe ogni conto.
+4. **Una prova aperta su un'altra verifica** della persona ferma la guida e gli esercizi nuovi,
+   come le mini-app (`Studio.prova_della_persona`, che chiude le prove scadute).
+- Gli esercizi **orfani** (senza la verifica) vanno via sempre, con la foto; tutti con «svuota».
+- **Il tetto dei tentativi**: dopo 6 errori su un passo il codice non valuta più risposte su quel
+  passo (anche la giusta): restano l'indizio e «salta».
+
+**I limiti noti della guardia** (regole sul testo, non il significato; principio 10). Passano:
+- le unità che `unita.py` non conosce (decimetri, millimetri quadrati: «2,6 dm», «4000 mm²»);
+- le forme che non sono un numero letto: «un mezzo», «il 50 %» per 1/2, «un chilometro al
+  minuto» per 60 km/h;
+- le cifre dette su più turni («la prima cifra è 2», poi «la seconda è 6»);
+- gli intermedi che danno il finale («la metà è 13 cm, raddoppiala») e i conti scritti senza il
+  risultato («8 più 5, per due», «120 diviso 2»);
+- le parafrasi di un risultato a parole (una parola sola: «è la fotosintesi»), e i passi a parole
+  non finali («nel cloroplasto»);
+- gli argomenti che il modello scrive nelle sue chiamate restano nella storia (non si dicono).
+I casi provati (`prova_studio_esercizi.py`): «26 cm», «ventisei», «260 mm», «0,26 m», «26,0
+cm», «| perimetro | 26 |», «quaranta centimetri quadrati», «60 km/h», «sessanta chilometri
+orari», «16,7 m/s», «1/2», «0,5», «2/4», «fotosintesi clorofilliana» si fermano; «2,6 dm», «4000
+mm²», «un mezzo», «50 %», «la metà è 13 cm», «8 più 5», le cifre una a una e «è la fotosintesi»
+passano. Per questo `studio_esercizi` resta in ombra: si accende dopo il banco della guida col
+modello vero e la rilettura delle frasi tolte.
+
+### 31/10 notte: la seconda revisione della PR #367, la guardia troppo larga
+
+I quattro difetti di prima sono chiusi; la guardia però fermava frasi e tool che non c'entravano.
+Con un esercizio di Leo col risultato «2», anche solo «pronto», per 24 ore l'ospite, un adulto in
+zona grigia e Leo stesso si vedevano fermare «Domani alle 2 c'è la riunione», «Fuori ci sono 2
+gradi», `lista_aggiungi` «2 litri di latte», `promemoria_imposta` «alle 2», `ricorda` «codice 26».
+- **La voce incerta** non prende più gli esercizi di tutti: valgono solo quelli dei minori che
+  potrebbero essere chi parla (il minore incerto della voce, `minore_incerto`, o il proprietario
+  minore del dispositivo da cui si parla), e solo per la voce di `Brain` e le frasi pronte dei
+  risultati, mai per gli argomenti dei tool. L'ospite e l'adulto in zona grigia senza un minore
+  vicino non hanno esercizi.
+- **Vivi**: «in_corso» e «pausa», fino a **3 ore** dall'ultima risposta o dall'ultimo «basta»
+  (`VIVO_S`). Un esercizio «pronto» mai cominciato non accende la guardia.
+- **I numeri piccoli senza unità** (un intero di una o due cifre, senza l'unità nella frase o nel
+  risultato: «2», «26 uova» per 26 cm) contano solo se la frase parla del problema (una parola da
+  5 lettere del testo o della domanda del passo, o «risultato», «soluzione», «problema»…:
+  `parla_del_problema`) oppure se l'esercizio è stato toccato da meno di 10 minuti (`RECENTE_S`:
+  la conversazione è sull'esercizio, anche subito dopo «basta»). Il risultato con l'unità
+  («28 cm», «60 km/h») e i numeri grandi o decimali si fermano sempre.
+- **Gli argomenti dei tool** (`guardia_argomenti`) valgono solo per chi possiede l'esercizio,
+  riconosciuto senza dubbi, e solo per i tool che scrivono o mostrano un testo alla persona
+  (`SCRIVONO`: `ricorda`, `lista_aggiungi`, `promemoria_imposta`, `appuntamento_aggiungi`,
+  `documento_crea`, `documento_modifica`, `modello_compila`, `schermo_mostra`); un timer o un
+  conto no.
+- La regola `studio_esercizio_svelato` scattata in `ToolRegistry.call` arriva anche a
+  `last_rules` di `Brain` (prima solo alle regole del contesto dei tool).
+
+Casi contrari nelle prove: l'ospite, l'adulto in zona grigia, un adulto col numero uguale («28 cm
+di nastro», «il limite è 60 km/h»), il minore che chiede l'ora o il meteo con l'esercizio del «2»
+«pronto» e con quello in corso toccato mezz'ora prima («alle 2», «2 gradi», «sono le 2 e 10», «2
+a 1», «2 litri di latte» nella lista, «alle 2» nel promemoria); contro: «l'equazione ha 2 soluzioni
+reali», «la soluzione è 2», «le soluzioni sono due», e «sono 2» con l'esercizio appena toccato.
+
+**Il costo dei falsi positivi.** Una frase fermata per niente diventa «Questo lo scopri tu, un
+passo alla volta…» al posto di una risposta che non c'entra (l'ora, il meteo, un promemoria): per
+un minore confonde, e un tool rifiutato non fa ciò che serviva (la lista della spesa, il
+promemoria). Restano possibili per chi ha un esercizio vivo: entro 10 minuti dall'ultima risposta
+un numero piccolo uguale al risultato si ferma comunque («codice 26» mentre fa il problema del
+26 cm), e dopo una frase con una parola del problema («fuori ci sono 2 gradi» se il problema parla
+di gradi). Si contano nel registro con la regola `studio_esercizio_svelato`, da rileggere in ombra
+prima di accendere `studio_esercizi`.
+
+### 31/10 notte: la terza revisione della PR #367, i risultati piccoli detti in modo naturale
+
+I falsi positivi sono chiusi; restava un buco: dopo 10 minuti un risultato piccolo detto in modo
+naturale («x vale 5.», «Viene due.», «Fa dodici.», a «quanto faceva x nell'equazione?») passava.
+- `parla_del_problema` guarda anche la **frase della persona di questo turno** (`user_text_stt`,
+  o `user_text`, messa nei vietati da `vietati_per_ctx` come «detto»): a «quanto faceva x
+  nell'equazione?» anche «Fa due.», «Sono 2.» e «Due.» si fermano.
+- Le parole dell'esercizio comprendono anche «giusto», «giusta», «faceva», «viene», e conta
+  l'**incognita** del testo (una lettera sola fuori da una parola: «x» in «3x + 5 = 20»; non «a»,
+  «e», «è», «l'», «c'è»): «x vale 5.» si ferma.
+- **`lavoro_affida`**: un minore lo può chiamare (la chiave «agenti» del suo preset: «si» nella
+  fascia più grande, «autorizzazione» col sì del tutore; `minori._TOOL_CHIAVE`). Con un suo
+  esercizio vivo valgono gli stessi controlli degli argomenti: `lavoro_affida` e
+  `lavoro_rispondi` sono in `SCRIVONO`.
+- Contrari nelle prove: «alle 2» detto all'ospite o all'adulto (anche parlando di un'equazione)
+  e a Leo che chiede l'ora resta libero.
+
+**Limiti noti in più.** «Viene» è una parola comune: con un esercizio vivo dal risultato piccolo
+«domani viene la nonna alle 2» si ferma (il costo dei falsi positivi della sezione sopra). E un
+**limite dell'identità**: il minore che parla dal telefono di un adulto con la voce riconosciuta
+come l'adulto è l'adulto per Calliope (niente `minore_incerto`, il dispositivo non è di un
+minore), e la guardia non ha i suoi esercizi: lo ferma solo il riconoscimento della voce
+(`minore_piu_protetto`, la compagnia), non lo Studio.
 
 ## L'importazione dei materiali scaricati: file e ZIP (31/10, issue #298, ramo `issue-298-studio-importa`)
 
