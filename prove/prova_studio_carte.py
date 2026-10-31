@@ -177,9 +177,29 @@ verifica("da_ripassare: attiva e scaduta (vuota vale subito); tolta mai",
 # ═══════════════════════════ 2. le risposte ═══════════════════════════
 print("— le risposte")
 verifica("forma chiusa: un anno, un nome, al più tre parole senza articoli né preposizioni",
-         C.chiusa("Nel 1453.") == C.chiusa("1453") == "millequattrocentocinquantatre"
+         C.chiusa("Nel 1453.") == C.chiusa("1453") == "#1453"
          and C.chiusa("Il Portogallo") == "portogallo"
          and C.chiusa("Servivano a conservare e insaporire i cibi") is None, C.chiusa("1453"))
+# #361: i numeri restano numeri (un gettone «#valore@unità»), confrontati con studio/unita.py
+verifica("#361: «1» è una risposta chiusa (prima diventava «uno» e si scartava come articolo); "
+         "«uno» detto vale 1, «2» e «è 1» no",
+         C.chiusa("1") == "#1" and C.risposta_giusta(C.chiusa("1"), "1")
+         and C.risposta_giusta(C.chiusa("1"), "uno") and not C.risposta_giusta(C.chiusa("1"), "2")
+         and not C.risposta_giusta(C.chiusa("1"), "è 1"), C.chiusa("1"))
+ch_d = C.chiusa("1,5 g/cm³")
+verifica("#361: «1,5 g/cm³» non sta dentro «2,5 g/cm³»; la stessa misura detta o convertita sì",
+         ch_d == "#1.5@g/cm3" and not C.risposta_giusta(ch_d, "2,5 g/cm³")
+         and not C.risposta_giusta(ch_d, "è 2,5 g/cm³ credo")
+         and not C.risposta_giusta(ch_d, "15 g/cm³")
+         and C.risposta_giusta(ch_d, "1,5 g/cm³")
+         and C.risposta_giusta(ch_d, "la densità è 1,5 grammi al centimetro cubo")
+         and C.risposta_giusta(ch_d, "1500 kg/m³"), ch_d)
+verifica("#361, contrari dei numeri: «12» non dentro «112», «5» non dentro «15», la misura senza "
+         "l'unità attesa non basta",
+         not C.risposta_giusta(C.chiusa("12"), "112")
+         and not C.risposta_giusta(C.chiusa("5"), "15 credo")
+         and not C.risposta_giusta(ch_d, "1,5")
+         and C.risposta_giusta(C.chiusa("20 m/s"), "72 km/h"))
 ch = C.chiusa("1453")
 verifica("il codice: la cifra detta, anche dentro una frase corta",
          C.risposta_giusta(ch, "1453") and C.risposta_giusta(ch, "nel 1453 mi pare")

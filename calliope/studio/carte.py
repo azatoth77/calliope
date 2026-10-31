@@ -166,11 +166,66 @@ _ARTICOLI = frozenset("il lo la i gli le l un uno una di del dello della dei deg
                       "fra".split())
 
 
+# I numeri della forma chiusa (31/10, #361): un gettone «#valore» o «#valore@unità», confrontato
+# come numero con `studio/unita.py` (come in `risposte.py`), mai trasformato in parole prima del
+# confronto. Prima «1» diventava «uno» e si scartava come articolo, e «1,5 g/cm³» diventava
+# «cinque g cm3», che si trovava dentro «2,5 g/cm³»
+NUMERO = "#"
+
+
+def _gettoni(testo) -> list[str]:
+    """Le parole di un testo per la forma chiusa e il confronto: minuscole, senza accenti né
+    punteggiatura, gli apostrofi come spazi; i numeri (anche in lettere, coi decimali e
+    l'unità subito dopo: «1,5 g/cm³», «un metro e mezzo» no) un gettone solo `NUMERO`."""
+    from . import unita as U
+    t = U._in_cifre(U._semplice(testo))
+    t = re.sub(r"(?<=\d) (?=\d{3}\b)", "", t)                # «1 861»
+    out, p = [], 0
+    rx = re.compile(r"(?<![\w.,])(" + U._NUM.pattern + r")(?![\w])|[a-z0-9]+")
+    while True:
+        m = rx.search(t, p)
+        if m is None:
+            return out
+        p = m.end()
+        if m.group(1) is not None:
+            v = U._cifre(m.group(1))
+            if v is not None:
+                tok = f"{NUMERO}{v:.10g}"
+                mu = U._RE_U.match(t, p + len(t[p:]) - len(t[p:].lstrip(" ")))
+                if mu is not None:
+                    tok += "@" + U._VOCI[int(mu.lastgroup[1:])][1]
+                    p = mu.end()
+                out.append(tok)
+                continue
+        out.append(m.group(0))
+
+
+def _numero(tok: str):
+    """(valore, unità) di un gettone numero, o None."""
+    if not tok.startswith(NUMERO):
+        return None
+    v, _, u = tok[1:].partition("@")
+    try:
+        return float(v), (u or None)
+    except ValueError:
+        return None
+
+
+def _uguale(atteso: str, detto: str) -> bool:
+    """Una parola della forma chiusa e una della frase: uguali; due numeri, uguali come numeri
+    (`unita.confronta`: le unità convertite, «1,5 g/cm³» non è «2,5 g/cm³»)."""
+    na, nd = _numero(atteso), _numero(detto)
+    if na is None or nd is None:
+        return na is None and nd is None and atteso == detto
+    from . import unita as U
+    return U.confronta(nd, na) == "giusto"
+
+
 def chiusa(risposta) -> str | None:
     """La forma chiusa di una risposta, se il codice la può controllare: un numero (anche con
-    l'unità) o al più `CHIUSA_PAROLE` parole senza gli articoli. Altrimenti None (vale solo
-    l'autovalutazione)."""
-    ps = [w for w in normale(risposta) if w not in _ARTICOLI]
+    l'unità: un gettone solo) o al più `CHIUSA_PAROLE` parole senza gli articoli. Altrimenti None
+    (vale solo l'autovalutazione)."""
+    ps = [w for w in _gettoni(risposta) if w not in _ARTICOLI]
     if not ps or len(ps) > CHIUSA_PAROLE:
         return None
     return " ".join(ps)
@@ -179,22 +234,19 @@ def chiusa(risposta) -> str | None:
 _NEGAZIONI = frozenset({"non", "no", "nemmeno", "neanche", "mica"})
 
 
-_PICCOLI = None
-
-
 def corta(chiusa_: str | None) -> bool:
     """Una risposta chiusa che sta facilmente dentro una frase detta per altro (revisione della
     PR #324, nota 2): una forma dell'autovalutazione («sì», «no», «quasi»), una parola di al più
-    tre lettere, o un numero fino a venti. Per queste vale solo la frase intera."""
-    global _PICCOLI
+    tre lettere, o un numero intero fino a venti senza unità. Per queste vale solo la frase
+    intera."""
     if not chiusa_:
         return False
-    if _PICCOLI is None:
-        from ..numeri import in_lettere
-        _PICCOLI = {in_lettere(n).replace(" ", "") for n in range(21)}
     ps = chiusa_.split()
+    if len(ps) == 1 and _numero(ps[0]) is not None:
+        v, u = _numero(ps[0])
+        return u is None and float(v).is_integer() and 0 <= v <= 20
     return (autovalutazione(chiusa_) is not None
-            or (len(ps) == 1 and (len(ps[0]) <= 3 or ps[0] in _PICCOLI)))
+            or (len(ps) == 1 and len(ps[0]) <= 3))
 
 
 def risposta_giusta(chiusa_: str | None, detto) -> bool:
@@ -205,18 +257,21 @@ def risposta_giusta(chiusa_: str | None, detto) -> bool:
     if not chiusa_:
         return False
     cerca = chiusa_.split()
-    ps = [w for w in normale(detto) if w not in _ARTICOLI]
+    ps = [w for w in _gettoni(detto) if w not in _ARTICOLI]
     while ps and ps[0] in _INTORNO:
         ps = ps[1:]
     while ps and ps[-1] in _INTORNO:
         ps = ps[:-1]
+
+    def di_fila(pezzo):
+        return len(pezzo) == len(cerca) and all(_uguale(a, d) for a, d in zip(cerca, pezzo))
     if corta(chiusa_):
-        return ps == cerca
+        return di_fila(ps)
     if not ps or len(ps) > FRASE_MAX_PAROLE:
         return False
     n = len(cerca)
     for i in range(len(ps) - n + 1):
-        if ps[i:i + n] == cerca and not (i and ps[i - 1] in _NEGAZIONI) and not (
+        if di_fila(ps[i:i + n]) and not (i and ps[i - 1] in _NEGAZIONI) and not (
                 i > 1 and ps[i - 2] in _NEGAZIONI and ps[i - 1] in ("e", "era", "e'")):
             return True
     return False
