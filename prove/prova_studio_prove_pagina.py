@@ -151,10 +151,13 @@ def scenario_telefono(t, st, vid):
     aspetta(lambda: t.v("!!document.getElementById('studio-p-vf')"), 4)
     t.v(f"(() => {{ const i = document.getElementById('studio-p-testo'); i.value = {json.dumps(HTML)};"
         " i.dispatchEvent(new Event('input', {bubbles: true})); return 1; })()")
+    # A pagina ferma (il cambio di tipo ridisegna il modulo), poi «Salva»
+    time.sleep(0.4)
     t.tocca('.studio-h-prove button[data-prove="salva"]')
-    ok = aspetta(lambda: any(d["testo"] == HTML for d in st.domande(LEO, vid)["domande"]), 6)
+    ok = aspetta(lambda: any(d["testo"] == HTML for d in st.domande(LEO, vid)["domande"]), 10)
     verifica("«Scrivi una domanda»: salvata; l'HTML resta testo", bool(ok) and HTML in testo(t)
-             and not t.v("!!document.querySelector('.studio-h-prove .studio-testo b b')"))
+             and not t.v("!!document.querySelector('.studio-h-prove .studio-testo b b')"),
+             f"{bool(ok)} {testo(t)[-300:]}")
     misure(t, "390×844 con le domande")
 
 
