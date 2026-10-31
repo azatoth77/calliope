@@ -21,6 +21,9 @@ materiali di `prova_studio_argomenti.py` (la sua parte prima).
 5. **Il banco del 31/10** (#344): i capi scritti come codice, singolare e plurale, il tetto che
    tiene la rete connessa, il collegamento debole alle isole, e le uscite vere del banco
    ricostruite (`manuali/studio/uscite_banco_3110.json`) col vLLM finto di `studio_vllm_finto.py`.
+6. **Il banco del 31/10 07:02** (#349): i codici della seconda richiesta per parte, gli scarti
+   di `connetti` per motivo, le regole nuove, e le uscite vere della seconda passata (un
+   collegamento solo, dentro una parte già unita) col vLLM finto.
 
     python prove/prova_studio_mappa_genera.py
 """
@@ -753,6 +756,59 @@ testo5 = PA.B.scrivi_riepilogo(usc5, {"mappa": r5, "modello": "finto"})
 verifica("il riepilogo: una parte sola 67 % (criterio no), coi deboli 100 %",
          "una parte sola: 67 %" in testo5 and "coi collegamenti deboli da controllare 100 %"
          in testo5 and "deboli 1" in testo5, testo5[-600:])
+
+# ═══════════════════════════ 6. il banco del 31/10 07:02 (#349) ═══════════════════════════
+print("— il banco del 31/10 07:02: la seconda passata col modello vero")
+# I codici per parte: la parte della radice per prima (Parte 1, codici bassi), anche quando la
+# radice è nell'ultima parte dello scheletro
+parti_tit = [tripla("Atlantico", "bagna", "Brasile", "A1", "P2"),
+             tripla("Colombo", "parte da", "Palos", "A3", "P4"),
+             tripla("Colombo", "arriva in", "America", "A3", "P4"),
+             tripla("Colombo", "naviga con", "Caravelle", "A3", "P4")]
+n10, c10 = MG.scheletro(parti_tit, rs, as_, 12, titolo="Colombo")
+cod10 = dict((n["testo"], c) for c, n in MG.codici(n10, c10))
+blocco10 = MG.blocco_scheletro(n10, c10, rs)
+verifica("i codici della seconda richiesta per parte: la parte del centro è la Parte 1 coi codici "
+         "bassi, le altre «staccate»",
+         cod10["Colombo"] == "C1" and {cod10["Atlantico"], cod10["Brasile"]} == {"C5", "C6"}
+         and "Parte 1 (la principale, col centro C1):" in blocco10
+         and "Parte 2 (staccata):" in blocco10, (cod10, blocco10[-300:]))
+fm10 = {}
+nuovi10 = MG.connetti([{"da": cod10["Palos"], "relazione": "è vicino a", "a": cod10["America"],
+                        "pagine": ["P4"]},                                  # stessa parte
+                       {"da": "C99", "relazione": "è", "a": "C1", "pagine": ["P4"]},
+                       {"da": cod10["Brasile"], "relazione": "è parte di", "a": cod10["America"],
+                        "pagine": ["P5"]}], n10, c10, rs, 12, misure=fm10)
+verifica("connetti conta i proposti e gli scartati per motivo (stessa parte, codice che non c'è)",
+         fm10 == {"proposti": 3, "codice": 1, "stessa_parte": 1, "verbo": 0, "tetto": 0}
+         and len(nuovi10) == 1, fm10)
+verifica("le regole della prima richiesta chiedono la rete (ogni tripla dopo la prima usa un "
+         "concetto già scritto); quelle della seconda, un collegamento per parte staccata",
+         "ogni tripla dopo la prima usa almeno un concetto già scritto" in MG.REGOLE
+         and "Per ogni parte staccata" in MG.REGOLE_CONNESSIONE
+         and "dentro la stessa parte" in MG.REGOLE_CONNESSIONE)
+# Le uscite vere del banco del 31/10 07:02: il modello proponeva un collegamento solo, in
+# matematica e in scienze dentro una parte già unita (riproposto o nuovo, mai fra due parti)
+usc6 = Path(tempfile.mkdtemp(prefix="banco-0702-"))
+u0702 = carica_uscite(Path(__file__).resolve().parent / "manuali" / "studio"
+                      / "uscite_banco_3110_0702.json")
+r6 = PA.B.fase_mappa(VllmFinto(uscite=u0702, materiali=mat), mat, {}, usc6, lambda m: None)
+verifica("le uscite del 31/10 07:02 col vLLM finto rifanno il banco (parti 5 → 5, 2 → 2, 5 → 3; "
+         "concetti nelle pagine 10, 12, 11)",
+         [(r6[v]["componenti_prima"], r6[v]["componenti"], r6[v]["concetti_fondati"])
+          for v in ("matematica", "scienze", "storia")] == [(5, 5, 10), (2, 2, 12), (5, 3, 11)]
+         and all(u0702["mappa"][v]["banco"]["componenti"] == r6[v]["componenti"] for v in r6),
+         {v: (x["componenti_prima"], x["componenti"]) for v, x in r6.items()})
+verifica("la causa misurata: in matematica e scienze l'unico collegamento proposto è dentro la "
+         "stessa parte; in storia i due proposti uniscono",
+         r6["matematica"]["connessione"]["stessa_parte"] == 1
+         and r6["scienze"]["connessione"]["stessa_parte"] == 1
+         and r6["storia"]["connessione"] == {"proposti": 2, "codice": 0, "stessa_parte": 0,
+                                              "verbo": 0, "tetto": 0},
+         {v: x["connessione"] for v, x in r6.items()})
+testo6 = PA.B.scrivi_riepilogo(usc6, {"mappa": r6, "modello": "finto"})
+verifica("il riepilogo dice la seconda passata: proposti e scartati per motivo",
+         "seconda passata: proposti 1, scartati (stessa parte 1)" in testo6, testo6[-700:])
 
 PA.SRV.shutdown()
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")

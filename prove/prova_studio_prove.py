@@ -822,6 +822,30 @@ SC5 = [(CB, r, "giusto") for r in ("direi b", "credo b", "penso b", "secondo me 
 male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC5 if RS.valuta(d, r)[0] != e]
 verifica("lettere dopo «direi», «credo», «secondo me», «scelgo»… e in fondo dopo una virgola o fra "
          "parentesi: giuste come prima; «direi c» sbagliato (revisione della PR #346)", not male, male)
+# Banco del 31/10 07:02 (#349): un'opzione dentro un'altra. L'opzione uguale all'intera risposta
+# vince sempre; un'opzione che sta dentro un'altra nominata nello stesso punto non conta a parte
+EQ = RS.prepara("scelta", "Quale equazione?", "x + 3x = 32",
+                ["x + 3x = 32", "3x - x = 32", "x + 3 = 32", "3x = 32"])
+EQD = RS.prepara("scelta", "Quale equazione?", "3x = 32",
+                 ["x + 3x = 32", "3x - x = 32", "x + 3 = 32", "3x = 32"])
+SP = RS.prepara("scelta", "Chi firmò?", "Spagna e Portogallo", ["Spagna", "Spagna e Portogallo",
+                                                               "Francia"])
+SPS = RS.prepara("scelta", "Chi?", "Spagna", ["Spagna", "Spagna e Portogallo", "Francia"])
+SC6 = [(EQ, "x + 3x = 32", "giusto"), (EQ, "x+3x=32", "giusto"), (EQ, "la a", "giusto"),
+       (EQ, "credo x + 3x = 32", "giusto"), (EQ, "3x = 32", "sbagliato"),
+       (EQ, "x + 3 = 32", "sbagliato"), (EQ, "3x - x = 32", "sbagliato"),
+       (EQ, "3x = 32 o x + 3x = 32", "sbagliato"), (EQ, "x + 3x = 32 oppure 3x = 32", "sbagliato"),
+       (EQD, "3x = 32", "giusto"), (EQD, "x + 3x = 32", "sbagliato"), (EQD, "la d", "giusto"),
+       (SP, "Spagna e Portogallo", "giusto"), (SP, "la Spagna e il Portogallo", "giusto"),
+       (SP, "Spagna", "sbagliato"), (SP, "Spagna e Francia", "sbagliato"),
+       (SP, "Spagna o Francia", "sbagliato"), (SP, "Spagna e Portogallo o Francia", "sbagliato"),
+       (SP, "Portogallo e Spagna", "da_rivedere"), (SP, "Spagna, Portogallo", "da_rivedere"),
+       (SPS, "Spagna", "giusto"), (SPS, "solo la Spagna", "giusto"),
+       (SPS, "Spagna e Portogallo", "sbagliato"), (SPS, "Portogallo e Spagna", "da_rivedere")]
+male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC6 if RS.valuta(d, r)[0] != e]
+verifica("un'opzione dentro un'altra (#349): l'opzione uguale alla risposta vince, vince la più "
+         "lunga nello stesso punto; due opzioni in punti diversi sbagliato; la più lunga in un "
+         "altro ordine da rivedere", not male, male)
 NN3 = [("0,5 kg", "1/2 kg", "giusto"), ("0,75 L", "3/4 di litro", "giusto"),
        ("0,5 kg", "mezzo chilo", "giusto"), ("1571", "in mezzo al Mediterraneo, nel 1571",
                                              "giusto"),

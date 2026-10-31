@@ -258,6 +258,12 @@ def _scelta(d: dict, risposta: str) -> str:
         if lett not in LETTERE[:len(ops)]:
             return DA_RIVEDERE                       # una lettera che non c'è («f» con 3 opzioni)
         return GIUSTO if LETTERE.index(lett) == giusta else SBAGLIATO
+    # L'opzione uguale all'intera risposta vince sempre (banco del 31/10 07:02, #349: «x + 3x =
+    # 32» era «sbagliata» perché dentro c'è l'opzione «3x = 32»)
+    intera = [i for i, o in enumerate(ops) if _uguale_opzione(o, " ".join(ps))
+              or _uguale_opzione(o, risposta)]
+    if len(intera) == 1:
+        return GIUSTO if intera[0] == giusta else SBAGLIATO
     negata = any(w in C._NEGAZIONI for w in ps)
     pr = parole(risposta)
     # Seconda revisione della PR #342: prima le opzioni nominate **esattamente** (la lettera sola
@@ -271,15 +277,26 @@ def _scelta(d: dict, risposta: str) -> str:
     esatte = {LETTERE.index(w) for k, w in lettere.items() if not _negata(ps, k)}
     esatte |= {i for i, o in enumerate(ops) if _uguale_opzione(o, risposta)}
     if len(pr) <= 12:
-        esatte |= {i for i, o in enumerate(ops) if parole(o) and _di_fila(parole(o), pr)}
+        esatte |= _nominate(ops, pr)
     # «la a, no, la c», «Austria no Australia», «a, anzi c» (terza revisione della PR #342):
     # una correzione fra due opzioni nominate esattamente la decide chi rivede, mai il codice
     nominate = {LETTERE.index(w) for w in lettere.values()}
     if len(pr) <= 12:
-        nominate |= {i for i, o in enumerate(ops) if parole(o) and _di_fila(parole(o), pr,
-                                                                             negate=True)}
+        nominate |= _nominate(ops, pr, negate=True)
     if len(nominate) > 1 and any(w in _CORREZIONI for w in ps):
         return DA_RIVEDERE
+    if esatte and len(pr) <= 12:
+        # «Portogallo e Spagna» con le opzioni «Spagna» e «Spagna e Portogallo»: nominata la più
+        # corta, ma la risposta ha tutte le parole della più lunga in un altro ordine; la decide
+        # chi rivede, mai «sbagliato» dal codice (#349)
+        piene = lambda x: set(parole(x)) - {"e", "ed"}  # noqa: E731
+        for i in esatte:
+            pi = piene(ops[i])
+            # Solo fra opzioni di parole: in una formula l'ordine conta («3x - x = 32» non è
+            # «x … 3x … 32»)
+            if any(j != i and j not in esatte and not re.search(r"[\d=+\-*/<>^]", o)
+                   and pi < piene(o) <= set(pr) for j, o in enumerate(ops)):
+                return DA_RIVEDERE
     if esatte:
         if len(esatte) > 1:
             # Più opzioni nominate esattamente («a o b»): «sbagliato»; con una negazione di
@@ -296,6 +313,29 @@ def _scelta(d: dict, risposta: str) -> str:
     if len(simili) != 1:
         return DA_RIVEDERE                 # niente, o più opzioni solo per somiglianza
     return GIUSTO if simili == {giusta} else SBAGLIATO
+
+
+def _nominate(ops: list[str], pr: list[str], negate: bool = False) -> set[int]:
+    """Le opzioni con le parole tutte uguali e di fila nella frase. Un'opzione che sta **dentro**
+    un'altra opzione nominata nello stesso punto non conta a parte: vince la più lunga («3x = 32»
+    dentro «x + 3x = 32», «Spagna» dentro «Spagna e Portogallo»; banco del 31/10 07:02, #349)."""
+    posti: dict[int, list[tuple[int, int]]] = {}
+    for i, o in enumerate(ops):
+        ch = parole(o)
+        n = len(ch)
+        if not n:
+            continue
+        p = [(k, k + n) for k in range(len(pr) - n + 1)
+             if pr[k:k + n] == ch and (negate or not _negata(pr, k))]
+        if p:
+            posti[i] = p
+    out = set()
+    for i, p in posti.items():
+        dentro = lambda a, b: all(  # noqa: E731 — ogni posto di i dentro un posto più largo
+            any(c <= x and y <= d and (d - c) > (y - x) for c, d in posti[b]) for x, y in a)
+        if not any(j != i and dentro(p, j) for j in posti):
+            out.add(i)
+    return out
 
 
 def _di_fila(chiave: list[str], ps: list[str], negate: bool = False) -> bool:

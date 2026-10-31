@@ -95,6 +95,79 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   ≥ 90 %» non si raggiunge; il prompt nuovo della seconda passata e i codici al posto dei concetti
   sono da rimisurare col banco vero.
 
+## Il banco del 31/10 07:02: l'opzione dentro un'altra e la seconda passata col modello vero (31/10, issue #349, ramo `issue-349-studio-scelta-connessione`)
+
+*Epic #251. Il banco sulla DGX del 31/10 alle 07:02 (`banco_studio.py --fasi prove,mappa`,
+qwen3.6-35b, versione f552873, dopo la PR #346), le uscite grezze in
+`/tmp/banco-studio/prove2/risultati.jsonl` lette in sola lettura e copiate (materiali di fantasia)
+in `prove/manuali/studio/uscite_banco_3110_0702.json`.*
+
+**I numeri del banco.**
+
+| verifica | concetti nelle pagine | parti (prima → dopo la seconda passata) | domande fondate | scelte nelle pagine | atteso sbagliato |
+|---|---|---|---|---|---|
+| matematica | 10/11 (91 %) | 5 → 5 | 22/28 (79 %), 1 calcolata | 14/17 (82 %) | 1 |
+| scienze | 12/12 (100 %) | 2 → 2 | 19/23 (83 %), 1 calcolata | 10/10 (100 %) | 0 |
+| storia | 11/11 (100 %) | 5 → 3 | 21/26 (81 %) | 17/18 (94 %) | 0 |
+
+Una parte sola senza i deboli: **0 %** delle verifiche (coi deboli 100 %).
+
+**1. L'atteso «x + 3x = 32» era «sbagliato».** Opzioni «x + 3x = 32», «3x - x = 32», «x + 3 = 32»,
+«3x = 32»: dentro la risposta giusta scritta per intero c'è l'opzione «3x = 32», e due opzioni
+nominate davano «sbagliato» (anche a uno studente che la scrive giusta). Ora (`risposte._scelta`,
+`_nominate`):
+- l'opzione **uguale all'intera risposta vince sempre**;
+- un'opzione che sta **dentro un'altra opzione nominata nello stesso punto** non conta a parte:
+  vince la più lunga («3x = 32» dentro «x + 3x = 32», «Spagna» dentro «Spagna e Portogallo»); due
+  opzioni in punti diversi restano due («3x = 32 o x + 3x = 32» sbagliato);
+- se è nominata la più corta ma la risposta ha tutte le parole piene della più lunga in un altro
+  ordine («Portogallo e Spagna», «Spagna, Portogallo»), la decide chi rivede: «da rivedere», mai
+  «sbagliato» dal codice; solo fra opzioni di parole (in una formula l'ordine conta: «3x - x = 32»
+  non è «x … 3x … 32»).
+Il blocco 4 dello script del revisore della PR #346: le 58 risposte come prima, nessuna sbagliata
+che passa. Col vLLM finto sulle uscite delle 07:02 `auto_sbagliate` 1 → **0** e le fondate di
+matematica 22 → **23/28 (82 %)**.
+
+**2. La seconda passata unisce poco: le cause, dalle uscite vere.**
+- *La prima passata* scrive **una tripla isolata per argomento** («Principi di equivalenza →
+  Soluzione», «Frazioni → M.c.m.», «0 x = b → Impossibile»…): in matematica 7 triple e 13 concetti
+  in 6 gruppi, in storia 9 triple in 9 gruppi. La regola «una rete sola» non bastava.
+- *La seconda passata* propone pochissimo, e male: in matematica **un collegamento solo,
+  «Problema reale → si traduce in → Equazione», che c'era già**; in scienze uno solo, «Foglia →
+  contiene → Traspirazione», **dentro la parte già unita** (l'isola era «Radici, Linfa grezza,
+  Xilema»); in storia due, che uniscono (5 → 3). Il codice **non scartava collegamenti buoni**:
+  scartava solo quelli dentro la stessa parte, che non uniscono niente.
+- Quindi il problema è **il prompt**, non il controllo. Correzioni (nessun collegamento non fondato
+  accettato in più: `connetti` è uguale):
+  - la prima richiesta chiede che la prima tripla parta dal centro e che **ogni tripla dopo la
+    prima usi un concetto già scritto**, «non una tripla isolata per argomento»;
+  - la seconda richiesta mette la parte del centro per prima, «Parte 1 (la principale, col centro
+    C1)», e le altre «Parte k (staccata)», coi codici **per parte** (`codici(nodi, coll)`: la Parte 1
+    ha i codici bassi, ogni parte i suoi di fila; prima i codici seguivano l'ordine dei concetti e
+    le parti avevano codici sparsi), e chiede **per ogni parte staccata** un collegamento «da» un
+    suo concetto «a» un concetto di un'altra parte, dicendo che uno dentro la stessa parte o uno
+    che c'è già non serve;
+  - le misure: `connetti(…, misure=)` conta i proposti e gli scartati per motivo (`codice`,
+    `stessa_parte`, `verbo`, `tetto`); il banco li scrive (`connessione`) e il riepilogo li dice
+    («seconda passata: proposti 1, scartati (stessa parte 1)»); nel lettore
+    `connessioni_proposte` e `connessioni_stessa_parte`.
+- *Misura.* Il vLLM finto ridà le uscite vere (anche la seconda passata, coi testi dei concetti al
+  posto dei codici di allora) e rifà esattamente il banco: 5 → 5, 2 → 2, 5 → 3, e con le misure
+  nuove «stessa parte 1» in matematica e scienze. **L'effetto dei prompt nuovi non si misura col
+  finto** (ridà le risposte di prima): va misurato col banco vero dopo l'unione:
+
+      V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale)
+      PYTHONPATH=$V $V/.venv/bin/python prove/manuali/banco_studio.py \
+          --fasi prove,mappa --uscita /tmp/banco-studio/prove3
+
+**3. Le domande** restano in ombra: con l'atteso giusto, matematica 23/28 (82 %) fondate, ma le
+scelte con l'opzione nelle pagine sono 14/17 (82 %, criterio 90 %).
+
+Prove: in `prova_studio_prove.py` l'opzione dentro un'altra (formule e parole, i contrari); in
+`prova_studio_mappa_genera.py` la sezione 6 (codici per parte, scarti per motivo, le regole, le
+uscite vere col vLLM finto); in `prova_studio_domande_genera.py` la sezione 6; in
+`prova_studio_mappa_libera.py` la seconda richiesta con la Parte 1 principale.
+
 ## Il banco del 31/10: lo scheletro a isole, la matematica e l'atteso «sbagliato» (31/10, issue #344, ramo `issue-344-studio-banco-qualita`)
 
 *Epic #251. Viene dal banco sulla DGX del 31/10 alle 04:29 (`banco_studio.py --fasi prove,mappa`,
