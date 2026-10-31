@@ -155,9 +155,20 @@ def scenario_telefono(t, st, vid):
     time.sleep(0.4)
     t.tocca('.studio-h-prove button[data-prove="salva"]')
     ok = aspetta(lambda: any(d["testo"] == HTML for d in st.domande(LEO, vid)["domande"]), 10)
-    verifica("«Scrivi una domanda»: salvata; l'HTML resta testo", bool(ok) and HTML in testo(t)
-             and not t.v("!!document.querySelector('.studio-h-prove .studio-testo b b')"),
-             f"{bool(ok)} {testo(t)[-300:]}")
+    # La pagina si ridisegna dopo la risposta del server: si aspetta che la domanda compaia, e se
+    # non compare il dettaglio dice tutto (revisione della PR #345: il controllo subito cadeva a
+    # volte, col dettaglio troncato in coda)
+    visto = aspetta(lambda: HTML in testo(t), 6)
+    annidato = t.v("!!document.querySelector('.studio-h-prove .studio-testo b b')")
+    modulo = t.v("!!document.getElementById('studio-p-testo')")
+    stato_p = t.v("window.CalliopeStudio && window.CalliopeStudio.stato ? "
+                  "window.CalliopeStudio.stato().prove : null") or {}
+    el = testo(t)
+    verifica("«Scrivi una domanda»: salvata; l'HTML resta testo",
+             bool(ok) and bool(visto) and not annidato,
+             f"salvata={bool(ok)} nella pagina={bool(visto)} b annidato={bool(annidato)} "
+             f"modulo aperto={bool(modulo)} esito={stato_p.get('esito')!r} "
+             f"testo: {el[:200]!r} … {el[-200:]!r}")
     misure(t, "390×844 con le domande")
 
 

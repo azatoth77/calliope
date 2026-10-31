@@ -557,8 +557,9 @@ dell'eco della stanza.
     - **Il testo per la voce lo ripulisce il codice** (forma, principio 10): via numeri di pagina,
       elenchi, markdown e `[[ ]]`; formule, sigle, romani e simboli a parole solo nel ripasso
       (`pronuncia.per_ripasso`). Non si dicono mai le frasi con un indirizzo, col nome di
-      Calliope, i messaggi per un assistente, gli annunci della scuola e, sulle pagine con
-      istruzioni, gli ordini; al loro posto una frase del codice.
+      Calliope (anche storpiato, e le altre parole che svegliano in uso), i messaggi per un
+      assistente (anche di un'altra marca), gli annunci della scuola e, sulle pagine con
+      istruzioni, gli ordini; al loro posto una frase del codice (revisione della PR #345).
     - **Due voci di Piper**: le frasi del codice nella voce di Calliope, il materiale nella «voce
       del libro» (`studio_ascolta_voce`). Nessuna frase del codice contiene testo delle pagine
       (niente frasi pronte con dati non fidati); `riferire` non serve, perché nessun modello
@@ -566,7 +567,10 @@ dell'eco della stanza.
     - **A voce** il tool `studio_ascolta` (classe «sicuro», **senza fonte non fidata**: il
       risultato ha solo conti e la frase del codice) prepara la lettura, e il ciclo la fa dopo la
       risposta, a pezzi di 3 frasi. Il guardiano del nome è quello della risposta: half-duplex,
-      niente trascrizioni mentre legge, «Calliope, basta» la ferma. Il testo non entra nella
+      niente trascrizioni mentre legge, «Calliope, basta» la ferma. L'audio dell'interruzione
+      diventa un turno solo con la voce di una persona registrata: il nome detto dal libro ferma
+      e basta. Un messaggio scritto arrivato intanto la ferma come un timer (revisione della PR
+      #345). Il testo non entra nella
       storia, negli eventi, nello schermo né nel registro (`Uscita.leggi`, `turno_lettura`).
       «Riprendi» e «ripeti» (dall'inizio del paragrafo) usano la posizione delle frasi sentite per
       intero, in memoria 2 ore; nei dati del turno una riga coi soli numeri.

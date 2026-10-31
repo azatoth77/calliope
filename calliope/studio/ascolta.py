@@ -206,22 +206,78 @@ _MESSAGGIO = re.compile(
     r"\b(?:per|all?)\s+l['’]\s*assistente\b|\bassistente\s+(?:vocale|virtuale|digitale)\b|"
     r"\bintelligenza artificiale\b.{0,30}\b(?:ignora|rispondi|scrivi|di['’]|dì)\b|"
     r"\bignora\s+(?:le|tutte\s+le|ogni)\s+(?:regole|istruzioni)\b|"
-    r"\b(?:regole|istruzioni)\s+precedenti\b", re.I)
+    r"\b(?:regole|istruzioni)\s+precedenti\b|\b(?:per|all?)\s+l['’]\s*ia\b", re.I)
+# Gli assistenti di altre marche chiamati in testa alla frase o dopo un segno (revisione della PR
+# #345): «Alexa, …», «Ok Google», «Ehi Siri», «Hey Cortana», «Ehi assistente», «Assistente, …».
+# «Google ha comprato…» resta: Google da solo non chiama nessuno
+_ALTRI_ASSISTENTI = re.compile(
+    r"(?:^|[,;:.!?«\"(]\s*)\W*(?:(?:ehi|ehy|hey|ok|okay)\s+(?:google|siri|alexa|cortana|"
+    r"assistente)|alexa|siri|cortana|assistente\s*[,:!])", re.I)
+# Un indirizzo detto a parole («w w w punto sito punto it», «mario chiocciola gmail punto com»)
+_INDIRIZZO_DETTO = re.compile(
+    r"\bw\s*w\s*w\b|\bchiocciola\b|\bpunto\s+(?:it|com|org|net|eu|info)\b", re.I)
+
+
+def _norma_nome(t: str) -> str:
+    """Minuscole, senza accenti, k → c, doppie semplificate: «Kalliope», «Callíope», «Caliope»
+    diventano tutti «caliope»."""
+    t = unicodedata.normalize("NFKD", str(t or ""))
+    t = "".join(c for c in t if not unicodedata.combining(c)).lower().replace("k", "c")
+    return re.sub(r"([a-z])\1+", r"\1", t)
+
+
+def _distanza_uno(a: str, b: str) -> bool:
+    """`a` e `b` differiscono al più di una lettera (sostituita, aggiunta o tolta)."""
+    if a == b:
+        return True
+    if abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b)) == 1
+    corto, lungo = (a, b) if len(a) < len(b) else (b, a)
+    return any(lungo[:i] + lungo[i + 1:] == corto for i in range(len(lungo)))
+
+
+def nome_dentro(frase: str, nomi) -> bool:
+    """La frase contiene una delle parole che svegliano (il nome e, in startrek, «computer»),
+    anche storpiata (revisione della PR #345): senza accenti, con la k, le doppie semplificate,
+    con una lettera di tolleranza dalle 6 lettere (mai sulla prima), e scritta a lettere staccate
+    («C a l l i o p e»). Forma, non significato (principio 10)."""
+    parole = re.findall(r"[a-z]+", _norma_nome(frase))
+    if not parole:
+        return False
+    candidati = set(parole)
+    corsa: list[str] = []
+    for p in parole + [""]:                       # le lettere staccate, unite
+        if len(p) == 1:
+            corsa.append(p)
+            continue
+        if len(corsa) >= 3:
+            candidati.add(re.sub(r"([a-z])\1+", r"\1", "".join(corsa)))
+        corsa = []
+    for n in nomi or ():
+        nn = _norma_nome(n)
+        if not nn:
+            continue
+        for w in candidati:
+            if w == nn or (len(nn) >= 6 and w[:1] == nn[:1] and _distanza_uno(w, nn)):
+                return True
+    return False
 
 
 def scarto(frase: str, nomi, istruzioni: bool) -> str | None:
-    """Perché una frase del materiale non si dice (None: si dice): «indirizzo» (URL, email:
-    principio 5), «nome» (il nome di Calliope: la voce si interromperebbe da sola, ed è un ordine
-    rivolto a lei), «messaggio» (rivolto a un assistente), «annuncio» («verifica annullata») e,
-    sulle pagine con «ISTRUZIONI: sì», «ordine» (comincia con un ordine a un assistente: sulle
-    altre pagine «Scrivi…», «Rispondi…» sono gli esercizi). Forma, non significato (principio 10)."""
+    """Perché una frase del materiale non si dice (None: si dice): «indirizzo» (URL, email, anche
+    detti a parole: principio 5), «nome» (le parole che svegliano, anche storpiate: la voce si
+    interromperebbe da sola, ed è un ordine rivolto a lei), «messaggio» (rivolto a un assistente,
+    anche di un'altra marca), «annuncio» («verifica annullata») e, sulle pagine con «ISTRUZIONI:
+    sì», «ordine» (comincia con un ordine a un assistente: sulle altre pagine «Scrivi…»,
+    «Rispondi…» sono gli esercizi). Forma, non significato (principio 10)."""
     from . import argomenti as A
-    if A._INDIRIZZO.search(frase):
+    if A._INDIRIZZO.search(frase) or _INDIRIZZO_DETTO.search(frase):
         return "indirizzo"
-    low = frase.lower()
-    if any(n and re.search(rf"(?<!\w){re.escape(str(n).lower())}(?!\w)", low) for n in nomi):
+    if nome_dentro(frase, nomi):
         return "nome"
-    if _MESSAGGIO.search(frase):
+    if _MESSAGGIO.search(frase) or _ALTRI_ASSISTENTI.search(frase):
         return "messaggio"
     if A._ANNUNCIO.search(frase):
         return "annuncio"
@@ -528,6 +584,7 @@ class Sintesi:
         self._thread = None
         self.fatti = 0
         self.secondi = 0.0
+        self._mia = None              # `attivita.ultima` lasciato dalla nostra ultima frase
 
     def firma_voci(self) -> str:
         return f"{Path(str(self.voce_calliope)).name}|{Path(str(self.voce_libro)).name}"
@@ -571,10 +628,28 @@ class Sintesi:
             return
         fine = time.monotonic() + VOCE_ATTESA_MAX_S
         while time.monotonic() < fine:
-            if getattr(a, "in_sintesi", 0) == 0 and \
-                    time.monotonic() - getattr(a, "ultima", 0.0) >= VOCE_FERMA_S:
+            ultima = getattr(a, "ultima", 0.0)
+            # L'ultimo segno di vita è la nostra frase di prima: non è la voce dal vivo
+            if getattr(a, "in_sintesi", 0) == 0 and (
+                    ultima == self._mia or time.monotonic() - ultima >= VOCE_FERMA_S):
                 return
             time.sleep(0.2)
+
+    def _sintetizza(self, voce, testo: str) -> bytes:
+        """Una frase, segnata nell'attività delle voci (revisione della PR #345): la taratura
+        della voce non parte mentre la sintesi per lo schermo lavora, e la vede come una sintesi
+        vera. Prima aspetta che la voce dal vivo sia ferma."""
+        from ..tts import sintesi_pcm
+        self._aspetta_voce()
+        a = self.attivita
+        if a is None:
+            return sintesi_pcm(voce, testo, self.pronuncia)
+        a.inizio()
+        try:
+            return sintesi_pcm(voce, testo, self.pronuncia)
+        finally:
+            a.fine()
+            self._mia = getattr(a, "ultima", None)
 
     def _voci(self):
         cal = self.voce_per(self.voce_calliope)
@@ -590,7 +665,6 @@ class Sintesi:
         return cal, lib
 
     def _lavora(self):
-        from ..tts import sintesi_pcm
         while True:
             try:
                 path, voci, ancora = self._q.get(timeout=60)
@@ -620,9 +694,8 @@ class Sintesi:
                             pausa = PAUSA_FRASE_S if prima.par == v.par else (
                                 PAUSA_PARTE_S if prima.tipo == CALLIOPE else PAUSA_PARAGRAFO_S)
                             w.writeframes(b"\0\0" * int(rate * pausa))
-                        self._aspetta_voce()
-                        w.writeframes(sintesi_pcm(lib if v.tipo == LIBRO else cal, v.testo,
-                                                  self.pronuncia))
+                        w.writeframes(self._sintetizza(lib if v.tipo == LIBRO else cal,
+                                                       v.testo))
                         prima = v
                         with self._lock:
                             self._stato[k] = round((i + 1) / tot, 3)
@@ -684,15 +757,46 @@ def togli_audio(cartella, verifiche_vive: set | None = None, piu_vecchi_di_s: fl
                 tutta = True                         # una verifica che non c'è più
             else:
                 tutta = verifiche_vive is None and not piu_vecchi_di_s     # «svuota»
+            # Nella rotazione resta solo la firma più recente (revisione della PR #345): i file di
+            # un copione di prima non si ascoltano più
+            tieni = _firma_recente(d) if piu_vecchi_di_s and not tutta else None
             for f in list(d.iterdir()):
                 if f.is_symlink() or not f.is_file():
                     continue
-                if tutta or (piu_vecchi_di_s and adesso - f.stat().st_mtime > piu_vecchi_di_s):
+                vecchia = tieni is not None and not f.name.startswith(tieni + "-")
+                if tutta or vecchia or (piu_vecchi_di_s
+                                        and adesso - f.stat().st_mtime > piu_vecchi_di_s):
                     f.unlink()
                     n += 1
             if not any(d.iterdir()):
                 d.rmdir()
         except (OSError, ValueError):
+            continue
+    return n
+
+
+def _firma_recente(d: Path) -> str | None:
+    """La firma del file del ripasso toccato per ultimo in una cartella (None se non ce n'è)."""
+    file = [f for f in d.iterdir() if f.is_file() and not f.is_symlink()
+            and re.fullmatch(r"[0-9a-f]{1,16}-\d+\.wav", f.name)]
+    if not file:
+        return None
+    return max(file, key=lambda f: f.stat().st_mtime).name.split("-", 1)[0]
+
+
+def togli_firme_vecchie(d: Path | None, firma: str) -> int:
+    """Nella cartella del ripasso di una verifica, i file di una firma diversa da `firma` (il
+    copione è cambiato: revisione della PR #345). I file provvisori in scrittura restano."""
+    if d is None or not d.is_dir() or d.is_symlink():
+        return 0
+    n = 0
+    for f in list(d.iterdir()):
+        try:
+            if (f.is_file() and not f.is_symlink() and f.suffix == ".wav"
+                    and not f.name.startswith(firma + "-")):
+                f.unlink()
+                n += 1
+        except OSError:
             continue
     return n
 
@@ -724,7 +828,14 @@ class Ascolti:
             "saltate": {}})
 
     def _nomi_ascolto(self) -> list[str]:
-        return [str(getattr(self.cfg, "name", "") or "Calliope")]
+        """Le parole che svegliano in uso (il nome e, in startrek, «computer»: revisione della PR
+        #345), e il nome comunque."""
+        nomi = [str(getattr(self.cfg, "name", "") or "Calliope")]
+        try:
+            nomi += [str(n) for n in (getattr(self.cfg, "wake_names", None) or ()) if n]
+        except Exception:  # noqa: BLE001 — una Config finta: basta il nome
+            pass
+        return list(dict.fromkeys(nomi))
 
     def _carte_ascolto(self, v: dict, chi) -> list[dict]:
         carte = [c for c in self._carte_di(v, chi) if c["stato"] == "attiva" and c["nel_piano"]]
@@ -953,6 +1064,7 @@ class Ascolti:
         if cartella is None:
             return {"senza_voce": True}
         path = cartella / nome_file(fa, parte)
+        togli_firme_vecchie(cartella, fa)
         if path.exists():
             try:
                 os.utime(path)              # l'ultimo ascolto: la cache scade da qui

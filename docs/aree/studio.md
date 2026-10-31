@@ -224,8 +224,10 @@ frase della parte 1,2 s.
 - riparte da solo, 2 s indietro, se Calliope torna a dormire entro 2 minuti: «la domanda va al
   tutor e poi si riprende»;
 - sul PC personale lo stato viene dalla voce degli schermi;
-- se il PC è legato a un satellite, la sua stanza va in pausa col motivo «ripasso» (5 minuti,
-  rinnovata dal battito) e si riprende solo se la pausa è ancora quella del ripasso. **La pausa
+- se il PC è legato a un satellite, la sua stanza va in pausa col motivo «ripasso» (2 minuti,
+  rinnovata dal battito quando ne restano meno di 75 s) e si riprende solo se la pausa è ancora
+  quella del ripasso e nessun altro schermo dello stesso satellite suona.
+  *[storico fino alla revisione della PR #345: «5 minuti», mentre l'analisi diceva 2]* **La pausa
   scelta da una persona non si tocca mai.**
 
 **Durante una prova aperta** della verifica, scritta o orale, **il ripasso si blocca per tutti**,
@@ -264,7 +266,8 @@ rigenerato:
 - la posizione: 2 ore;
 - la pausa delle carte: 4 s;
 - la ripresa sullo schermo: entro 2 minuti;
-- il battito: 30 s, la pausa della stanza 5 minuti;
+- il battito: 30 s, la pausa della stanza 2 minuti (*storico fino alla revisione della PR #345:
+  5*);
 - la cache: 7 giorni.
 
 **Prove** (tutte verdi il 31/10):
@@ -287,6 +290,43 @@ rigenerato:
 - il nome di Calliope in una pagina (la musa!) fa saltare quella frase;
 - la taratura della voce attribuisce alla voce di Calliope anche le frasi della voce del libro, che
   ha costi simili.
+
+### 31/10: la revisione della PR #345
+
+Lo script del revisore (frasi ostili da una pagina, contro `scarto` e `per_ripasso`) è nei casi di
+`prova_studio_ascolta.py`, sezione «la revisione della PR #345».
+
+1. **Il nome storpiato.** Una pagina con «Caliope», «Callíope», «Kalliope», «C a l l i o p e» o
+   «Calliopea» faceva interrompere la voce da sola: il rilevatore della parola sente la storpiatura,
+   ma il controllo cercava il nome esatto. Ora `nome_dentro` toglie gli accenti, legge la k come c,
+   semplifica le doppie, unisce le lettere staccate e tiene una lettera di tolleranza dalle 6
+   lettere, mai sulla prima. Contrari: «Callisto», «Callimaco», «la calle» restano.
+2. **Il nome detto dal libro non diventa un turno.** Prima un'interruzione durante la lettura
+   passava sempre il suo audio al giro dopo (`barge_seed`), e l'audio era quello del libro. Ora il
+   seme vale solo se `known_voice` vi riconosce una persona registrata, come il barge-in di livello
+   B; altrimenti la lettura si ferma e basta (regola `studio_ripasso_fermato_senza_voce`). Col
+   satellite il seme non ha audio: nel dubbio non vale, e la persona richiama (la finestra
+   d'ascolto resta aperta `followup_s`).
+3. **Lo scritto non aspetta.** Fra un pezzo e l'altro anche un messaggio scritto da uno schermo
+   (`ingresso`) o la sveglia del ciclo fermano la lettura, come un timer: «Metto in pausa il
+   ripasso: è arrivato un messaggio.» La posizione resta.
+4. **La sintesi per lo schermo si fa vedere.** Ogni frase è fra `attivita.inizio()` e `fine()`,
+   dopo l'attesa della voce dal vivo: la taratura della voce non parte mentre lavora. La sua
+   attività non la fa aspettare da sola (si ricorda l'ultimo segno di vita suo).
+5. **Le parole che svegliano in uso**, non solo il nome: in startrek anche «computer».
+
+Le minori:
+- non si dicono le frasi rivolte ad assistenti di altre marche, in testa o dopo un segno («Alexa,
+  …», «Ok Google», «Ehi Google», «Ehi Siri», «Siri, …», «Hey Cortana», «Ehi assistente»,
+  «Assistente, …»), né «per l'IA»; «Google ha comprato YouTube» si dice;
+- un indirizzo detto a parole («w w w punto sito punto it», «chiocciola», «punto com») è un
+  indirizzo;
+- la pausa della stanza del satellite è di 2 minuti, come nell'analisi;
+- con due schermi sullo stesso satellite la stanza riprende solo quando nessuno dei due suona;
+- i file di una firma vecchia vanno via subito: quando si ascolta, e nella rotazione;
+- `prova_studio_prove_pagina.py` cadeva a volte su «Scrivi una domanda»: controllava la pagina
+  prima che si ridisegnasse. Ora aspetta, e se cade il dettaglio dice cosa manca (salvata, nella
+  pagina, modulo, esito, inizio e fine del testo). Tre giri di fila verdi.
 
 ## Le prove: verifica finta e interrogazione simulata (31/10, issue #248, ramo `issue-248-studio-verifica-finta`)
 

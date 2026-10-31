@@ -5050,8 +5050,11 @@ class Ciclo:
         dalla conversazione, con la voce del libro per il materiale. Half-duplex come la
         risposta: mentre legge si ascolta solo il nome (`_ascolta_il_nome`, livelli A e B),
         niente trascrizioni; «Calliope, basta» la ferma e la frase dopo il nome va al giro
-        successivo come ogni barge-in. Prima di ogni pezzo una prova aperta, gli orari, lo Studio
-        spento o un annuncio in coda la fermano. Nel registro dei turni solo i conti."""
+        successivo come ogni barge-in, ma solo se nell'audio dell'interruzione c'è la voce di una
+        persona registrata (revisione della PR #345): la voce del libro che dice il nome, anche
+        storpiato, ferma la lettura e basta, senza diventare un turno. Prima di ogni pezzo una
+        prova aperta, gli orari, lo Studio spento, un annuncio in coda o un messaggio scritto
+        arrivato intanto la fermano (la posizione resta). Nel registro dei turni solo i conti."""
         ctx = getattr(self, "tool_ctx", None)
         lettura = getattr(ctx, "ascolta", None) if ctx is not None else None
         if lettura is None:
@@ -5070,6 +5073,13 @@ class Ciclo:
         def controlla():
             if self._annunci_pronti():
                 return ("annuncio", "Metto in pausa il ripasso: c'è un avviso.")
+            # Un messaggio scritto da uno schermo, o la sveglia del ciclo (revisione della PR
+            # #345): non aspetta la fine della lettura, che si ferma come per un timer
+            ingresso = getattr(self, "ingresso", None)
+            sveglia = getattr(self, "sveglia", None)
+            if (ingresso is not None and not ingresso.vuoto()) or (
+                    sveglia is not None and sveglia.is_set()):
+                return ("messaggio", "Metto in pausa il ripasso: è arrivato un messaggio.")
             return st.ascolto_vale(lettura)
 
         w = types.SimpleNamespace()
@@ -5095,10 +5105,29 @@ class Ciclo:
             # Solo i conti: mai il testo delle pagine (decisione 0035, punti 6 e 42)
             self.rec["ripasso"] = {k: esito.get(k) for k in ("motivo", "frasi", "sentite")}
             self.rule("studio_ripasso_letto")
-        if w.watch.get("seed"):
-            # Interrotta col nome: si ascolta subito, dall'audio che contiene il nome
-            self.barge_seed = w.watch["seed"]
+        seme = w.watch.get("seed")
+        if seme and self._seme_di_persona(seme):
+            # Interrotta da una persona registrata: si ascolta subito, dall'audio col nome
+            self.barge_seed = seme
+        elif seme:
+            # Il nome sentito senza la voce di una persona registrata: era il libro (o la TV).
+            # La lettura si ferma e basta: niente turno dall'audio del materiale
+            if self.rec is not None:
+                self.rule("studio_ripasso_fermato_senza_voce")
+            print("   [STUDIO] ripasso fermato dal nome senza una voce registrata: niente turno",
+                  flush=True)
         self.awake_until = time.monotonic() + cfg.followup_s
+
+    def _seme_di_persona(self, seme) -> bool:
+        """L'audio dell'interruzione è di una persona registrata (`known_voice`, come il barge-in
+        di livello B)? Nel dubbio no: il ripasso resta fermo e la persona richiama."""
+        try:
+            parti = [np.asarray(x).reshape(-1) for x in seme if x is not None]
+            if not parti:
+                return False
+            return bool(self.known_voice(np.concatenate(parti)))
+        except Exception:  # noqa: BLE001
+            return False
 
     def _storia_come_detta(self, t):
         """Nella storia la risposta di Calliope è ciò che la persona ha sentito (10/10, giro

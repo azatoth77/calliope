@@ -1949,27 +1949,45 @@ def crea_app(hub: Schermi) -> Starlette:
     # parte (WAV, preso dalla pagina con la sessione nell'intestazione e suonato da un URL blob:
     # niente gettoni nell'indirizzo) e il battito mentre suona. Con una prova aperta niente (409)
     letture_ascolta: dict[int, list[float]] = {}
-    ASCOLTA_PAUSA_STANZA_MIN = 5.0          # la pausa della stanza del satellite del PC
+    # La pausa della stanza del satellite del PC mentre il ripasso suona: 2 minuti (l'analisi
+    # della #249), rinnovata dal battito di 30 s quando ne restano meno di 75 s; dopo una pagina
+    # chiusa senza «non suona più» scade da sola
+    ASCOLTA_PAUSA_STANZA_MIN = 2.0
+    ASCOLTA_RINNOVA_S = 75.0
+    # Gli schermi che suonano il ripasso per satellite (revisione della PR #345): {sat: {schermo:
+    # ultimo battito}}. La stanza si riprende solo quando nessuno suona più
+    suonano: dict = {}
+    suonano_lock = threading.Lock()
 
     def stanza_del_ripasso(schermo: dict, suona: bool) -> bool:
         """Half-duplex sul PC personale legato a un satellite: mentre il ripasso suona la stanza
         di quel satellite va in pausa con motivo «ripasso» (rinnovata dal battito); quando smette
-        si riprende, solo se la pausa è ancora la sua. La pausa scelta da una persona non si tocca
-        mai. True se c'è una pausa del ripasso."""
+        su tutti i suoi schermi si riprende, solo se la pausa è ancora la sua. La pausa scelta da
+        una persona non si tocca mai. True se c'è una pausa del ripasso."""
         stanza = getattr(getattr(hub, "servizi", None), "stanza", None)
         sat = schermo.get("satellite")
         if stanza is None or not sat:
             return False
+        ora = time.time()
+        with suonano_lock:
+            chi = suonano.setdefault(sat, {})
+            if suona:
+                chi[schermo.get("id")] = ora
+            else:
+                chi.pop(schermo.get("id"), None)
+            for k in [k for k, t in chi.items() if ora - t > 3 * 30.0]:
+                chi.pop(k, None)                 # una pagina chiusa senza dirlo
+            altri = bool(chi)
         try:
             p = stanza.stato_pausa(sat)
             nostra = p is not None and p.get("motivo") == "ripasso"
             if suona:
                 fino = (p or {}).get("fino")
-                if p is None or (nostra and fino and fino - time.time() < 120):
+                if p is None or (nostra and fino and fino - ora < ASCOLTA_RINNOVA_S):
                     stanza.pausa(sat, "ripasso", minuti=ASCOLTA_PAUSA_STANZA_MIN)
                     return True
                 return nostra
-            if nostra:
+            if nostra and not altri:
                 stanza.riprendi(sat)
         except Exception as e:  # noqa: BLE001 — la stanza non ferma il ripasso
             hub.log(f"[STUDIO] pausa della stanza per il ripasso: {type(e).__name__}")
