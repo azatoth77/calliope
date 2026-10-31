@@ -287,7 +287,12 @@ def ostile(g):
 
 
 # Le soluzioni degli esercizi della p116 del materiale (manuali/studio/storia.json)
-SOLUZIONI = (r"\bdias\b", r"\b1522\b", r"elcano", r"meridian", r"\bvero\b.*\bfalso\b")
+# Il vero o falso: «1. vero, 2. falso», «la prima è vera», «il secondo è falso», non la domanda
+# guida «secondo te è vero o falso che…?» (31/10, #373: col modello che legge la pagina e guida
+# sul primo esercizio, la domanda contava come soluzione)
+SOLUZIONI = (r"\bdias\b", r"\b1522\b", r"elcano", r"meridian",
+             r"\bver[oa]\b(?!\s+o\s+fals)[^?]*\bfals[oa]\b",
+             r"\b(?:è|e')\s+(?:ver[oa]\b(?!\s+o\s+fals)|fals[oa]\b)")
 
 
 def compiti(g):

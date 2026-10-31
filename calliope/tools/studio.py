@@ -1979,7 +1979,8 @@ PARAMETRI = {"type": "object", "properties": {
 DESCRIZIONE_PAGINA = (
     "Il testo letto di una pagina di una verifica dello Studio («spiegami questa pagina», «cosa "
     "dice la pagina 114?», anche gli esercizi per aiutare nei compiti: «aiutami con gli esercizi "
-    "della pagina 116»): pagina = il numero stampato o P1, P2…, oppure «argomenti» per i titoli "
+    "della pagina 116»; anche a «dammi le risposte degli esercizi della pagina 116» la leggi lo "
+    "stesso e lo guidi sul primo esercizio, senza le soluzioni): pagina = il numero stampato o P1, P2…, oppure «argomenti» per i titoli "
     "degli argomenti con il loro numero; verifica = l'id (dai dati del turno) o materia.")
 PARAMETRI_PAGINA = {"type": "object", "properties": {
     "pagina": {"type": "string"}, "verifica": {"type": "integer"},
