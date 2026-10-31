@@ -1796,6 +1796,18 @@ codice); in `prova_studio_home_pagina.py` il ripasso e «Scrivi una carta» nell
 `prova_studio_resoconto.py`. La prova col modello sulla DGX (la voce che chiede e la persona che
 risponde) resta a chi amministra.
 
+### 31/10 sera: «domani» non è fra dieci minuti (issue #356)
+
+`carte.prossima` metteva ogni scadenza a giorni alla mezzanotte del giorno: alle 23:50 «Quasi»
+tornava dopo 10 minuti, come «Non la sapevo», e «La sapevo» dalla scatola 1 dopo circa 24 ore
+invece di 2 giorni (trovato nella revisione della PR #351, dove `prova_studio_carte` fissava quel
+comportamento). Ora la scadenza è la più tarda fra la mezzanotte del giorno e adesso più i giorni
+meno `MARGINE_ORE` (12): «Quasi» alle 23:50 torna domani alle 11:50, «La sapevo» dopo 36 ore; la
+mattina vince la mezzanotte come prima (alle 8:00 «Quasi» è domani alle 0:00), dal pomeriggio la
+scadenza cade nelle prime ore del giorno (alle 16:00 domani alle 4:00). I tasti dicono «domani» e
+«fra 2 giorni» anche a tarda sera. La vigilia resta il tetto. Le carte già scritte tengono la
+scadenza che hanno.
+
 ## La padronanza per argomento (30/10, issue #245, ramo `issue-245-studio-padronanza`)
 
 *Passo 5 dell'epic #251; decisione [0035](../decisioni/0035-studio.md) punto 32; analisi nel
