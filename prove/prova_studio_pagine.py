@@ -34,6 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import datetime
 import io
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -830,55 +831,64 @@ def prova_server():
 def prova_dos(port, sess, vid, foto_b):
     """Revisione della PR #312: senza sessione niente si legge e la connessione si chiude subito;
     un rifiuto dopo una sessione valida butta il corpo al più per STUDIO_SCARTA_S; un invio vero
-    troppo lento si ferma dopo STUDIO_LEGGI_S."""
+    troppo lento si ferma dopo STUDIO_LEGGI_S.
+
+    Come si misura (#316, e la sua revisione con i mutanti di server.py): nel caso lento il client
+    scrive un byte ogni `lento` secondi finché il server risponde o chiude, così un tetto per
+    pezzo invece che sul totale (uno slowloris) non chiude mai e la prova cade. Il tempo sta fra
+    0,9×T e un tetto relativo, T + max(5 s, 3×T): un tempo massimo moltiplicato (×8) o tolto
+    cade. Prima di ogni byte un `select` legge la risposta se c'è; un reset o un errore di
+    `sendall` mentre si scrive vale «il server ha chiuso». Un byte partito proprio mentre il
+    server chiude torna come RST e su Windows porta via la risposta non ancora letta (1 volta su
+    20): il codice allora si legge dal lato server, dalle risposte che il server ha costruito
+    (`_json`, spiato), con l'istante."""
     import select
     import socket
     from calliope.schermi import server as SRV
 
-    def manda(intestazioni: dict, corpo_iniziale: bytes = b"", lento: float = 0.0, durata: float = 30.0,
-              smetti: float | None = None):
-        """(prima riga della risposta, secondi, chiusa?, risposta arrivata mentre si mandava?)
-        mandando le intestazioni e poi, se `lento`, un byte ogni `lento` secondi fino a `smetti`
-        secondi (poi si aspetta e basta), per al più `durata` secondi. Seconda revisione della PR
-        #315 (#316): prima di ogni byte si guarda se la risposta è arrivata, e allora si smette di
-        scrivere e la si legge; un reset vale come una chiusura, senza perdere quello che è già
-        arrivato. Prima si continuava a scrivere dopo la risposta e la chiusura del server: il
-        byte successivo provocava un RST, e su Windows `recv` alzava ConnectionResetError prima di
-        leggere la risposta (1 volta su 14). Resta una corsa che nessun controllo prima del byte
-        chiude: un byte partito proprio mentre il server chiude arriva dopo la chiusura, il RST
-        torna subito e Windows butta la risposta non ancora letta (visto 1 volta su 20 col solo
-        controllo). Per questo nei casi a tempo si smette di scrivere (`smetti`) prima che il
-        tempo del server possa scadere: il server lo conta da quando ha la richiesta, cioè dopo
-        `t0`, e quando chiude non c'è niente in volo."""
+    costruite = []                          # (monotonic, codice) dal lato server
+    vero_json = SRV._json
+
+    def spia_json(data, status: int = 200, headers=None):
+        costruite.append((time.monotonic(), status))
+        return vero_json(data, status, headers)
+
+    def tetto(t: float) -> float:
+        return t + max(5.0, 3 * t)
+
+    def manda(intestazioni: dict, corpo_iniziale: bytes = b"", lento: float = 0.0,
+              entro: float = 30.0):
+        """{"riga", "codice", "da", "dt", "chiusa", "durante"}: le intestazioni, poi (se `lento`) un
+        byte ogni `lento` secondi finché il server risponde o chiude, al più per `entro` secondi.
+        `codice` è quello della riga di stato o, se un reset l'ha portata via, quello costruito
+        dal server dopo `t0` (`da`: «client» o «server»); `dt` quando la risposta o la chiusura
+        si è vista; `durante`: si stava ancora mandando il corpo."""
         sk = socket.create_connection(("127.0.0.1", port), timeout=30)
         t0 = time.monotonic()
         righe = "".join(f"{k}: {v}\r\n" for k, v in intestazioni.items())
         sk.sendall(f"POST /api/studio/pagina HTTP/1.1\r\nHost: 127.0.0.1\r\n{righe}\r\n".encode()
                    + corpo_iniziale)
-        fine = t0 + durata
-        risposta, chiusa, durante = b"", False, False
-        # Finché si manda: si aspetta la risposta al più `lento` (o fino alla fine) e, se non c'è,
-        # un byte. Appena c'è, si smette di scrivere
+        fine = t0 + entro
+        risposta, chiusa, durante, visto = b"", False, False, None
         while time.monotonic() < fine:
-            scrive = lento and (smetti is None or time.monotonic() - t0 < smetti)
-            attesa = min(lento, fine - time.monotonic()) if scrive else fine - time.monotonic()
+            attesa = min(lento, fine - time.monotonic()) if lento else fine - time.monotonic()
             if select.select([sk], [], [], max(attesa, 0))[0]:
-                durante = True
+                durante, visto = True, time.monotonic()
                 break
-            if scrive:
+            if lento:
                 try:
                     sk.sendall(b"0")
-                except OSError:            # il server ha chiuso mentre si mandava
+                except OSError:             # il server ha chiuso mentre si scriveva
                     chiusa = durante = True
+                    visto = time.monotonic()
                     break
-        # Poi si legge tutto quello che c'è, fino alla chiusura
         sk.settimeout(max(fine - time.monotonic(), 0.1))
-        while not chiusa:
+        while not chiusa and visto is not None:
             try:
                 pezzo = sk.recv(65536)
             except socket.timeout:
                 break
-            except OSError:                # reset: chiusa, e quello che è arrivato resta
+            except OSError:                 # reset: chiusa, e quello che è arrivato resta
                 chiusa = True
                 break
             if not pezzo:
@@ -886,52 +896,59 @@ def prova_dos(port, sess, vid, foto_b):
                 break
             risposta += pezzo
         sk.close()
-        return (risposta.split(b"\r\n", 1)[0].decode("latin-1"), time.monotonic() - t0, chiusa,
-                durante)
+        riga = risposta.split(b"\r\n", 1)[0].decode("latin-1")
+        m = re.match(r"HTTP/1\.[01] (\d{3})", riga)
+        if m:
+            codice, da = int(m.group(1)), "client"
+        else:
+            dopo = [c for t, c in costruite if t >= t0]
+            codice, da = (dopo[-1], "server") if (dopo and chiusa) else (None, "")
+        return {"riga": riga, "codice": codice, "da": da, "chiusa": chiusa, "durante": durante,
+                "dt": (visto or time.monotonic()) - t0}
 
-    base = {"Content-Type": "application/octet-stream",
-            "X-Calliope-Studio": quote(json.dumps({"verifica": vid}))}
-    # Senza sessione, 20 MB dichiarati e solo 1 kB mandato: 401 subito, niente letto, connessione
-    # chiusa. «Subito»: prima del tempo in cui si butterebbe il corpo di un rifiuto
-    riga, dt, chiusa, _ = manda({**base, "Content-Length": "20000000"}, b"x" * 1000)
-    verifica("DoS: senza sessione e con un corpo grosso → 401 subito, niente letto, connessione chiusa",
-             " 401 " in riga and chiusa and dt < SRV.STUDIO_SCARTA_S, f"{riga} {dt:.1f}s chiusa={chiusa}")
-    # Un byte solo, dopo mezzo secondo: la risposta arriva prima (il server non aspetta il corpo), e
-    # niente è in volo quando il server chiude
-    riga, dt, chiusa, durante = manda({**base, "X-Calliope-Sessione": "inventata", "Content-Length": "5000"},
-                                      b"", lento=0.5, smetti=0.5)
-    verifica("DoS: una sessione inventata con un invio lento → 401 subito, senza aspettare il corpo",
-             " 401 " in riga and durante and dt < SRV.STUDIO_SCARTA_S, f"{riga} {dt:.1f}s")
-    riga, dt, chiusa, _ = manda({**base, "X-Calliope-Sessione": sess["leo"]}, b"")
-    verifica("DoS: senza Content-Length → 411 subito e la connessione chiusa",
-             " 411 " in riga and chiusa and dt < SRV.STUDIO_SCARTA_S, f"{riga} {dt:.1f}s")
+    def descrivi(r):
+        return (f"{r['codice']} (dal {r['da'] or 'nessuno'}) {r['dt']:.1f}s chiusa={r['chiusa']} "
+                f"durante={r['durante']} «{r['riga']}»")
+
+    SRV._json = spia_json
     prima_s, prima_l = SRV.STUDIO_SCARTA_S, SRV.STUDIO_LEGGI_S
-    SRV.STUDIO_SCARTA_S, SRV.STUDIO_LEGGI_S = 1.5, 1.5
     try:
-        # Un rifiuto dopo una sessione valida (la verifica che non c'è) con un invio lento: il corpo
-        # si butta al più per STUDIO_SCARTA_S, poi la risposta e la connessione chiusa. Senza tetto
-        # in secondi (#316: non reggeva su una macchina carica): la risposta arriva mentre si manda
-        # ancora (100 kB a un byte ogni 0,3 s non finirebbero mai), e non prima del tempo massimo
+        base = {"Content-Type": "application/octet-stream",
+                "X-Calliope-Studio": quote(json.dumps({"verifica": vid}))}
+        # Senza sessione, 20 MB dichiarati e solo 1 kB mandato: 401 subito, niente letto, la
+        # connessione chiusa. «Subito»: prima del tempo in cui si butterebbe il corpo di un rifiuto
+        r = manda({**base, "Content-Length": "20000000"}, b"x" * 1000, entro=SRV.STUDIO_SCARTA_S)
+        verifica("DoS: senza sessione e con un corpo grosso → 401 subito, niente letto, connessione chiusa",
+                 r["codice"] == 401 and r["chiusa"] and r["dt"] < SRV.STUDIO_SCARTA_S, descrivi(r))
+        r = manda({**base, "X-Calliope-Sessione": "inventata", "Content-Length": "5000"}, b"",
+                  lento=0.5, entro=SRV.STUDIO_SCARTA_S)
+        verifica("DoS: una sessione inventata con un invio lento → 401 subito, senza aspettare il corpo",
+                 r["codice"] == 401 and r["durante"] and r["dt"] < SRV.STUDIO_SCARTA_S, descrivi(r))
+        r = manda({**base, "X-Calliope-Sessione": sess["leo"]}, b"", entro=SRV.STUDIO_SCARTA_S)
+        verifica("DoS: senza Content-Length → 411 subito e la connessione chiusa",
+                 r["codice"] == 411 and r["chiusa"] and r["dt"] < SRV.STUDIO_SCARTA_S, descrivi(r))
+        SRV.STUDIO_SCARTA_S, SRV.STUDIO_LEGGI_S = 1.5, 1.5
+        # Un rifiuto dopo una sessione valida (la verifica che non c'è) con un invio lento che non
+        # smette: il corpo si butta al più per STUDIO_SCARTA_S, poi il 404 e la connessione chiusa
         meta = quote(json.dumps({"verifica": 9999}))
-        riga, dt, chiusa, durante = manda({**base, "X-Calliope-Studio": meta,
-                                           "X-Calliope-Sessione": sess["leo"],
-                                           "Content-Length": "100000"}, b"", lento=0.3,
-                                          smetti=SRV.STUDIO_SCARTA_S * 0.6)
+        t = SRV.STUDIO_SCARTA_S
+        r = manda({**base, "X-Calliope-Studio": meta, "X-Calliope-Sessione": sess["leo"],
+                   "Content-Length": "100000"}, b"", lento=0.3, entro=tetto(t))
         verifica("DoS: un rifiuto con un invio lento si interrompe dopo il tempo massimo (404)",
-                 " 404 " in riga and durante and dt >= SRV.STUDIO_SCARTA_S * 0.9,
-                 f"{riga} {dt:.1f}s chiusa={chiusa}")
+                 r["codice"] == 404 and r["durante"] and 0.9 * t <= r["dt"] <= tetto(t), descrivi(r))
         # Lo stesso rifiuto con il corpo tutto mandato: la frase arriva (il telefono la vede)
         s, d = chiedi(port, "/api/studio/pagina", sess["leo"], byte=foto_b, meta={"verifica": 9999})
         verifica("DoS: il rifiuto con il corpo intero arriva con la sua frase", s == 404 and d.get("errore"),
                  f"{s} {d}")
-        # Un invio vero troppo lento: 408 dopo STUDIO_LEGGI_S, mentre si manda ancora
-        riga, dt, chiusa, durante = manda({**base, "X-Calliope-Sessione": sess["leo"],
-                                           "Content-Length": "100000"}, b"\xff\xd8\xff", lento=0.3,
-                                          smetti=SRV.STUDIO_LEGGI_S * 0.6)
+        # Un invio vero troppo lento, che non smette: 408 dopo STUDIO_LEGGI_S
+        t = SRV.STUDIO_LEGGI_S
+        r = manda({**base, "X-Calliope-Sessione": sess["leo"], "Content-Length": "100000"},
+                  b"\xff\xd8\xff", lento=0.3, entro=tetto(t))
         verifica("DoS: un invio vero troppo lento si ferma (408) dopo il tempo massimo",
-                 " 408 " in riga and durante and dt >= SRV.STUDIO_LEGGI_S * 0.9, f"{riga} {dt:.1f}s")
+                 r["codice"] == 408 and r["durante"] and 0.9 * t <= r["dt"] <= tetto(t), descrivi(r))
     finally:
         SRV.STUDIO_SCARTA_S, SRV.STUDIO_LEGGI_S = prima_s, prima_l
+        SRV._json = vero_json
 
 
 def prova_pdf_insieme(port, sess, vid):
