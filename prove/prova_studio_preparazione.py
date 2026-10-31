@@ -2,7 +2,7 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 """La preparazione dello Studio dietro le quinte a secco (31/10, issue #297, parte 3, epic #251,
-decisione 0035 punto 52; calliope/studio/preparazione.py, studio/lettura.py `prepara`, le attività
+decisione 0035 punto 53; calliope/studio/preparazione.py, studio/lettura.py `prepara`, le attività
 della libreria coi parametri). Un modello finto (la risposta scritta qui), un orologio finto,
 persone e pagine di fantasia (Leo, il tutore Andrea).
 
@@ -246,6 +246,44 @@ verifica("contrario, reazione: una formula vera dentro una più lunga («NaClx»
          PR.reazione("2 Na + Cl2 -> 2 NaCl", ["R"], T2) is None)
 verifica("reazione: scritta intera con spazi diversi vale",
          PR.reazione("2Mg+O2→2MgO", ["P1"], testi) is not None)
+
+# Seconda revisione della PR #368: due materiali in una frase, le unità per esteso, gli equilibri
+T3 = {"D1": "Fra il legno e il ferro, il ferro ha massa 79 g e volume 10 cm³.",
+      "D2": "Il ferro, a differenza del sughero, pesa 79 g per 10 cm³.",
+      "D3": "Il basalto ha massa 79 g e volume 10 cm³, l'ebano no.",
+      "E": "Un cubetto di ferro ha massa 79 grammi e volume 10 centimetri cubi.",
+      "E2": "Il ferro: 79 gr in 10 cc. Un olio: 46 g in 50 millilitri. Il sughero: 0,24 "
+            "chilogrammi in 1 litro. Il rame: 89 g in 10 cm^3. Il ghiaccio: 1.000 g in 1.087 cm³. "
+            "Il ghiaccio: 45.9 g in 50 cm³. Il sughero: 240 g in 1 dm^3.",
+      "Q": "Equilibrio: N2 + 3H2 ⇌ 2NH3. Un altro: N2 + 3H2 <=> 2NH3. Anche: H2 + I2 ⇄ 2HI."}
+for nome, x, cit in (("il legno in una frase sul ferro", {"materiale": "legno", "m": 79, "V": 10}, ["D1"]),
+                     ("il sughero «a differenza del» ferro", {"materiale": "sughero", "m": 79, "V": 10},
+                      ["D2"]),
+                     ("il ferro con il sughero nella frase", {"materiale": "ferro", "m": 79, "V": 10},
+                      ["D2"])):
+    verifica(f"contrario, misura: {nome}", PR.misura(x, cit, T3) is None)
+verifica("contrario, misura: un altro materiale proposto nello stesso giro nella frase",
+         PR.misura({"materiale": "basalto", "m": 79, "V": 10}, ["D3"], T3) is not None
+         and PR.misura({"materiale": "basalto", "m": 79, "V": 10}, ["D3"], T3,
+                       ["basalto", "ebano"]) is None)
+verifica("misura: «legno» non conta come altro materiale per «legno di pino»",
+         PR.misura({"materiale": "legno di pino", "m": 52, "V": 100}, ["P2"], testi) is not None)
+for nome, x, att in (("grammi e centimetri cubi", ({"materiale": "ferro", "m": 79, "V": 10}, ["E"]), (79, 10)),
+                     ("gr e cc", ({"materiale": "ferro", "m": 79, "V": 10}, ["E2"]), (79, 10)),
+                     ("millilitri", ({"materiale": "olio", "m": 46, "V": 50}, ["E2"]), (46, 50)),
+                     ("chilogrammi e litro", ({"materiale": "sughero", "m": 0.24, "V": 1}, ["E2"]),
+                      (240, 1000)),
+                     ("cm^3", ({"materiale": "rame", "m": 89, "V": 10}, ["E2"]), (89, 10)),
+                     ("il punto delle migliaia", ({"materiale": "ghiaccio", "m": 1000, "V": 1087},
+                                                  ["E2"]), (1000, 1087)),
+                     ("il punto decimale", ({"materiale": "ghiaccio", "m": 45.9, "V": 50}, ["E2"]),
+                      (45.9, 50)),
+                     ("dm^3", ({"materiale": "sughero", "m": 240, "V": 1000}, ["E2"]), (240, 1000))):
+    r = PR.misura(x[0], x[1], T3)
+    verifica(f"misura, unità: {nome}", r is not None and (r["m"], r["V"]) == att, str(r))
+for testo in ("N2 + 3H2 ⇌ 2NH3", "N2 + 3 H2 -> 2 NH3", "H2 + I2 ⇄ 2HI"):
+    verifica(f"reazione: l'equilibrio «{testo}» dalla pagina con ⇌, <=> o ⇄",
+             PR.reazione(testo, ["Q"], T3) is not None)
 
 # ═══════════════════════════ 2–3. la lezione, ombra e attiva ═══════════════════════════
 print("— ombra")

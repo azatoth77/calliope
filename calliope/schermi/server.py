@@ -1392,7 +1392,10 @@ def crea_app(hub: Schermi) -> Starlette:
             out = []
         return _json({"verifiche": out, "prova": not st.per_schermi(),
                       "max_pagine": int(getattr(hub.cfg, "studio_pagine_max", 80) or 80),
-                      "pdf_max_pagine": int(getattr(hub.cfg, "studio_pdf_max_pagine", 40) or 40)})
+                      "pdf_max_pagine": int(getattr(hub.cfg, "studio_pdf_max_pagine", 40) or 40),
+                      # Per la condivisione dal telefono (#298 parte 3): il tetto prima di mandare
+                      "importa_max_mb": float(getattr(hub.cfg, "studio_importa_max_mb", 100.0)
+                                              or 100.0)})
 
     viste_fatte: dict[int, list[float]] = {}
 

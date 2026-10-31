@@ -8,6 +8,27 @@
   "scope": "/telefono/",
   "display": "standalone",
   "orientation": "portrait",
+  "share_target": {
+    "action": "/telefono/condividi",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "titolo",
+      "text": "testo",
+      "files": [{
+        "name": "file",
+        "accept": ["application/pdf", ".pdf", "image/jpeg", "image/png", "image/webp", ".jpg", ".jpeg", ".png", ".webp",
+                   "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx",
+                   "application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx",
+                   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx",
+                   "application/vnd.oasis.opendocument.text", ".odt",
+                   "application/vnd.oasis.opendocument.presentation", ".odp",
+                   "application/vnd.oasis.opendocument.spreadsheet", ".ods",
+                   "text/plain", "text/markdown", "text/csv", "text/html", ".txt", ".md", ".csv", ".html", ".htm",
+                   "application/zip", ".zip"]
+      }]
+    }
+  },
   "background_color": "#000000",
   "theme_color": "#000000",
   "icons": [

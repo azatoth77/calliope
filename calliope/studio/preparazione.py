@@ -1,6 +1,6 @@
 """
 La preparazione dello Studio dietro le quinte (31/10, issue #297, parte 3, epic #251, decisione
-0035 punto 52): per ogni verifica aperta il lettore delle pagine (lo stesso thread, la stessa
+0035 punto 53): per ogni verifica aperta il lettore delle pagine (lo stesso thread, la stessa
 guardia della DGX) chiede a qwen3.6, **quando la DGX è libera e la voce ferma** (la guardia del
 lettore: vLLM libero, nessun lavoro dell'agente; `arbitro_memoria.quiete`), dal **solo testo
 letto** delle pagine:
@@ -18,7 +18,8 @@ delle mini-app né fuori dalla busta.
 - Una misura vale se materiale, massa e volume stanno nella stessa frase di una pagina citata,
   con una massa sola e un volume solo, ognuno subito seguito dalla sua unità (g o kg; cm³, ml, L
   o dm³: si converte in grammi e cm³), la densità è fra 0,01 e 25 e lontana da quella
-  dell'acqua, e il materiale è una parola breve di lettere (`misura`).
+  dell'acqua, il materiale è una parola breve di lettere e la frase non nomina un altro
+  materiale (uno dei comuni o uno proposto nello stesso giro) (`misura`).
 - Che una reazione sia chimicamente possibile non si controlla: viene dalla pagina, scritta per
   intero (niente cifre o lettere a ridosso).
 - La lezione resta un testo del modello dalle pagine: sullo schermo con textContent, ai modelli
@@ -152,9 +153,13 @@ def atomi(formula: str) -> dict | None:
     return out if letto == formula else None
 
 
+# Le frecce: la reazione e l'equilibrio (seconda revisione della PR #368), «<=>» prima di «=»
+_FRECCE = r"(?:<=>|->|→|⟶|⇌|⇄|=)"
+
+
 def _norma_reazione(t: str) -> str:
     t = unicodedata.normalize("NFC", str(t or "")).translate(_PEDICI)
-    t = re.sub(r"\s*(?:->|→|⟶|=)\s*", ">", t)
+    t = re.sub(r"\s*" + _FRECCE + r"\s*", ">", t)
     return re.sub(r"\s+", "", t)
 
 
@@ -162,7 +167,7 @@ def _scritta(n: str, pagina: str) -> bool:
     """La reazione normalizzata `n` sta scritta per intero nella pagina: gli spazi della pagina
     contano solo come confini (prima e dopo la reazione niente cifre né lettere)."""
     t = unicodedata.normalize("NFC", str(pagina or "")).translate(_PEDICI)
-    t = re.sub(r"(?:->|→|⟶|=)", ">", t)
+    t = re.sub(_FRECCE, ">", t)
     corpo = r"\s*".join(re.escape(c) for c in n)
     return re.search(r"(?<![0-9A-Za-z])" + corpo + r"(?![0-9A-Za-z])", t) is not None
 
@@ -228,10 +233,18 @@ def reazione(testo, citate, testi: dict) -> dict | None:
 
 # Un numero subito seguito dalla sua unità (revisione della PR #368): la massa in grammi o
 # chilogrammi, il volume in cm³, ml, litri o dm³; nient'altro vale
-_QUANTITA = re.compile(r"(?<![\w,.])(\d+(?:[.,]\d+)?)\s*(kg|g|cm³|cm3|dm³|dm3|ml|l)(?![\w³])",
-                       re.I)
-UNITA_MASSA = {"g": 1.0, "kg": 1000.0}                                   # → grammi
-UNITA_VOLUME = {"cm³": 1.0, "cm3": 1.0, "ml": 1.0, "l": 1000.0, "dm³": 1000.0, "dm3": 1000.0}
+# (seconda revisione: anche per esteso, «gr», «cc», «cm^3»). Il punto delle migliaia vale solo con
+# tre cifre dopo («1.000 g»); «45.9» e «45,9» sono decimali
+UNITA_MASSA = {"g": 1.0, "gr": 1.0, "grammo": 1.0, "grammi": 1.0, "kg": 1000.0,
+               "chilogrammo": 1000.0, "chilogrammi": 1000.0}             # → grammi
+UNITA_VOLUME = {"cm³": 1.0, "cm3": 1.0, "cm^3": 1.0, "cc": 1.0, "ml": 1.0, "millilitro": 1.0,
+                "millilitri": 1.0, "centimetro cubo": 1.0, "centimetri cubi": 1.0,
+                "l": 1000.0, "litro": 1000.0, "litri": 1000.0, "dm³": 1000.0, "dm3": 1000.0,
+                "dm^3": 1000.0, "decimetro cubo": 1000.0, "decimetri cubi": 1000.0}  # → cm³
+_UNITA = "|".join(re.escape(u).replace(r"\ ", r"\s+")
+                  for u in sorted([*UNITA_MASSA, *UNITA_VOLUME], key=len, reverse=True))
+_QUANTITA = re.compile(r"(?<![\w,.])(\d{1,3}(?:\.\d{3})+(?:,\d+)?(?![\d.])|\d+(?:[.,]\d+)?)"
+                       r"\s*(" + _UNITA + r")(?![\w³^])", re.I)
 # Le frasi: un punto fra due cifre non chiude (52.5 g)
 _FRASI = re.compile(r"(?<!\d)[.;!?](?!\d)|[.;!?](?=\s|$)|\n")
 
@@ -240,11 +253,14 @@ def _quantita(frase: str) -> tuple[list, list]:
     """Le masse e i volumi della frase: [(numero scritto, valore in g o cm³)]."""
     masse, volumi = [], []
     for q in _QUANTITA.finditer(frase):
+        s = q.group(1)
+        if re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:,\d+)?", s):
+            s = s.replace(".", "")
         try:
-            x = float(q.group(1).replace(",", "."))
+            x = float(s.replace(",", "."))
         except ValueError:
             continue
-        u = q.group(2).lower()
+        u = " ".join(q.group(2).lower().split())
         if u in UNITA_MASSA:
             masse.append((round(x, 6), round(x * UNITA_MASSA[u], 6)))
         else:
@@ -255,7 +271,29 @@ def _quantita(frase: str) -> tuple[list, list]:
 _MATERIALE = re.compile(r"^[a-zàèéìòù' ]{2,30}$")
 
 
-def misura(x: dict, citate, testi: dict) -> dict | None:
+# I materiali comuni (seconda revisione della PR #368): una frase che ne nomina un altro, oltre a
+# quello della misura, non vale («Il ferro, a differenza del sughero, pesa 79 g per 10 cm³.»)
+MATERIALI_COMUNI = ("ferro", "rame", "sughero", "legno", "ghiaccio", "alluminio", "olio", "acqua",
+                    "vetro", "plastica", "piombo", "oro", "argento", "mercurio", "alcol", "sale",
+                    "zucchero", "acciaio", "ottone", "marmo", "granito",
+                    "gomma", "cera", "polistirolo", "carta", "sabbia", "latte", "benzina",
+                    "glicerina", "stagno", "zinco", "nichel", "titanio", "argilla", "cemento")
+
+
+def _altro_materiale(frase_chiave: set, mat_chiave: list, altri) -> bool:
+    """Nella frase c'è un materiale diverso da quello della misura (uno dei comuni o uno proposto
+    dal modello nello stesso giro); una parola del materiale stesso («legno» di «legno di pino»)
+    non conta."""
+    for m2 in (*MATERIALI_COMUNI, *altri):
+        k2 = A.chiave(str(m2 or "")).split()
+        if not k2 or set(k2) <= set(mat_chiave):
+            continue
+        if all(w in frase_chiave for w in k2):
+            return True
+    return False
+
+
+def misura(x: dict, citate, testi: dict, altri=()) -> dict | None:
     """Una misura dei materiali → una domanda di «Affonda o galleggia?» ({materiale, m, V}), o
     None se non va (vedi il docstring del modulo)."""
     if not isinstance(x, dict):
@@ -282,7 +320,10 @@ def misura(x: dict, citate, testi: dict) -> dict | None:
             masse, volumi = _quantita(frase)
             if len(masse) != 1 or len(volumi) != 1:
                 continue
-            if not all(w in A.chiave(frase).split() for w in chiave_mat):
+            parole = set(A.chiave(frase).split())
+            if not all(w in parole for w in chiave_mat):
+                continue
+            if _altro_materiale(parole, chiave_mat, altri):
                 continue
             (ms, mg), (vs, vc) = masse[0], volumi[0]
             if round(float(m), 6) not in (ms, mg) or round(float(v), 6) not in (vs, vc):
@@ -346,8 +387,11 @@ def valida(grezzo: dict, rif, arif) -> dict:
             continue
         if len(valori["reazioni"]) < REAZIONI_MAX:
             valori["reazioni"].append(r)
+    # I materiali proposti nello stesso giro: una frase che ne nomina un altro non vale
+    proposti = [str(x.get("materiale") or "") for x in (grezzo.get("misure") or [])[:12]
+                if isinstance(x, dict)]
     for x in (grezzo.get("misure") or [])[:12]:
-        mz = misura(x, puliti(x.get("pagine") or []), testi) \
+        mz = misura(x, puliti(x.get("pagine") or []), testi, proposti) \
             if isinstance(x, dict) and isinstance(x.get("pagine"), list) else None
         if mz is None or mz in valori["misure"]:
             scartati += 1
