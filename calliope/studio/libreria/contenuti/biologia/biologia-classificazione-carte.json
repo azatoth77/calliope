@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "biologia-classificazione-carte",
+  "tipo": "mazzo",
+  "titolo": "La classificazione dei viventi: le carte",
+  "materia": "Biologia",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "biologia-classificazione",
+  "carte": [
+    {"domanda": "Qual è la categoria più ampia della classificazione dei viventi?", "risposta": "Il dominio", "sbagliata": "Il regno"},
+    {"domanda": "Qual è la categoria più piccola della classificazione dei viventi?", "risposta": "La specie", "sbagliata": "Il genere"},
+    {"domanda": "Chi ha introdotto la nomenclatura binomia?", "risposta": "Linneo", "sbagliata": "Darwin"},
+    {"domanda": "Nel nome Homo sapiens, quale parola indica il genere?", "risposta": "Homo", "sbagliata": "Sapiens"},
+    {"domanda": "Con quale iniziale si scrive il nome del genere?", "risposta": "Maiuscola", "sbagliata": "Minuscola"},
+    {"domanda": "Che cos'è una specie?", "risposta": "Un gruppo di individui che in natura si incrociano fra loro e hanno figli fertili."},
+    {"domanda": "Perché il cavallo e l'asino sono due specie diverse, anche se insieme hanno il mulo?", "risposta": "Perché il mulo è sterile: per essere della stessa specie i figli devono essere fertili."},
+    {"domanda": "Quali sono i tre domini dei viventi?", "risposta": "Batteri, Archei ed Eucarioti."},
+    {"domanda": "In quale regno stanno gli eucarioti che assorbono il cibo e hanno la parete di chitina?", "risposta": "Funghi", "sbagliata": "Piante"},
+    {"domanda": "Gatto domestico e leone sono nella stessa famiglia: sono anche nello stesso genere?", "risposta": "No: il gatto è del genere Felis, il leone del genere Panthera."}
+  ]
+}

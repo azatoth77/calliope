@@ -69,9 +69,12 @@ from .spec import ToolContext, ToolSpec, note_rule
 FAMILIARI = frozenset({"familiare", "amministra"})
 AZIONI = ("crea", "stato", "piano", "oggi", "fatto", "salta_oggi", "sposta", "archivia", "tieni",
           "togli", "riprova", "sessione", "resoconto", "riepilogo", "carte", "mappa", "tipo",
-          "conclusa", "prove", "indica", "indicazioni", "indicazioni_togli", "premi")
+          "conclusa", "prove", "indica", "indicazioni", "indicazioni_togli", "premi",
+          "libreria")
 # «premi» (31/10, #296): la serie di giorni di studio e il conto delle stelle, frasi del codice
 # coi soli numeri (studio/premi.py); per = il ragazzo, per il tutore. I duelli solo sullo schermo
+# «libreria» (31/10, #297): i contenuti della libreria scelti dal codice per una verifica (titoli
+# della libreria, dati fidati, e i numeri degli argomenti, mai i loro titoli)
 # «indica», «indicazioni», «indicazioni_togli» (31/10, passo 10, #250 e #285): le indicazioni di
 # un tutore per lo studio del suo minore (studio/tutore.py). Il testo di «indica» deve venire dalle
 # parole del tutore in questa frase (`_detta_dal_tutore`); la lettura dà solo il conto (il testo
@@ -83,7 +86,7 @@ AZIONI = ("crea", "stato", "piano", "oggi", "fatto", "salta_oggi", "sposta", "ar
 # testo delle domande; «tipo» (scritta o interrogazione, la finestra «dal») e «conclusa» (la prova
 # vera è fatta) cambiano i dati della persona
 LETTURE = frozenset({"stato", "piano", "oggi", "resoconto", "riepilogo", "carte", "mappa",
-                     "prove", "indicazioni", "premi"})
+                     "prove", "indicazioni", "premi", "libreria"})
 # Le azioni che un tocco può chiedere (schermi/tocchi.py): sui dati della persona, reversibili
 DA_TOCCO = frozenset({"fatto", "salta_oggi", "tieni", "togli", "riprova", "sessione"})
 
@@ -165,7 +168,8 @@ def _data_detta(testo, oggi: datetime.date) -> datetime.date | None:
 
 _MESI_RX = "|".join(MESI)
 _MATERIE_RX = "matematica|italiano|storia|geografia|scienze|inglese|francese|spagnolo|tedesco|" \
-              "tecnologia|arte|musica|fisica|chimica|latino|filosofia|diritto|economia|informatica"
+              "tecnologia|arte|musica|fisica|chimica|latino|filosofia|diritto|economia|informatica|" \
+              "biologia"
 _GIORNI_RX = "|".join(g.replace("ì", "[iì]") for g in GIORNI)
 _DATA_TESTO = re.compile(
     rf"\b(oggi|domani|dopodomani)\b"
@@ -567,6 +571,52 @@ def _carte_conto(ctx, svc, chi, v) -> dict:
     return _f(frase + ".", verifica=v["id"], da_ripassare=c["da_ripassare"])
 
 
+DOVE_LIBRERIA = "Le trovi nello Studio sul telefono o sul PC, sotto la verifica: Dalla libreria."
+LIBRERIA_SPENTA = "La libreria dello Studio qui non è accesa."
+LIBRERIA_VOCE_MAX = 6
+_TIPO_DETTO = {"scheda": "la scheda", "mazzo": "le carte", "miniapp": "l'attività"}
+
+
+def _libreria_conto(ctx, svc, chi, v) -> dict:
+    """«Cosa c'è nella libreria per chimica?»: i contenuti scelti dal codice (studio/libreria),
+    coi titoli della libreria (dati fidati, scritti e rivisti da noi) e il numero dell'argomento,
+    mai il suo titolo (viene dalle pagine). Al tutore la verifica col nome del ragazzo."""
+    r = svc.proposte_libreria(chi, v["id"])
+    nome = svc._nome_per(chi, v)
+    di = f"la verifica di {str(v['materia']).lower()}" + (f" di {nome}" if nome else "")
+    if r["modo"] != "attiva":
+        return _f(LIBRERIA_SPENTA, ok=False)
+    if r["chiusa"]:
+        return _f("C'è una prova aperta su questa verifica: la libreria torna dopo la consegna.",
+                  ok=False, verifica=v["id"])
+    prop = r["proposte"]
+    if not prop:
+        materie = r["materie"]
+        quali = (", ".join(materie[:-1]) + " e " + materie[-1]) if len(materie) > 1 else (
+            materie[0] if materie else "")
+        return _f(f"Per {di} nella libreria non ho niente che corrisponda agli argomenti."
+                  + (f" Per ora ci sono schede e carte di {quali}." if quali else ""),
+                  verifica=v["id"], proposte=0)
+    pezzi, gruppo = [], None
+    for p in prop[:LIBRERIA_VOCE_MAX]:
+        cosa = f"{_TIPO_DETTO.get(p['tipo'], 'il contenuto')} «{p['titolo']}»"
+        if p["tipo"] == "mazzo" and p.get("aggiunto"):
+            cosa += ", già fra le carte"
+        if p["motivo"] == "prerequisito":
+            cosa = "per ripartire da prima " + cosa
+        g = p["numero"]
+        if g != gruppo or not pezzi:
+            testa = (f"per l'argomento {g}" if g else "per l'argomento della verifica")
+            pezzi.append(f"{testa} {cosa}")
+            gruppo = g
+        else:
+            pezzi[-1] += f", {cosa}"
+    altri = len(prop) - LIBRERIA_VOCE_MAX
+    frase = (f"Per {di} nella libreria ho: " + "; ".join(pezzi)
+             + (f"; e altri {altri}" if altri > 0 else "") + ". " + DOVE_LIBRERIA)
+    return _f(frase, verifica=v["id"], proposte=len(prop))
+
+
 DOVE_MAPPA = "La mappa la trovi nello Studio sul telefono o sul PC: Le mie cose, Studio, Mappa."
 
 
@@ -861,6 +911,12 @@ def _dopo_negazioni(parole: list[str]) -> list[tuple[str, str]]:
     return out
 
 
+# Le forme di cortesia fisse, staccate dalla punteggiatura o in fondo («Calliope, se puoi, con Leo
+# insisti…»): il loro «se» non è una condizione e non si conta (31/10, #343, terza revisione della
+# PR #348). Senza punteggiatura («se puoi farlo solo il lunedì») restano
+_CORTESIA = re.compile(r"\bse\s+(?:puoi|riesci|vuoi)\b(?=\s*(?:[,.;:!?]|$))", re.I)
+
+
 def _detta_dal_tutore(ctx, testo) -> bool:
     """Il testo dell'indicazione viene dalle parole del tutore in questa frase. Un vincolo sulla
     provenienza di un argomento già scelto dal modello (principio 10), come la data detta:
@@ -871,8 +927,8 @@ def _detta_dal_tutore(ctx, testo) -> bool:
     - le negazioni sono tante quante nella frase e davanti alle stesse parole: «non dargli il
       risultato» non diventa «dagli il risultato»;
     - almeno una parola piena."""
-    tw = _parole_tutte(testo)
-    fw = _parole_tutte(getattr(ctx, "user_text", "") or "")
+    tw = _parole_tutte(_CORTESIA.sub(" ", str(testo or "")))
+    fw = _parole_tutte(_CORTESIA.sub(" ", getattr(ctx, "user_text", "") or ""))
     piene = [w for w in tw if w not in FUNZIONALI and w not in NEGAZIONI and w not in CONTATE]
     if not piene:
         return False
@@ -1041,6 +1097,8 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
             return _conclusa(ctx, svc, chi, v)
         if azione == "prove":
             return _prove_conto(ctx, svc, chi, v)
+        if azione == "libreria":
+            return _libreria_conto(ctx, svc, chi, v)
         return _sessione(ctx, svc, chi, v, conoscenza, umore or None)
     except (NonTrovata, NonPermesso):
         return _f(NON_CE, ok=False)
@@ -1664,7 +1722,9 @@ DESCRIZIONE = (
     "verifica se la dice, giorni se dice quanto vale); «indicazioni» quante ce ne sono (per = il "
     "ragazzo, vuoto per sé); «indicazioni_togli» le toglie (per, materia facoltativa); «premi» "
     "la serie di giorni di studio e le stelle («quante stelle ho?», «com'è la mia serie?»; per = "
-    "il ragazzo se lo chiede il tutore). "
+    "il ragazzo se lo chiede il tutore); «libreria» cosa c'è di pronto nella "
+    "libreria per una verifica («cosa c'è nella libreria per chimica?», «hai delle "
+    "schede per la verifica di biologia?»: schede e carte da aprire sullo schermo). "
     "verifica: l'id, se lo sai (dai dati del turno); altrimenti materia.")
 
 PARAMETRI = {"type": "object", "properties": {

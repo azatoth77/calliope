@@ -1286,6 +1286,20 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
   border-top: 1px dashed var(--accento-bordo); padding-top: 0.4rem; }
 .studio-c-risp { display: block; color: var(--tenue); overflow-wrap: anywhere; }
 .studio-c-esiti .studio-h-tasto { flex: 1 1 12rem; }
+/* La libreria dello Studio (31/10, #297, libreria.js): le proposte e una scheda da leggere, con le
+   soluzioni di «Prova tu» una per volta. Il testo va a capo sempre, anche col carattere grande */
+.studio-l-scheda { display: flex; flex-direction: column; gap: 0.45rem; padding: 0.8rem 0.9rem; border-radius: 0.8rem;
+  border: 1px solid var(--accento-bordo); background: var(--accento-fondo); min-width: 0; }
+.studio-l-nome { margin: 0; font-size: 1.15rem; color: var(--testo); overflow-wrap: anywhere; }
+.studio-l-titoletto { margin: 0.4rem 0 0; font-size: 1rem; color: var(--testo); overflow-wrap: anywhere; }
+.studio-l-testo { margin: 0; color: var(--testo); line-height: 1.45; overflow-wrap: anywhere; }
+.studio-l-righe, .studio-l-prova { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.3rem;
+  color: var(--testo); overflow-wrap: anywhere; }
+.studio-l-domanda { display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start; }
+.studio-l-soluzione { margin: 0; color: var(--testo); border-top: 1px dashed var(--accento-bordo); padding-top: 0.3rem;
+  overflow-wrap: anywhere; }
+.studio-l-voce .studio-nota { overflow-wrap: anywhere; }
+.studio-l-voce .studio-tasti { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .studio-c-campo { width: 100%; box-sizing: border-box; font: inherit; padding: 0.5rem; border-radius: 0.6rem;
   border: 1px solid var(--accento-bordo); background: var(--pannello); color: var(--testo); resize: vertical; }
 .studio-c-modulo select { font: inherit; min-height: 2.6rem; padding: 0.3rem 0.6rem; border-radius: 0.6rem;

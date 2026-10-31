@@ -37,7 +37,10 @@ due, con l'esito deciso dal codice e le domande dal lettore in ombra di serie (s
 voce e sullo schermo, con un copione scritto dal codice e la «voce del libro» (sezione sotto). Dal
 31/10 la **vista del tutore** e le **indicazioni dei tutori** (10, #250 e #285): padronanza alla
 cieca in ombra, il giudizio del tutore a peso pieno, «Da guardare tu», e le frasi dei tutori nei dati
-del turno del minore con una cornice del codice (sezione sotto). Dal 31/10 i **premi** (#296): la
+del turno del minore con una cornice del codice (sezione sotto). Dal 31/10 la **libreria** (#297,
+prima parte): schede e mazzi di carte scritti con Claude e rivisti, scelti dal codice dagli
+argomenti della verifica, «Dalla libreria» nella home e la lettura `libreria` a voce (sezione
+sotto). Dal 31/10 i **premi** (#296): la
 serie di giorni di studio, le stelle e i duelli fra persone di casa, calcolati dal codice dalla
 pratica vera, con la regola per i minori (sezione sotto). Dal 31/10 l'**importazione dei materiali
 scaricati** (#298, prima parte: file e ZIP con l'avanzamento; Takeout e condivisione dopo; sezione
@@ -61,6 +64,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Prove: il tipo della prova vera e la finestra «dal», le domande (scelta multipla, vero o falso, numero con l'unità, parole chiave, aperta; anche le carte), la verifica finta scritta e l'interrogazione simulata a voce, l'esito del codice, «da rivedere» della persona o del tutore, la generazione delle domande dal lettore (dal 31/10, passo 8, #248; schema «studio» alla versione 10; `studio_domande_genera` ombra di serie) | SQLite (`studio_domande`, `studio_prove`); qwen3.6 col client e la guardia del lettore per la generazione; libreria standard per l'esito | `calliope/studio/risposte.py` → `prepara`, `valuta`, `attesa_detta`; `calliope/studio/unita.py` → `leggi`, `una_misura`, `confronta`; `calliope/studio/prove.py` → `Prove` (in `Studio`): `aggiungi_domanda`, `domande`, `conferma_domande`, `inizia_prova`, `rispondi_prova`, `consegna_prova`, `rivedi_voce`, `orale_inizia`, `orale_risposta`, `orale_basta`, `_chiudi_prove`, `_conto_prove`; `calliope/studio/domande_genera.py` → `corpo`, `proposte`, `firma`; `calliope/studio/lettura.py` → `Lettore.genera_domande`; `calliope/studio/servizio.py` → `conclusa`, `_fine`; `calliope/tools/studio.py` → `studio_interroga`, azioni `tipo`, `conclusa`, `prove`; `calliope/schermi/server.py` → `POST /api/studio/prova`; `calliope/schermi/pagina/studio.js` (la sezione «Prove»); prove `prove/prova_studio_prove.py`, `prove/prova_studio_domande_genera.py`, `prove/prova_studio_prove_pagina.py` |
 | Ripasso da ascoltare: il copione a parti composto dal codice (le pagine del piano ripulite per la voce, le carte con la pausa per pensare), la lettura a voce dopo la risposta col barge-in, riprendi e ripeti, l'audio delle parti per lo schermo, la tenuta della cache (dal 31/10, passo 9, #249; schema «studio» invariato, alla versione 10; `studio_ascolta` attiva di serie con lo Studio, `studio_ascolta_voce`, `studio_ascolta_giorni`) | Piper con le voci dello Speaker (la voce di Calliope e la «voce del libro»), `wave` della libreria standard; niente modello | `calliope/studio/ascolta.py` → `paragrafi`, `frasi`, `scarto`, `frasi_pagina`, `componi`, `Copione`, `pezzi`, `sentite`, `da_ripetere`, `leggi`, `Sintesi`, `togli_audio`, `Ascolti` (in `Studio`): `ascolto_prepara`, `ascolto_vale`, `ascolto_fermo`, `nota_ascolto`, `ascolto_parti`, `ascolto_audio`; `calliope/pronuncia.py` → `per_ripasso`, `formule_dette`, `sigle_dette`, `romani_detti`, `simboli_detti`; `calliope/tts.py` → `sintesi_pcm`, `Speaker.say(spezza, voce)`, `silenzio`, `voce_per`; `calliope/eventi/uscita.py` → `turno_lettura`, `leggi`, `pausa`; `calliope/ciclo.py` → `_leggi_ripasso`; `calliope/tools/studio.py` → `studio_ascolta`; `calliope/schermi/server.py` → `POST /api/studio/ascolta`; `calliope/schermi/pagina/studio.js` («Ascolta»); prove `prove/prova_studio_ascolta.py`, `prove/prova_studio_ascolta_pagina.py`, `prove/prova_valore.py` (il ripasso attraverso Brain) |
 | Vista del tutore (padronanza alla cieca in ombra, giudizio del tutore, «Da guardare tu», prove, ripasso, mappa) e indicazioni dei tutori nei dati del turno del minore (dal 31/10, passo 10, #250 e #285; schema «studio» alla versione 11; `studio_indicazioni`, acceso di serie con lo Studio, `studio_indicazioni_giorni`) | SQLite (`studio_indicazioni`, `studio_tentativi` tipo «giudizio»); libreria standard, niente modello | `calliope/studio/tutore.py` → `forma_indicazione`, `CORNICE`, `Tutore` (in `Studio`): `vista_tutore`, `giudica`, `rivedi_da_tutore`, `scrivi_indicazione`, `cambia_indicazione`, `togli_indicazione`, `togli_indicazioni`, `indicazioni`, `nota_indicazioni`; `calliope/studio/padronanza.py` → `GIUDIZI`, `accordo`; `calliope/brain.py` → `_nota_studio`; `calliope/tools/studio.py` → azioni `indica`, `indicazioni`, `indicazioni_togli`; `calliope/schermi/server.py` → `POST /api/studio/tutore`; `calliope/schermi/pagina/studio.js` («Per te che lo segui», «Indicazioni di chi ti segue»); prove `prove/prova_studio_tutore.py`, `prove/prova_studio_tutore_pagina.py` |
+| Libreria: schede degli argomenti e mazzi di carte nel repository (dati fidati, JSON), il formato e la verità, l'indice per argomento, la scelta del codice con la padronanza solo mostrata, «Dalla libreria» nella home, «Aggiungi le carte», la lettura `libreria` a voce (dal 31/10, #297, prima parte; schema «studio» invariato; `studio_libreria`, attiva di serie con lo Studio) | libreria standard, niente modello; i contenuti in `calliope/studio/libreria/contenuti/<materia>/*.json` | `calliope/studio/libreria/formato.py` → `valida`, `leggi_file`, `FORMULE`; `calliope/studio/libreria/indice.py` → `Libreria` (`carica`, `controlla`, `trova`, `di_scheda`), `parole`, `radice`, `materia_vale`, `scegli`; `calliope/studio/libreria/studio.py` → `DallaLibreria` (in `Studio`): `proposte_libreria`, `scheda_libreria`, `soluzione_libreria`, `aggiungi_mazzo`, `_libreria_home`; `calliope/tools/studio.py` → azione `libreria`; `calliope/schermi/server.py` → `POST /api/studio/libreria`; `calliope/schermi/pagina/libreria.js`; prove `prove/prova_studio_libreria.py`, `prove/prova_studio_libreria_pagina.py`, `prove/verita_libreria.py`; passo manuale `prove/manuali/libreria-studio.md` |
 | Premi: la serie di giorni di studio con le pause, le stelle dei traguardi, i duelli fra persone di casa, gli interruttori per persona (il tutore per un minore) (dal 31/10, #296; schema «studio» alla versione 12; `studio_serie`, `studio_stelle` accese di serie con lo Studio, `studio_serie_pause` 1, `studio_duelli` spento di serie) | SQLite (`studio_stelle`, `studio_premi`, `studio_duelli`, `studio_pratica`); libreria standard, niente modello | `calliope/studio/premi.py` → `pratica`, `studiato`, `serie`, `superata`, `frase_serie`, `frase_stelle_nuove`, `Premi` (in `Studio`): `premi`, `impostazioni_premi`, `imposta_premi`, `aggiorna_stelle`, `frase_premi`, `frase_premi_letti`, `persone_per_duello`, `proponi_duello`, `accetta_duello`, `rispondi_duello`, `consegna_duello`, `annulla_duello`, `vista_duello`; `calliope/tools/studio.py` → azione `premi`, «fatto» con la serie; `calliope/schermi/server.py` → `POST /api/studio/premi`, `POST /api/studio/duello`; `calliope/schermi/pagina/studio.js` («I tuoi traguardi», «Duelli», «Premi» nella vista del tutore); prove `prove/prova_studio_premi.py`, `prove/prova_studio_premi_pagina.py` |
 | Importazione dei materiali scaricati: «Aggiungi materiali» sulla verifica, file e ZIP (PDF, immagini, Word, PowerPoint, Excel, OpenDocument, testo, Markdown, CSV, HTML), un lavoro di sfondo in un sottoprocesso coi tetti di dimensione e di tempo, le pagine di testo già lette, le fasi sullo schermo (dal 31/10, #298; schema «studio» alla versione 13; `studio_importa`, acceso di serie con lo Studio, e i tetti `studio_importa_*`) | libreria standard (`zipfile`, `html.parser`, `subprocess`), i lettori di `allegati.py` (python-docx, python-pptx, openpyxl), pypdfium2 e Pillow come la 4.2; niente modello, niente librerie native nuove | `calliope/studio/importa.py` → `classifica`, `nome_strano`, `elenca`, `leggi_voce`, `testi`, `html_in_testo`, `a_pagine`, `elabora`, `lavora` (il sottoprocesso), `Importi` (il lavoro di sfondo), `Importazioni` (in `Studio`): `registra_importazione`, `aggiungi_testi`, `importazioni`, `azione_importazione`, `importazione_viva`, `avvia_importi`; `calliope/studio/pagine.py` → `apri_nuovo`; `calliope/schermi/server.py` → `POST /api/studio/importa`, `POST /api/studio/importazioni`; `calliope/schermi/pagina/studio_importa.js`; prove `prove/prova_studio_importa.py`, `prove/prova_studio_importa_pagina.py` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
@@ -119,7 +123,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 
 *Epic #251, decisione di chi amministra del 28/10 (niente API di Classroom: sugli account dei
 minorenni servono i permessi della scuola). Analisi nel commento della #298; decisione
-[0035](../decisioni/0035-studio.md) punti 46–49. Questa è la prima parte: file e archivi ZIP con
+[0035](../decisioni/0035-studio.md) punti 47–50. Questa è la prima parte: file e archivi ZIP con
 l'avanzamento. Il Takeout di Classroom e la condivisione dal telefono vengono dopo.*
 
 **Come si usa.** Sulla carta di una verifica in bozza o aperta della home dello Studio, sul telefono
@@ -217,8 +221,70 @@ Prove: `prova_studio_importa.py` (a secco, ~25 s, col sottoprocesso e il server 
 falsi, nomi strani, ZIP ostili, le pagine, i permessi, i limiti, ferma, riprendi, il riavvio a
 metà, la tenuta) e `prova_studio_importa_pagina.py` (il browser a 390×844, 320×693 col testo al 125
 % e sul PC). Le prove dello Studio che controllavano lo schema 12 e il service worker v35 sono
-passate alla 13 e alla v36.
+passate alla 13 e alla v37 (la v36 è della libreria, #297).
 
+## La libreria: schede e carte preparate, scelte dal codice (31/10, issue #297, ramo `issue-297-libreria`)
+
+Prima delle tre parti della #297 (analisi nel commento della issue; decisione 0035 punto 46).
+La prima serie è per la **prima superiore, tecnico tecnologico, indirizzo Chimica, materiali e
+biotecnologie** (decisione di chi amministra del 30/10; nient'altro della classe vera nel
+repository): **17 schede e 17 mazzi** (168 carte), Chimica (sostanze pure e miscugli, l'atomo,
+reazioni e bilanciamento, la mole, acidi basi e pH), Fisica (grandezze e unità, la misura e gli
+errori, la densità, il moto rettilineo uniforme), Informatica (il sistema binario, bit e byte,
+algoritmi e diagrammi di flusso, hardware e software), Biologia (i viventi, la cellula, la
+membrana e l'osmosi, la classificazione). Scritte con Claude da capo, originali, AGPL.
+
+- **Formato** (`libreria/formato.py`): un JSON per contenuto, metadati obbligatori (materia,
+  classe, argomento, chiavi, prerequisiti, durata, comandi a voce, licenza, revisione); il mazzo
+  eredita argomento, chiavi e prerequisiti dalla scheda. Testo semplice (niente link, markdown,
+  emoji, caratteri di controllo), lunghezze massime. Il tipo `miniapp` (estensione, tipo
+  «esplora»/«quiz»/«percorso», schede, comandi non vuoti) è già nel formato per la parte 2.
+- **Verità** (`prove/verita_libreria.py`, anche da sola): 101 conti dichiarati (densità, moto,
+  conversioni, moli e masse molari, pH, bilanciamento, binario ed esadecimale, livelli
+  elettronici, neutroni) rifatti con la tabella della prova e cercati nel testo; le 128 risposte
+  chiuse delle carte giuste per `carte.risposta_giusta` e le «sbagliate» tipiche no; ogni
+  risposta chiusa senza conto nella sua scheda. *[I numeri dei conti e delle chiuse sono quelli
+  del 31/10: la prova vuole almeno 40 e 80.]*
+- **Indice** (`libreria/indice.py`): radici delle parole (le vocali finali tolte fino a tre lettere:
+  «mole» e «moli», «atomo» e «atomi»), le parole di servizio dei titoli fuori («capitolo»,
+  «esercizi», «pagina»), una chiave vale se tutte le sue radici sono nel titolo, punteggio dalla
+  somma delle parole. Venti titoli veri provati e i contrari («il moto dei pianeti», «soluzioni
+  degli esercizi», un titolo ostile, «gli atomi» in storia). «Teoria» e «unità» contano (all'inizio
+  erano parole di servizio: «teoria cellulare» e «unità di misura» non trovavano niente).
+- **Scelta** (`scegli`): due schede per argomento al più, dodici proposte; la padronanza solo
+  «mostrata» (le lacune prima coi prerequisiti), in ombra l'ordine degli argomenti; senza argomenti
+  confermati l'argomento generale della verifica.
+- **Home e pagina** (`libreria.js`, studio.js cambia di sei righe): «Dalla libreria» per verifica,
+  la scheda con sezioni, «Da ricordare», esempi, errori tipici, «Prova tu» con «Mostra la
+  soluzione» (la soluzione arriva dal server una per volta, mai prima), i prerequisiti da aprire,
+  «Aggiungi le carte»; tutto textContent; ogni risposta del server porta il numero della sua
+  richiesta e una vecchia si butta. La vista «libreria» nei dati del turno (solo il tipo).
+- **Voce**: la lettura `libreria` del tool `studio` (E0, verbi «librer» e «sched»): «Per la
+  verifica di chimica nella libreria ho: per l'argomento 1 la scheda «…», le carte «…»; …». Mai il
+  titolo di un argomento; al tutore «la verifica di chimica di Leo». Dopo una pagina letta nella
+  stessa risposta non parte, come le altre letture di `studio` (`politica.DOPO_DATO`).
+- **Carte**: origine «libreria» (nuova in `carte.ORIGINI`), attive e da ripassare, legate
+  all'argomento della proposta (o a quello scelto dal tutore), niente doppioni, il tetto delle
+  300. Schema «studio» invariato: quello dell'epic (12 dopo la #355). Una carta della libreria
+  ripassata conta per la serie dei premi (#296) come le altre: è pratica vera, e `premi.py` non
+  guarda l'origine (provato in `prova_studio_libreria.py`).
+- Materia **Biologia** nell'elenco fisso dello Studio.
+
+**Revisione della PR #360** (31/10): il caffè al posto della «bibita a pH 5»; la regola delle cifre
+dopo la virgola solo per le potenze di dieci, col contrario 0,005; nel solido le particelle vibrano
+intorno a posizioni fisse; il glucosio fra le molecole polari, non «grandi»; il SI definito oggi
+con costanti della natura, un tempo con campioni. Unita l'epic coi premi: pagina v36.
+
+**Da sapere** (trovato scrivendo le carte, non corretto qui): `carte.normale` scrive «1» come
+«uno», che `chiusa` toglie come articolo. Una risposta chiusa «1» non è chiusa, e «1,5 g/cm³»
+diventa «cinque g cm3», che è dentro «2,5 g/cm³»: il codice la darebbe giusta. Le carte della
+libreria lo evitano (la prova di verità controlla ogni «sbagliata»), le carte scritte dalla persona
+no: da correggere in `carte.py` con le sue prove.
+
+**Come si aggiunge un contenuto**: [`prove/manuali/libreria-studio.md`](../../prove/manuali/libreria-studio.md).
+
+**Prove**: `prova_studio_libreria.py` (a secco, col server vero e attraverso Brain),
+`prova_studio_libreria_pagina.py` (browser a 390×844, 320×693, col testo al 125 % e sul PC).
 ## I premi: serie, stelle e duelli (31/10, issue #296, ramo `issue-296-studio-serie-stelle`)
 
 *Epic #251. Decisione [0035](../decisioni/0035-studio.md), punto 45. L'analisi, con le soglie, è
@@ -610,6 +676,30 @@ ha i suoi casi nelle prove.
 Misure col vLLM finto dopo la revisione: mappa come sopra (matematica 8/8 nelle pagine, tutti da
 controllare; una parte sola 67 %, coi deboli 100 %); domande fondate 17/22, 21/23, 24/28,
 `auto_sbagliate` 0, 0, 0.
+
+### 31/10: i ritocchi di risposte, unità, argomenti e indicazioni (issue #343)
+
+Dalle revisioni delle PR #342, #346 e #348, non bloccanti, ognuno coi suoi contrari nelle prove:
+- **`risposte._numero`**: una misura composta sola, senza altri numeri né alternative, con la somma
+  diversa dall'atteso è «sbagliato» («1 metro e 50 centimetri» con 1,05 m, «2 ore e 30 minuti» con
+  2 h; prima «da rivedere»). Con un numero in più («3 prove: …») o la stessa unità due volte resta
+  «da rivedere».
+- **`unita.leggi`**: dopo «di» non legano il numero le unità che sono parole comuni («secondo»,
+  «ore», «gradi»): «2 di secondo grado» e «3 di ore» non sono 2 s e 3 h. «3/4 di litro» sì.
+- **`argomenti._pezzi`**: una cifra e una consonante si uniscono solo con un operatore subito
+  prima della cifra o subito dopo la lettera, come le vocali: «punto 2 b» e «classe 3 B» restano
+  due pezzi. Effetto noto: «2 x» scritto senza operatori non è più «2x».
+- **`argomenti._di_fila`**: il meno in testa al titolo («-5») vale solo se nella pagina non segue
+  un numero o una lettera sola: non è dentro «10 - 5 = 5» né «x - 5»; dopo una parola («di -5
+  gradi») sì.
+- **`tools/studio._detta_dal_tutore`**: le forme di cortesia staccate dalla punteggiatura o in
+  fondo («se puoi,», «se riesci.», «se vuoi,») si tolgono prima di contare il «se»; «se puoi farlo…»
+  senza virgola resta.
+- **Il banco** (`banco_studio.py`) scrive la quota delle calcolate e le fondate anche sul totale.
+
+Gli script del revisore rilanciati contro il ramo dell'epic: il blocco 4 di `funzioni.py` (PR
+#346) e `nominate.py` (PR #350) danno gli stessi esiti di prima, nessuna risposta sbagliata
+diventa «giusto».
 
 ## La vista del tutore e le indicazioni (31/10, issue #250 e #285, ramo `issue-250-studio-tutore`)
 
@@ -2054,6 +2144,18 @@ codice); in `prova_studio_home_pagina.py` il ripasso e «Scrivi una carta» nell
 6 in `prova_studio_piano.py`, `prova_studio_pagine.py`, `prova_studio_padronanza.py` e
 `prova_studio_resoconto.py`. La prova col modello sulla DGX (la voce che chiede e la persona che
 risponde) resta a chi amministra.
+
+### 31/10 sera: «domani» non è fra dieci minuti (issue #356)
+
+`carte.prossima` metteva ogni scadenza a giorni alla mezzanotte del giorno: alle 23:50 «Quasi»
+tornava dopo 10 minuti, come «Non la sapevo», e «La sapevo» dalla scatola 1 dopo circa 24 ore
+invece di 2 giorni (trovato nella revisione della PR #351, dove `prova_studio_carte` fissava quel
+comportamento). Ora la scadenza è la più tarda fra la mezzanotte del giorno e adesso più i giorni
+meno `MARGINE_ORE` (12): «Quasi» alle 23:50 torna domani alle 11:50, «La sapevo» dopo 36 ore; la
+mattina vince la mezzanotte come prima (alle 8:00 «Quasi» è domani alle 0:00), dal pomeriggio la
+scadenza cade nelle prime ore del giorno (alle 16:00 domani alle 4:00). I tasti dicono «domani» e
+«fra 2 giorni» anche a tarda sera. La vigilia resta il tetto. Le carte già scritte tengono la
+scadenza che hanno.
 
 ## La padronanza per argomento (30/10, issue #245, ramo `issue-245-studio-padronanza`)
 

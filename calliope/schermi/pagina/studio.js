@@ -669,6 +669,10 @@
     }
     if (v.tutore) art.append(sezioneTutore(v));
     if (v.stato === "aperta" || v.stato === "bozza") art.append(sezioneCarte(v));
+    // La libreria (31/10, #297, libreria.js): le proposte del server; null → niente sezione
+    if (window.CalliopeLibreria && Array.isArray(v.libreria)) {
+      art.append(window.CalliopeLibreria.sezione(v, { ridisegna: disegnaHome, ricarica: caricaHome, vista }));
+    }
     // Le prove (passo 8, #248): la verifica finta e le domande; l'orale si fa a voce
     if (v.stato === "aperta") art.append(sezioneProve(v));
     // La mappa concettuale (passo 7, #247): lo scheletro, la mia mappa, a memoria
@@ -3080,6 +3084,7 @@
     const b = ev.target.closest && ev.target.closest("button");
     if (!b || b.disabled) return;
     if (b.dataset.carte) { suCarte(b); return; }
+    if (b.dataset.libreria) { if (window.CalliopeLibreria) window.CalliopeLibreria.su(b); return; }
     if (b.dataset.prove) { suProve(b); return; }
     if (b.dataset.mappa) { suMappa(b); return; }
     if (b.dataset.ascolta) { suAscolta(b); return; }
@@ -3165,6 +3170,7 @@
     carte = null;
     mappa = null;
     tut = null;
+    if (window.CalliopeLibreria) window.CalliopeLibreria.chiudi();
     Object.assign(pre, { duello: null, dati: null, risposte: {}, esito: "", attesa: false });
     chiudiAscolta();
     if (st.materiali) chiudiCamera();

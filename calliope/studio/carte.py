@@ -7,6 +7,9 @@ decisione 0035 punto 33; progetto § «Studio 5 · Ripasso con le carte»). Funz
 - una carta nuova è nella scatola 1 e si ripassa subito;
 - «La sapevo»: scatola + 1 (al più `SCATOLE`), la prossima volta fra `INTERVALLI[scatola]` giorni;
 - «Quasi»: la scatola resta, la prossima volta domani;
+- a tarda sera «domani» non è fra pochi minuti (31/10, #356): la scadenza a giorni è la più tarda
+  fra la mezzanotte di quel giorno e adesso più l'intervallo meno `MARGINE_ORE` ore (per «domani»
+  adesso + 12 ore);
 - «Non la sapevo»: scatola 1, di nuovo fra `DI_NUOVO_MIN` minuti (nella stessa sessione);
 - prima della verifica nessuna scadenza va oltre la **vigilia** (il giorno di ripasso del piano).
 Le soglie sono iniziali, da tarare in ombra sulle risposte vere (decisione 4 del 27/10): si
@@ -36,6 +39,9 @@ INTERVALLI = {1: 1, 2: 2, 3: 4, 4: 8, 5: 16}
 DI_NUOVO_MIN = 10
 # «Quasi»: domani
 QUASI_GIORNI = 1
+# Una scadenza a giorni non arriva prima di tanti giorni meno queste ore (#356): alle 23:50 «quasi»
+# tornava a mezzanotte, dopo 10 minuti come «non la sapevo»
+MARGINE_ORE = 12
 
 SAPEVO, QUASI, NON_SAPEVO = "sapevo", "quasi", "non_sapevo"
 ESITI = (SAPEVO, QUASI, NON_SAPEVO)
@@ -47,7 +53,9 @@ ESITO_TENTATIVO = {SAPEVO: "giusto", QUASI: "indizio", NON_SAPEVO: "sbagliato"}
 STATI = ("attiva", "proposta", "tolta", "ombra")
 # «mappa» (revisione della PR #330): le carte di «Fanne carte», scritte dalla persona dagli errori
 # della mappa; con la mappa libera aperta non si vedono (servizio._carte_di, _carta)
-ORIGINI = ("persona", "modello", "mappa")
+# «libreria» (31/10, #297): le carte di un mazzo della libreria, aggiunte dalla persona o dal tutore
+# con «Aggiungi le carte» (studio/libreria/studio.py, `aggiungi_mazzo`)
+ORIGINI = ("persona", "modello", "mappa", "libreria")
 DOMANDA_MAX = 240
 RISPOSTA_MAX = 240
 # Una risposta «chiusa» (la controlla il codice): un numero o al più tante parole
@@ -91,15 +99,20 @@ def prossima(scatola: int, esito: str, adesso, vigilia=None) -> tuple[int, str]:
     if esito == NON_SAPEVO:
         return 1, (adesso + datetime.timedelta(minutes=DI_NUOVO_MIN)).isoformat()
     if esito == QUASI:
-        giorno = oggi + datetime.timedelta(days=QUASI_GIORNI)
+        giorni = QUASI_GIORNI
     else:
         s = min(SCATOLE, s + 1)
-        giorno = oggi + datetime.timedelta(days=INTERVALLI[s])
+        giorni = INTERVALLI[s]
+    # La più tarda fra la mezzanotte del giorno e adesso + giorni − MARGINE_ORE (31/10, #356)
+    scadenza = max(datetime.datetime.combine(oggi + datetime.timedelta(days=giorni),
+                                             datetime.time()),
+                   adesso + datetime.timedelta(days=giorni, hours=-MARGINE_ORE))
     if vigilia is not None:
         v = _dt(vigilia).date()
-        if v > oggi and giorno > v:
-            giorno = v
-    return s, datetime.datetime.combine(giorno, datetime.time()).isoformat()
+        tetto = datetime.datetime.combine(v, datetime.time())
+        if v > oggi and scadenza > tetto:
+            scadenza = tetto
+    return s, scadenza.isoformat()
 
 
 def da_ripassare(carta: dict, adesso) -> bool:

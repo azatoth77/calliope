@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "biologia-membrana-carte",
+  "tipo": "mazzo",
+  "titolo": "La membrana plasmatica e i trasporti: le carte",
+  "materia": "Biologia",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "biologia-membrana",
+  "carte": [
+    {"domanda": "Di quali molecole è fatto soprattutto il doppio strato della membrana plasmatica?", "risposta": "Fosfolipidi", "sbagliata": "Carboidrati"},
+    {"domanda": "Quale parte del fosfolipide è attratta dall'acqua?", "risposta": "La testa", "sbagliata": "Le code"},
+    {"domanda": "Che cosa vuol dire che la membrana ha permeabilità selettiva?", "risposta": "Che lascia passare alcune sostanze e ne blocca altre, così la cellula controlla che cosa entra ed esce."},
+    {"domanda": "Nella diffusione una sostanza si sposta verso dove è più concentrata o meno concentrata?", "risposta": "Verso dove è meno concentrata, finché la concentrazione diventa uguale."},
+    {"domanda": "Come si chiama la diffusione dell'acqua attraverso una membrana semipermeabile?", "risposta": "Osmosi", "sbagliata": "Trasporto attivo"},
+    {"domanda": "In quale soluzione un globulo rosso si gonfia e può scoppiare?", "risposta": "In una soluzione ipotonica", "sbagliata": "In una soluzione ipertonica"},
+    {"domanda": "Come si chiama il distacco della membrana dalla parete in una cellula vegetale che perde acqua?", "risposta": "Plasmolisi", "sbagliata": "Emolisi"},
+    {"domanda": "Quale trasporto sposta le sostanze contro il gradiente di concentrazione, consumando ATP?", "risposta": "Trasporto attivo", "sbagliata": "Diffusione facilitata"},
+    {"domanda": "Come si chiama la proteina che porta fuori ioni sodio e dentro ioni potassio?", "risposta": "Pompa sodio-potassio", "sbagliata": "Canale ionico"},
+    {"domanda": "Che cosa succede a un globulo rosso in una soluzione isotonica?", "risposta": "Niente: l'acqua entra ed esce nella stessa misura e la cellula resta normale."}
+  ]
+}

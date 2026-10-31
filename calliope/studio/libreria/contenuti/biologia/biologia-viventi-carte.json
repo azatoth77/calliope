@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "biologia-viventi-carte",
+  "tipo": "mazzo",
+  "titolo": "Le caratteristiche dei viventi: le carte",
+  "materia": "Biologia",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "biologia-viventi",
+  "carte": [
+    {"domanda": "Qual è la più piccola unità che possiede tutte le caratteristiche della vita?", "risposta": "La cellula", "sbagliata": "L'atomo"},
+    {"domanda": "Come si chiama l'insieme delle reazioni chimiche che avvengono in un vivente?", "risposta": "Metabolismo", "sbagliata": "Omeostasi"},
+    {"domanda": "Come si chiama la capacità di mantenere stabili le condizioni interne del corpo?", "risposta": "Omeostasi", "sbagliata": "Metabolismo"},
+    {"domanda": "Come si chiama un organismo fatto di una sola cellula?", "risposta": "Unicellulare", "sbagliata": "Pluricellulare"},
+    {"domanda": "Come si chiama un gruppo di cellule simili che svolgono la stessa funzione?", "risposta": "Tessuto", "sbagliata": "Organo"},
+    {"domanda": "Come si chiama un insieme di organi che collaborano a una funzione, come la digestione?", "risposta": "Apparato", "sbagliata": "Tessuto"},
+    {"domanda": "Come si chiama il cambiamento delle popolazioni di viventi nel corso di molte generazioni?", "risposta": "Evoluzione", "sbagliata": "Crescita"},
+    {"domanda": "Che differenza c'è fra riproduzione asessuata e sessuata?", "risposta": "Nell'asessuata basta un genitore e i figli sono quasi identici; nella sessuata due genitori uniscono le cellule riproduttive."},
+    {"domanda": "Perché di solito i virus non sono considerati viventi a pieno titolo?", "risposta": "Non sono fatti di cellule e si moltiplicano solo dentro una cellula che infettano."},
+    {"domanda": "Quali sono i livelli di organizzazione dalla cellula all'organismo?", "risposta": "Cellula, tessuto, organo, apparato, organismo."}
+  ]
+}

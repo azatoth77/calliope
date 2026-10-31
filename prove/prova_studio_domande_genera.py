@@ -234,9 +234,11 @@ verifica("la fase «prove»: una richiesta per verifica, le misure", cli.n == 1
              k: v for k, v in x.items() if k != "domande"})
 testo = B.scrivi_riepilogo(uscita, {"modello": "finto", "richieste": 1, "attese_s": 0,
                                     "prove": r})
-verifica("il riepilogo con i criteri, le calcolate a parte",
+verifica("il riepilogo con i criteri, le calcolate a parte (dal 31/10, #343, con la loro quota e "
+         "le fondate anche sul totale)",
          "PROVE" in testo and "auto_sbagliate 0" in testo
-         and "calcolate 1 (da controllare 1, criterio: tutte)" in testo, testo)
+         and "calcolate 1 (9 %; da controllare 1, criterio: tutte)" in testo
+         and "sul totale " in testo, testo)
 
 # ═══════════════════════════ 5. il banco del 31/10 (#344) ═══════════════════════════
 print("— le domande vere del banco del 31/10 col vLLM finto")

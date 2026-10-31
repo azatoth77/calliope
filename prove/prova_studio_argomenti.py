@@ -444,7 +444,16 @@ def prova_controllo():
         # Contrari dell'unione di una cifra e una lettera: non attraverso un a capo, non con una
         # lettera elisa o accentata, non con una parola piccola senza operatore
         ("15x", "5x = 15\nx = 3", False), ("20l", "3x + 5 = 20 l'espressione", False),
-        ("4e6", "il m.c.m. di 4 e 6", False), ("2a + 1", "vale 2 a + 1 qui", True)]
+        ("4e6", "il m.c.m. di 4 e 6", False), ("2a + 1", "vale 2 a + 1 qui", True),
+        # #343 (terza revisione della PR #346): una cifra e una consonante solo con un operatore
+        # vicino («punto 2 b», «classe 3 B» restano staccati); con l'operatore sì
+        ("2b", "al punto 2 b si legge", False), ("3b", "la classe 3 B studia", False),
+        ("3x + 5 = 20", "risolvi 3 x + 5 = 20", True), ("y = 2x", "poi y = 2 x", True),
+        # …e il meno in testa: «-5» non è dentro una sottrazione (dopo un numero o una lettera
+        # sola); dopo una parola o all'inizio sì
+        ("-5", "10 - 5 = 5", False), ("-5", "poi x - 5 = 2", False),
+        ("-5", "vale -5 gradi", True), ("-5", "-5 è il minimo", True),
+        ("x = -5", "la soluzione x = -5", True)]
     sbagli = [(t, pg) for t, pg, att in VARIANTI if A.controlla(t, ["P1"], {"P1": pg})[1] != att]
     verifica("controllo: la stessa formula scritta in modi diversi («3 x», «2·x», «x**2», «<=», "
              "«½», «Fe³⁺», «−5») sì; una formula diversa («≤» e «≥», «≠» e «=», «x = -5») no; "

@@ -1066,6 +1066,13 @@ studio:
   # conoscenti e mai in classifica; non danno premi né tentativi. Spenti di serie: con true li
   # usano gli adulti, e per un minore li accende il suo tutore dalla vista del tutore
   studio_duelli: false
+  # La libreria dello Studio (31/10, #297, calliope/studio/libreria/): schede degli argomenti e
+  # mazzi di carte scritti e rivisti da noi, nel repository, che il codice sceglie dagli argomenti
+  # della verifica (e dalla padronanza, se mostrata): la sezione «Dalla libreria» della home e la
+  # lettura «libreria» del tool studio. Dati fidati e niente modello: per questo attiva di serie
+  # con lo Studio. «ombra» calcola le proposte e le conta nel registro senza mostrarle; «spenta»
+  # niente
+  studio_libreria: attiva
   # L'importazione dei materiali scaricati (31/10, issue #298, studio/importa.py): un file o un
   # archivio ZIP dallo schermo personale («Aggiungi materiali» sulla verifica) diventa pagine
   # della verifica, con un lavoro di sfondo e le fasi sullo schermo. PDF e immagini come le

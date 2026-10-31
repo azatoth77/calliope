@@ -123,6 +123,9 @@ def _regex_unita() -> re.Pattern:
 
 
 _RE_U = _regex_unita()
+# Le unità che sono anche parole comuni: dopo «di» non legano il numero (31/10, #343: «2 di
+# secondo grado», «il 2 di secondo», «3 di ore» non sono 2 s e 3 h; «3/4 di litro» sì)
+_COMUNI_DOPO_DI = frozenset({"secondo", "secondi", "ora", "ore", "grado", "gradi"})
 
 # I numeri in lettere: 0–2100 e le migliaia tonde (gli anni, le misure di scuola)
 _PAROLE: dict[str, int] = {}
@@ -206,10 +209,10 @@ def leggi(testo) -> list[tuple[float, str | None]]:
             prima = t[:m.start()].rstrip()
             if not prima or not prima[-1].isdigit():
                 continue
-        unita.append((m.start(), m.end(), c))
+        unita.append((m.start(), m.end(), c, a))
     out = []
     for m in _NUM.finditer(t):
-        if any(s <= m.start() < e for s, e, _c in unita):
+        if any(s <= m.start() < e for s, e, _c, _a in unita):
             continue                                  # «m3», «cm2» non sono numeri
         v = _cifre(m.group(0))
         if v is None:
@@ -217,9 +220,10 @@ def leggi(testo) -> list[tuple[float, str | None]]:
         dopo = t[m.end():]
         if re.match(r"\s+e\s+mezz[oa]\b", dopo) or re.match(r"\s+e\s+0\.5\b", dopo):
             v += 0.5
-        span = next(((s, e_, c) for s, e_, c in unita if s >= m.end()
-                     and re.fullmatch(r"[\s,]*(?:e\s+mezz[oa]\s*)?(?:di\s+)?",
-                                      t[m.end():s])), None)
+        span = next(((s, e_, c) for s, e_, c, a in unita if s >= m.end()
+                     and (sep := re.fullmatch(r"[\s,]*(?:e\s+mezz[oa]\s*)?(di\s+)?",
+                                              t[m.end():s]))
+                     and not (sep.group(1) and a in _COMUNI_DOPO_DI)), None)
         u = span[2] if span else None
         # «un metro e mezzo», «2 ore e mezza»: il mezzo dopo l'unità (seconda revisione PR #342)
         if span and re.match(r"\s+e\s+mezz[oa]\b", t[span[1]:]) and not re.match(

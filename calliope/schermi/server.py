@@ -98,7 +98,12 @@ Indirizzi:
                                  (le proposte dal modello senza avvisi; 30/10,
                                  passo 6 dello Studio, #246); fuori dalla conversazione come gli
                                  argomenti, in ombra solo chi amministra
-  POST /api/studio/prova         «X-Calliope-Sessione», {verifica, azione?, prova?, voce?,
+  POST /api/studio/libreria      «X-Calliope-Sessione», {verifica, azione?, contenuto?, n?,
+                                 argomento?} → la libreria dello Studio per una verifica (31/10,
+                                 #297): le proposte scelte dal codice; «scheda» una scheda da
+                                 leggere (senza le soluzioni), «soluzione» quella della domanda n
+                                 di «prova tu», «carte» aggiunge un mazzo alle carte della verifica
+  POST /api/studio/prova       «X-Calliope-Sessione», {verifica, azione?, prova?, voce?,
                                  risposta?, esito?, domanda?…} → le prove della verifica (31/10,
                                  #248): la verifica finta scritta (inizia, rispondi, consegna,
                                  rivedi), le domande (domanda, togli_domanda, rimetti_domanda,
@@ -1674,6 +1679,72 @@ def crea_app(hub: Schermi) -> Starlette:
                     + (f" {cid}" if isinstance(cid, int) else ""))
         return _json(out)
 
+    # La libreria (31/10, #297, studio/libreria/): contenuti fidati, scelti dal codice. Le schede
+    # e le carte sono testo nostro, ma la pagina le scrive lo stesso con textContent; le soluzioni
+    # di «prova tu» arrivano una per volta, solo a richiesta. «carte» scrive sui dati della persona
+    # (come «scrivi» delle carte): per un minore dentro gli orari
+    AZIONI_LIBRERIA = ("scheda", "soluzione", "carte")
+
+    async def studio_libreria(request: Request):
+        """{verifica, azione?, contenuto?, n?, argomento?} → {proposte, materie, chiusa} e, con
+        l'azione, la scheda, la soluzione o l'esito di «Aggiungi le carte»."""
+        schermo, errore = schermo_personale(request, letture_studio, LETTURE_AL_MINUTO,
+                                            TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 1024)
+        if errore is not None:
+            return errore
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            return errore
+        vid, azione, cid = dati.get("verifica"), dati.get("azione"), dati.get("contenuto")
+        n, arg = dati.get("n"), dati.get("argomento")
+        if not isinstance(vid, int) or isinstance(vid, bool) or vid < 1 or (
+                azione is not None and azione not in AZIONI_LIBRERIA):
+            return _json({"errore": "richiesta non valida"}, 400)
+        if azione is not None and (not isinstance(cid, str) or not 0 < len(cid) <= 60):
+            return _json({"errore": "manca il contenuto"}, 400)
+        if azione == "soluzione" and (not isinstance(n, int) or isinstance(n, bool)):
+            return _json({"errore": "manca la domanda"}, 400)
+        if arg is not None and (not isinstance(arg, int) or isinstance(arg, bool)):
+            return _json({"errore": "argomento non valido"}, 400)
+        from .. import minori
+        from ..studio import NonPermesso, NonTrovata, VerificaChiusa
+        if azione == "carte":
+            orario = minori.fuori_orario(prof)
+            if orario:
+                return _json({"errore": minori.frase_fuori_orario(prof, orario),
+                              "codice": "fuori_orario"}, 403)
+
+        def fai():
+            if azione == "scheda":
+                return {"scheda": st.scheda_libreria(prof, vid, cid)}
+            if azione == "soluzione":
+                return {"soluzione": st.soluzione_libreria(prof, vid, cid, n)}
+            extra = {}
+            if azione == "carte":
+                extra["aggiunte"] = st.aggiungi_mazzo(prof, vid, cid, argomento=arg)
+            return {**st.proposte_libreria(prof, vid), **extra}
+        try:
+            out = await asyncio.to_thread(fai)
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        except VerificaChiusa:
+            return _json({"errore": "La verifica è chiusa: niente carte nuove."}, 409)
+        except PermissionError:
+            return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
+        except ValueError as ex:
+            from ..studio.libreria.studio import CON_PROVA
+            if str(ex) == CON_PROVA:
+                return _json({"errore": "C'è una prova aperta: la libreria torna dopo la "
+                                        "consegna."}, 409)
+            return _json({"errore": "Non va: riprova tra poco."}, 400)
+        if azione == "carte":
+            # Nel registro l'azione e gli id (il contenuto è della libreria, non della persona)
+            hub.log(f"[STUDIO] libreria della verifica {vid}: carte {cid}")
+        return _json(out)
+
     # La vista del tutore (31/10, passo 10, #250 e #285, studio/tutore.py): solo un tutore del
     # minore; gli altri, la persona stessa compresa, lo stesso «non c'è» di una verifica che non
     # esiste. Le indicazioni sono testo di un adulto di casa: la pagina le scrive con textContent,
@@ -2724,6 +2795,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/vista", vista_api, methods=["POST"]),
         Route("/api/studio/argomenti", studio_argomenti, methods=["POST"]),
         Route("/api/studio/carte", studio_carte, methods=["POST"]),
+        Route("/api/studio/libreria", studio_libreria, methods=["POST"]),
         Route("/api/studio/prova", studio_prova, methods=["POST"]),
         Route("/api/studio/mappa", studio_mappa, methods=["POST"]),
         Route("/api/studio/ascolta", studio_ascolta, methods=["POST"]),
@@ -2736,6 +2808,8 @@ def crea_app(hub: Schermi) -> Starlette:
         # Il rilevatore dei bordi e la pagina dello Studio (29/10, #281), del telefono e del PC
         Route("/bordi.js", file("bordi.js", "text/javascript; charset=utf-8")),
         Route("/studio.js", file("studio.js", "text/javascript; charset=utf-8")),
+        # La libreria dello Studio (31/10, #297)
+        Route("/libreria.js", file("libreria.js", "text/javascript; charset=utf-8")),
         # «Aggiungi materiali» dello Studio (31/10, #298), del telefono e del PC
         Route("/studio_importa.js", file("studio_importa.js", "text/javascript; charset=utf-8")),
         *telefono.rotte(hub),

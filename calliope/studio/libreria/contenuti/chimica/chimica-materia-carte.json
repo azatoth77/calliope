@@ -1,0 +1,23 @@
+{
+  "formato": 1,
+  "id": "chimica-materia-carte",
+  "tipo": "mazzo",
+  "titolo": "Sostanze pure e miscugli: le carte",
+  "materia": "Chimica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "chimica-materia",
+  "carte": [
+    {"domanda": "Quale stato della materia ha volume proprio ma prende la forma del recipiente?", "risposta": "Il liquido", "sbagliata": "Il solido"},
+    {"domanda": "Quale stato della materia non ha né forma né volume propri?", "risposta": "Il gas", "sbagliata": "Il liquido"},
+    {"domanda": "Come si chiama un miscuglio omogeneo di un solido sciolto in un liquido?", "risposta": "Soluzione", "sbagliata": "Sospensione"},
+    {"domanda": "Acqua e olio: che tipo di miscuglio è?", "risposta": "Eterogeneo", "sbagliata": "Omogeneo"},
+    {"domanda": "Quale tecnica separa un solido non sciolto da un liquido con un filtro?", "risposta": "Filtrazione", "sbagliata": "Distillazione"},
+    {"domanda": "Quale tecnica sfrutta le diverse temperature di ebollizione?", "risposta": "Distillazione", "sbagliata": "Filtrazione"},
+    {"domanda": "Che cosa distingue una sostanza pura da un miscuglio?", "risposta": "La composizione fissa e le proprietà costanti."},
+    {"domanda": "Quale tecnica separa i colori di un inchiostro?", "risposta": "Cromatografia", "sbagliata": "Decantazione"}
+  ]
+}

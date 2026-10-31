@@ -2163,7 +2163,7 @@ rilegge ogni 2 s finché un'importazione è viva (`POST /api/studio/importazioni
 minuto, un conto suo), ridisegnando solo la sua sezione. Nomi dei file e motivi arrivano dal server
 come dati: sempre `textContent` (la prova manda un file col nome in HTML). Due endpoint nuovi
 documentati in testa a `schermi/server.py`; la scheda e i tetti nel documento
-[studio](studio.md). Cache del service worker `calliope-telefono-pagina-v36` (era v35), con
+[studio](studio.md). Cache del service worker `calliope-telefono-pagina-v37` (era v36, della libreria #297), con
 `studio_importa.js`; `PAGINA_VERSIONE` uguale. Prova: `prova_studio_importa_pagina.py` (390×844,
 320×693 col testo al 125 %, il PC). La condivisione dal telefono (share target della PWA) è la terza
 parte della #298: oggi il manifest non lo dichiara.

@@ -1418,11 +1418,15 @@ def scrivi_riepilogo(uscita: Path, riep: dict):
         for vid, x in riep["prove"].items():
             base_f = x["n"] - x.get("calcolate", 0)
             fp = round(100 * x["fondate"] / base_f) if base_f else 0
+            # Le due quote (31/10, #343): le fondate anche sul totale, e quante sono calcolate
+            ft = round(100 * x["fondate"] / x["n"]) if x["n"] else 0
+            cq = round(100 * x.get("calcolate", 0) / x["n"]) if x["n"] else 0
             sp = round(100 * x["scelte_nelle_pagine"] / x["scelte"]) if x["scelte"] else 100
             righe.append(f"  {vid}: n {x['n']} " + " ".join(f"{t} {k}" for t, k in
                                                            x["tipi"].items() if k)
-                         + f" pulite {x['pulite']} fondate {x['fondate']}/{base_f} ({fp} %) "
-                         f"calcolate {x.get('calcolate', 0)} (da controllare "
+                         + f" pulite {x['pulite']} fondate {x['fondate']}/{base_f} ({fp} %; sul "
+                         f"totale {x['fondate']}/{x['n']}, {ft} %) "
+                         f"calcolate {x.get('calcolate', 0)} ({cq} %; da controllare "
                          f"{x.get('calcolate_da_controllare', 0)}, criterio: tutte) scelte "
                          f"{x['scelte_nelle_pagine']}/{x['scelte']} ({sp} %) da_controllare "
                          f"{x['da_controllare']} istruzioni {x['pagina_con_istruzioni']} ordine "

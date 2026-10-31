@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "informatica-computer-carte",
+  "tipo": "mazzo",
+  "titolo": "Il computer: le carte",
+  "materia": "Informatica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "informatica-computer",
+  "carte": [
+    {"domanda": "Che differenza c'è fra hardware e software?", "risposta": "L'hardware sono le parti fisiche del computer, il software sono i programmi."},
+    {"domanda": "Quale componente esegue le istruzioni dei programmi?", "risposta": "La CPU", "sbagliata": "La RAM"},
+    {"domanda": "Quale memoria perde il suo contenuto quando si spegne il computer?", "risposta": "La RAM", "sbagliata": "La ROM"},
+    {"domanda": "Quale memoria di sola lettura contiene il programma che parte all'accensione?", "risposta": "La ROM", "sbagliata": "La RAM"},
+    {"domanda": "La tastiera è una periferica di input o di output?", "risposta": "Input", "sbagliata": "Output"},
+    {"domanda": "La stampante è una periferica di input o di output?", "risposta": "Output", "sbagliata": "Input"},
+    {"domanda": "Un SSD è memoria centrale o memoria di massa?", "risposta": "Memoria di massa", "sbagliata": "Memoria centrale"},
+    {"domanda": "Quale software gestisce le risorse del computer e fa funzionare le applicazioni?", "risposta": "Il sistema operativo", "sbagliata": "Il browser"},
+    {"domanda": "Quanti MB sono 8 GB?", "risposta": "8000", "sbagliata": "800", "calcolo": {"formula": "conversione", "dati": {"valore": 8, "da": "GB", "a": "MB"}, "risultato": 8000}},
+    {"domanda": "Lo schermo tattile è una periferica di che tipo?", "risposta": "Input e output", "sbagliata": "Solo output"}
+  ]
+}

@@ -1,6 +1,6 @@
 # Prova col Takeout vero di Classroom e coi file scaricati (31/10/2026, issue #298)
 
-Decisione [0035](../../docs/decisioni/0035-studio.md) punti 46–49, documento d'area
+Decisione [0035](../../docs/decisioni/0035-studio.md) punti 47–50, documento d'area
 [studio](../../docs/aree/studio.md) («L'importazione dei materiali scaricati»). La fa **chi
 amministra**: un'esportazione vera contiene nomi, compiti e materiali di persone vere. Tutto ciò che
 viene da lì (l'archivio, gli elenchi dei file, le note, gli screenshot) va in `privato/` (fuori da

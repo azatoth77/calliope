@@ -72,6 +72,7 @@ from . import padronanza as PD
 from . import resoconto as R
 from .ascolta import Ascolti
 from .importa import Importazioni
+from .libreria.studio import DallaLibreria
 from .mappe import Mappe
 from .premi import Premi
 from .prove import Prove
@@ -84,7 +85,7 @@ MODI = (SPENTO, OMBRA, ATTIVO)
 # programma nel passo 4). Un'altra materia si scrive com'è, corta
 MATERIE = ("Matematica", "Italiano", "Storia", "Geografia", "Scienze", "Inglese", "Francese",
            "Spagnolo", "Tedesco", "Tecnologia", "Arte", "Musica", "Fisica", "Chimica", "Latino",
-           "Filosofia", "Diritto", "Economia", "Informatica")
+           "Filosofia", "Diritto", "Economia", "Informatica", "Biologia")
 MATERIA_MAX = 40
 FASCIA_DI_SERIE = "15:00-20:00"
 TITOLO_MAX = 60
@@ -224,12 +225,12 @@ def _data(valore) -> datetime.date:
     return datetime.date.fromisoformat(str(valore).strip()[:10])
 
 
-class Studio(Mappe, Prove, Ascolti, Tutore, Premi, Importazioni):
+class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni):
     """Lo Studio di questa installazione: un oggetto per processo. Le mappe concettuali (passo 7,
     #247) sono in `mappe.py`, le domande e le prove (passo 8, #248) in `prove.py`, il ripasso da
     ascoltare (passo 9, #249) in `ascolta.py`, la vista del tutore e le indicazioni (passo 10,
-    #250, #285) in `tutore.py`, la serie, le stelle e i duelli (#296) in `premi.py`,
-    l'importazione dei materiali scaricati (#298) in `importa.py`."""
+    #250, #285) in `tutore.py`, la serie, le stelle e i duelli (#296) in `premi.py`, la libreria (#297) in
+    `libreria/studio.py`, l'importazione dei materiali scaricati (#298) in `importa.py`."""
 
     def __init__(self, cfg, registry=None, log=print, adesso=None):
         self.cfg = cfg
@@ -2201,6 +2202,9 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, Importazioni):
                 "da_parte": self._da_parte(vid),
                 # Le carte (passo 6, #246): solo i conti; il testo lo dà /api/studio/carte
                 "carte": self._conto_carte(v),
+                # La libreria (#297): le proposte scelte dal codice, dati fidati; la scheda la dà
+                # /api/studio/libreria. None se spenta, in ombra o con una prova aperta
+                "libreria": self._libreria_home(chi, v),
                 # La mappa (passo 7, #247): solo conti e stati; il testo lo dà /api/studio/mappa
                 "mappa": self._conto_mappa(v),
                 # Il riepilogo e le sessioni (passo 4b, #244): righe scritte dal codice dai dati
@@ -2395,7 +2399,8 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, Importazioni):
              "pagine": "le pagine", "pagina": "una pagina", "sessione": "la sessione di oggi",
              "carte": "le carte", "mappa": "la mappa concettuale",
              "prove": "le prove (la verifica finta e le domande)",
-             "tutore": "la vista del tutore"}
+             "tutore": "la vista del tutore",
+             "libreria": "una scheda della libreria (studio, azione libreria)"}
 
     def riga_vista(self, chi, vista: dict | None) -> str:
         """La riga per i dati del turno quando una pagina dello Studio è aperta sullo schermo
