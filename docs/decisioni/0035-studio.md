@@ -798,7 +798,55 @@ della #297; tre parti: libreria e indice (qui), mini-app, adattamento e preparaz
     porta e dall'archivio, che servono per ciò che scrive l'agente); generarle con l'agente (resta
     per una mini-app che manca, in modalità sviluppo); una tela libera (la misura del palco e la
     voce le dà solo la macchina).
-48. **La preparazione dietro le quinte prende dai materiali solo valori validati** (#297, parte
+
+## L'importazione dei materiali scaricati (#298, 31/10)
+
+Decisione di chi amministra del 28/10: per i materiali della scuola niente API di Classroom (sugli
+account dei minorenni serve l'amministratore della scuola), ma tre strade semplici: i file
+scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi nel commento della
+#298; la prima PR fa i file e gli ZIP con l'avanzamento, Takeout e condivisione vengono dopo.
+
+48. **Un file o un archivio diventa pagine della verifica, con un lavoro di sfondo.** «Aggiungi
+    materiali» sulla carta della verifica (telefono e PC personale) manda i file a `POST
+    /api/studio/importa`, coi permessi delle pagine (punto 13: lo schermo personale, gli orari del
+    minore, la propria verifica o quella del minore da tutore; ospiti e conoscenti mai). Il file
+    va su disco a pezzi, col nome del server; un thread solo li lavora uno alla volta in un
+    **sottoprocesso** a priorità bassa, la voce non aspetta mai. PDF e immagini diventano pagine
+    «da leggere» come quelle della 4.2; Word, PowerPoint, Excel, OpenDocument, testo, Markdown,
+    CSV e HTML diventano **pagine di testo già lette** (`metodo` «file_testo»), senza OCR. Lo ZIP
+    si apre un livello; il resto è una riga «non letto: …» che non ferma gli altri.
+49. **Il tipo dai byte, i tetti contati, i nomi mai sul disco.** Il tipo lo dicono i byte;
+    l'estensione serve solo a scoprire i tipi falsi. Le voci dello ZIP non si estraggono per
+    nome: si leggono in memoria contando i byte decompressi (per voce e per archivio, non quelli
+    dichiarati), con un tetto alle voci e al rapporto di compressione; percorsi assoluti, «..»,
+    link, voci cifrate si saltano; nomi ripetuti, voci sovrapposte e troppe voci (lette dalla fine
+    dell'archivio prima di aprirlo) lo rifiutano intero, e i byte contati restano entro un
+    rapporto col file arrivato. Un tetto di tempo fra un segno di vita e l'altro del
+    sottoprocesso (la voce che lo blocca è «troppo pesante», si riparte dalla successiva), uno
+    per voce e uno per tutta l'importazione, più stretto per gli archivi (si ferma, si riprende
+    a mano).
+50. **I nomi dei file sono dati.** Sullo schermo con textContent, mai al modello né nelle frasi
+    pronte: i materiali importati non hanno titolo e il piano li dice «materiale N». Il testo è
+    un dato come quello dell'OCR (punto 6): al modello solo in busta, con la fonte «allegato»; le
+    macro non si eseguono mai, il testo nascosto entra con l'avviso.
+51. **L'avanzamento sta su disco e si vede.** Una riga per importazione (`studio_importazioni`,
+    schema 13) con le fasi (ricevuto, estratto, letto, argomenti, preparato), i conti e le righe
+    «non letto»; dopo un riavvio riparte dalla prossima voce. Si ferma, si riprende, si annulla.
+    Durante un'importazione la verifica non chiede gli argomenti. La tenuta è quella delle pagine
+    (punto 11): il file arrivato si toglie a lavoro finito, le righe vanno via con la verifica.
+    `studio_importa` la spegne senza spegnere lo Studio.
+
+    Alternative scartate:
+    - le API di Classroom: servono i permessi dell'amministratore della scuola;
+    - convertire i documenti in PDF per avere le immagini (LibreOffice): una dipendenza nativa
+      pesante, e il testo c'è già;
+    - estrarre lo ZIP in una cartella: i nomi arriverebbero al disco;
+    - un'importazione con tutti i file scelti insieme: ognuno è la sua, così un file rotto o
+      fermato non ferma gli altri.
+
+## La preparazione dietro le quinte (#297, parte 3, 31/10)
+
+52. **La preparazione dietro le quinte prende dai materiali solo valori validati** (#297, parte
     3, 31/10). Il lettore delle pagine (lo stesso thread e la stessa guardia: vLLM libero, nessun
     lavoro dell'agente) e in più la voce ferma da `studio_preparazione_quiete_s`
     (`arbitro_memoria.quiete`, la definizione unica) chiede a qwen3.6, per ogni verifica aperta,
@@ -820,7 +868,7 @@ della #297; tre parti: libreria e indice (qui), mini-app, adattamento e preparaz
     - La **regola degli errori** delle carte: un'ora, ferma al terzo con la stessa firma. Con una
       **prova aperta** sulla verifica niente si prepara né si mostra, e una preparazione arrivata
       durante la prova non si scrive.
-    - Schema «studio» alla versione 13 (`studio_preparazioni`; sulla verifica `prep_firma`,
+    - Schema «studio» alla versione 14 (`studio_preparazioni`; sulla verifica `prep_firma`,
       `prep_esito`, `prep_del`, `prep_detto`); va via con la verifica e con tutto lo Studio.
     - Una fase del banco (`--fasi preparazione`) misura lezioni e valori sulla DGX, con una pagina
       di chimica di fantasia e una ostile.
@@ -828,6 +876,7 @@ della #297; tre parti: libreria e indice (qui), mini-app, adattamento e preparaz
     Alternative scartate: generare le mini-app con i valori dentro il codice (l'agente, il
     collaudo: resta per una mini-app che manca); lasciare al modello la scelta del coefficiente
     nascosto (lo decide il codice); mostrare la lezione intera con gli avvisi.
+
 
 ## Da completare con i passi 4.3–4.5
 

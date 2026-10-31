@@ -43,7 +43,9 @@ argomenti della verifica, «Dalla libreria» nella home e la lettura `libreria` 
 sotto); dal 31/10 anche le **mini-app** (#297, seconda parte: otto giochi della macchina a stati,
 aperti con `studio_attivita`). Dal 31/10 i **premi** (#296): la
 serie di giorni di studio, le stelle e i duelli fra persone di casa, calcolati dal codice dalla
-pratica vera, con la regola per i minori (sezione sotto). Lo
+pratica vera, con la regola per i minori (sezione sotto). Dal 31/10 l'**importazione dei materiali
+scaricati** (#298, prima parte: file e ZIP con l'avanzamento; Takeout e condivisione dopo; sezione
+sotto). Lo
 Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
@@ -65,10 +67,16 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Vista del tutore (padronanza alla cieca in ombra, giudizio del tutore, «Da guardare tu», prove, ripasso, mappa) e indicazioni dei tutori nei dati del turno del minore (dal 31/10, passo 10, #250 e #285; schema «studio» alla versione 11; `studio_indicazioni`, acceso di serie con lo Studio, `studio_indicazioni_giorni`) | SQLite (`studio_indicazioni`, `studio_tentativi` tipo «giudizio»); libreria standard, niente modello | `calliope/studio/tutore.py` → `forma_indicazione`, `CORNICE`, `Tutore` (in `Studio`): `vista_tutore`, `giudica`, `rivedi_da_tutore`, `scrivi_indicazione`, `cambia_indicazione`, `togli_indicazione`, `togli_indicazioni`, `indicazioni`, `nota_indicazioni`; `calliope/studio/padronanza.py` → `GIUDIZI`, `accordo`; `calliope/brain.py` → `_nota_studio`; `calliope/tools/studio.py` → azioni `indica`, `indicazioni`, `indicazioni_togli`; `calliope/schermi/server.py` → `POST /api/studio/tutore`; `calliope/schermi/pagina/studio.js` («Per te che lo segui», «Indicazioni di chi ti segue»); prove `prove/prova_studio_tutore.py`, `prove/prova_studio_tutore_pagina.py` |
 | Libreria: schede degli argomenti e mazzi di carte nel repository (dati fidati, JSON), il formato e la verità, l'indice per argomento, la scelta del codice con la padronanza solo mostrata, «Dalla libreria» nella home, «Aggiungi le carte», la lettura `libreria` a voce (dal 31/10, #297, prima parte; schema «studio» invariato; `studio_libreria`, attiva di serie con lo Studio) | libreria standard, niente modello; i contenuti in `calliope/studio/libreria/contenuti/<materia>/*.json` | `calliope/studio/libreria/formato.py` → `valida`, `leggi_file`, `FORMULE`; `calliope/studio/libreria/indice.py` → `Libreria` (`carica`, `controlla`, `trova`, `di_scheda`), `parole`, `radice`, `materia_vale`, `scegli`; `calliope/studio/libreria/studio.py` → `DallaLibreria` (in `Studio`): `proposte_libreria`, `scheda_libreria`, `soluzione_libreria`, `aggiungi_mazzo`, `_libreria_home`; `calliope/tools/studio.py` → azione `libreria`; `calliope/schermi/server.py` → `POST /api/studio/libreria`; `calliope/schermi/pagina/libreria.js`; prove `prove/prova_studio_libreria.py`, `prove/prova_studio_libreria_pagina.py`, `prove/verita_libreria.py`; passo manuale `prove/manuali/libreria-studio.md` |
 | Premi: la serie di giorni di studio con le pause, le stelle dei traguardi, i duelli fra persone di casa, gli interruttori per persona (il tutore per un minore) (dal 31/10, #296; schema «studio» alla versione 12; `studio_serie`, `studio_stelle` accese di serie con lo Studio, `studio_serie_pause` 1, `studio_duelli` spento di serie) | SQLite (`studio_stelle`, `studio_premi`, `studio_duelli`, `studio_pratica`); libreria standard, niente modello | `calliope/studio/premi.py` → `pratica`, `studiato`, `serie`, `superata`, `frase_serie`, `frase_stelle_nuove`, `Premi` (in `Studio`): `premi`, `impostazioni_premi`, `imposta_premi`, `aggiorna_stelle`, `frase_premi`, `frase_premi_letti`, `persone_per_duello`, `proponi_duello`, `accetta_duello`, `rispondi_duello`, `consegna_duello`, `annulla_duello`, `vista_duello`; `calliope/tools/studio.py` → azione `premi`, «fatto» con la serie; `calliope/schermi/server.py` → `POST /api/studio/premi`, `POST /api/studio/duello`; `calliope/schermi/pagina/studio.js` («I tuoi traguardi», «Duelli», «Premi» nella vista del tutore); prove `prove/prova_studio_premi.py`, `prove/prova_studio_premi_pagina.py` |
+| Importazione dei materiali scaricati: «Aggiungi materiali» sulla verifica, file e ZIP (PDF, immagini, Word, PowerPoint, Excel, OpenDocument, testo, Markdown, CSV, HTML), un lavoro di sfondo in un sottoprocesso coi tetti di dimensione e di tempo, le pagine di testo già lette, le fasi sullo schermo (dal 31/10, #298; schema «studio» alla versione 13; `studio_importa`, acceso di serie con lo Studio, e i tetti `studio_importa_*`) | libreria standard (`zipfile`, `html.parser`, `subprocess`), i lettori di `allegati.py` (python-docx, python-pptx, openpyxl), pypdfium2 e Pillow come la 4.2; niente modello, niente librerie native nuove | `calliope/studio/importa.py` → `classifica`, `nome_strano`, `elenca`, `leggi_voce`, `testi`, `html_in_testo`, `a_pagine`, `elabora`, `lavora` (il sottoprocesso), `Importi` (il lavoro di sfondo), `Importazioni` (in `Studio`): `registra_importazione`, `aggiungi_testi`, `importazioni`, `azione_importazione`, `importazione_viva`, `avvia_importi`; `calliope/studio/pagine.py` → `apri_nuovo`; `calliope/schermi/server.py` → `POST /api/studio/importa`, `POST /api/studio/importazioni`; `calliope/schermi/pagina/studio_importa.js`; prove `prove/prova_studio_importa.py`, `prove/prova_studio_importa_pagina.py` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
 ## Problemi noti
+
+- L'importazione (#298) è provata solo con file e archivi di fantasia: il Takeout vero di Classroom
+  non è ancora stato guardato (passo manuale in `prove/manuali/studio-takeout-vero.md`), la
+  condivisione dal telefono non c'è, e sul telefono con Family Link non è provata. Del testo
+  nascosto si riconosce solo quello marcato nascosto in Word e le diapositive nascoste.
 
 - I premi (#296, revisione della PR #355): una sessione del piano con «Inizia» e «Fatto» a 10
   minuti di distanza conta come giorno di studio anche se in mezzo non si è fatto niente. Il codice
@@ -114,7 +122,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## La preparazione dietro le quinte (31/10, issue #297, parte 3, ramo `issue-297-preparazione`)
 
-Terza parte della #297 (decisione 0035 punto 48). `calliope/studio/preparazione.py` e
+Terza parte della #297 (decisione 0035 punto 52). `calliope/studio/preparazione.py` e
 `Lettore.prepara`: per ogni verifica aperta, quando la DGX è libera (la guardia del lettore) e la
 voce è ferma da `studio_preparazione_quiete_s` secondi (`arbitro_memoria.quiete`), una richiesta a
 qwen3.6 col solo testo letto in busta: una **lezione** breve per argomento e i **valori** delle
@@ -133,15 +141,186 @@ si aprono coi **parametri** (`Partita.parametri`, `scheda.avvio_js`, `GIOCO.nuov
 parametri })`, ricontrollati dalla logica: «Reazione 1 di 3, dai tuoi materiali»); la voce dice
 «Ho preparato…» una volta per preparazione (nella lettura «oggi» e «libreria» del tool `studio`).
 In ombra (di serie) si prepara e si conta nel registro soltanto. Regola degli errori delle carte;
-con una prova aperta niente. Schema 13 (`studio_preparazioni`). Banco: `--fasi preparazione`
+con una prova aperta niente. Schema 14 (`studio_preparazioni`). Banco: `--fasi preparazione`
 (pagina di chimica di fantasia in `prove/manuali/studio/preparazione/`).
 
 **Ritocchi della revisione della PR #366**: «di» per la «d» nel moto; `_ferma` controlla
 `posto.fermato` sotto il lock (un avviso solo col battito e il gancio della prova insieme); la
-docstring di `miniapp.py` cita il punto 47. Pagina v38.
+docstring di `miniapp.py` cita il punto 47. Pagina v39.
 
 **Da misurare sulla DGX** prima di `attiva`: `--fasi preparazione` (paragrafi fondati, valori
 giusti, ostili 0) e qualche notte in ombra (`[STUDIO] … preparazione in ombra` nel registro).
+## L'importazione dei materiali scaricati: file e ZIP (31/10, issue #298, ramo `issue-298-studio-importa`)
+
+*Epic #251, decisione di chi amministra del 28/10 (niente API di Classroom: sugli account dei
+minorenni servono i permessi della scuola). Analisi nel commento della #298; decisione
+[0035](../decisioni/0035-studio.md) punti 48–51. Questa è la prima parte: file e archivi ZIP con
+l'avanzamento. Il Takeout di Classroom e la condivisione dal telefono vengono dopo.*
+
+**Come si usa.** Sulla carta di una verifica in bozza o aperta della home dello Studio, sul telefono
+e sul PC personale, «Aggiungi materiali» → «Scegli i file» (anche più file insieme). Ogni file parte
+da solo (`POST /api/studio/importa`, byte nudi, `{verifica, nome}` in «X-Calliope-Studio») e diventa
+un'importazione; la scheda mostra le fasi e i conti e si rilegge ogni 2 s finché un'importazione è
+viva (`POST /api/studio/importazioni`), con «Ferma», «Riprendi» e «Annulla» (a lavoro finito «Togli
+dall'elenco»: le pagine già fatte restano). Si può chiudere la pagina: il lavoro va avanti sul server.
+
+**Cosa entra.** Il tipo lo dicono i byte (`allegati.riconosci`, `immagini.tipo_dai_byte`);
+l'estensione serve solo contro i tipi falsi:
+
+| Formato | Diventa |
+|---|---|
+| PDF (anche le esportazioni dei documenti Google) | pagine JPEG «da leggere» come la 4.2 (`pagine._dividi`), con la copia rifatta senza metadati per il testo senza OCR del lettore |
+| JPEG, PNG, WebP | una pagina «da leggere» come una foto della galleria (bordi del server, raddrizzata a 1600 px) |
+| Word (docx), PowerPoint (pptx), Excel (xlsx), OpenDocument (odt, odp, ods) | pagine di testo **già lette** (`metodo` «file_testo», senza immagine e senza modello): ~2500 caratteri per pagina; una diapositiva o un foglio per pagina. Avvisi «macro» (mai eseguite), «testo_nascosto» (`w:vanish` di Word, diapositive nascoste), «tagliato» |
+| testo, Markdown, CSV, HTML | come sopra; l'HTML senza tag, script e stili (`html.parser`) |
+| ZIP | un livello: ogni voce come sopra |
+
+Non entrano (una riga «non letto: …», gli altri vanno avanti): Office vecchio, HEIC, audio, video,
+programmi, script, JSON, 7z e RAR, uno ZIP dentro lo ZIP, un file vuoto, un tipo falso («il
+contenuto non è un PDF»).
+
+**I tetti** (in `Config`, sezione «studio»):
+
+| Chiave | Di serie | Cosa |
+|---|---|---|
+| `studio_importa` | true | spento: niente «Aggiungi materiali» e l'endpoint 404, lo Studio resta |
+| `studio_importa_max_mb` | 100 | un file mandato al più (un ZIP compreso); `Content-Length` obbligatorio |
+| `studio_importa_file_max` | 500 | le voci di un archivio: oltre, rifiutato intero |
+| `studio_importa_voce_max_mb` | 30 | i byte di una voce, **contati leggendo** |
+| `studio_importa_totale_max_mb` | 300 | i byte di tutto l'archivio, contati: oltre, le voci che restano «non lette» |
+| `studio_importa_passo_s` | 30 | fra un segno di vita del sottoprocesso e l'altro (a ogni voce e a ogni pagina di un PDF): oltre, la voce è «troppo pesante» e si riparte dalla successiva |
+| `studio_importa_tempo_max_s` | 1800 | per tutta l'importazione: oltre, «fermata» (si riprende a mano) |
+| `studio_importa_coda` | 10 | le importazioni vive (in coda, in corso, fermate) di una persona |
+
+Più il rapporto di compressione (150, come gli allegati) per voce e, dalla revisione della PR
+#364, **su tutto l'archivio** (i byte contati al più 150 volte il file arrivato), e come la 4.2
+`studio_pdf_max_pagine` e `studio_pagine_max` (le pagine di testo contano come le altre). Un
+archivio ha un tempo massimo più stretto, 60 s più 1 s per voce (dentro `studio_importa_tempo_max_s`),
+e ogni voce al più 120 s anche coi segni di vita. Un testo semplice più lungo delle pagine libere
+(in byte oltre quattro volte, poi in caratteri) non si legge nemmeno. Nel server: 20 invii al
+minuto per schermo, il corpo letto al più per 15 minuti, 90 letture al minuto della scheda; la
+pagina controlla `max_mb` prima di mandare e mostra l'avanzamento in byte dell'invio
+(`XMLHttpRequest.upload.onprogress`).
+
+**Sicurezza dei file.** Le voci non si estraggono mai per nome: il sottoprocesso le legge in memoria
+una alla volta e sul disco scrive solo le pagine col nome del server. Si saltano: i percorsi
+assoluti, con la lettera di un'unità o con «..» (zip-slip), i nomi con caratteri di controllo,
+troppo lunghi o profondi, i link simbolici (il modo Unix negli attributi), le voci cifrate, quelle
+con un rapporto sospetto. Una voce che mente sulla dimensione si ferma: `zipfile` legge al più il
+dichiarato e poi il CRC non torna («voce rovinata»), e comunque i byte si contano. Le voci
+sovrapposte (la «zip bomb» a voci che puntano agli stessi byte) e i nomi ripetuti rifiutano
+l'archivio intero (`controlla_struttura`: le voci in ordine di posizione, ognuna finisce prima della
+successiva; e gli avvisi di `zipfile` diventano errori). Il numero di voci e la grandezza della
+directory centrale si leggono dalla fine dell'archivio (anche ZIP64, `voci_dichiarate`) **prima** di
+aprirlo: 900 000 voci vuote portavano il sottoprocesso a 615 MB. Il docx o l'ODT con DOCTYPE o
+ENTITY (XXE, «billion laughs») non si apre (`allegati._zip_sicuro`, che dalla revisione della PR
+#364 legge tutta la parte XML a pezzi e non solo i primi 4096 byte). I nomi con i caratteri di
+direzione del testo («gpj.exe» al contrario) o con «..» scritto con altri caratteri (punti a
+larghezza piena, «‥») sono strani.
+Il sottoprocesso (`python -m calliope.studio.importa --lavora`) gira a priorità bassa
+(`BELOW_NORMAL_PRIORITY_CLASS` su Windows, `nice 10` su Linux), coi suoi provvisori in
+`studio_cartella/tmp/imp-*`, tolti dopo ogni giro e dalla pulizia dei provvisori.
+
+**Il lavoro di sfondo** (`Importi`): un thread per tutte le importazioni, una alla volta dalla più
+vecchia, creato al primo uso o all'avvio (`avvia_importi`, se ce ne sono di rimaste). A ogni voce le
+pagine entrano nel db con `aggiungi_pronte` o `aggiungi_testi`, che ricontrollano il permesso di chi
+ha mandato il file e lo stato della verifica: un tutore che non lo è più o una verifica chiusa
+fermano l'importazione («non riuscita»). Un materiale per file, origine «file», **senza titolo**: il
+nome del file è un dato (sulla scheda, mai al modello né nelle frasi pronte), e il piano dice
+«materiale N». Durante un'importazione viva la verifica non chiede gli argomenti
+(`verifiche_per_argomenti`): non si chiedono a metà dei file.
+
+**Le fasi** (dai dati, mai dal modello): ricevuto; estratto (finita); pagine e testo letti (gli stati
+delle pagine dei suoi materiali: le foto e i PDF scansionati li legge il lettore della 4.3);
+argomenti trovati (un'estrazione fatta dopo la fine); carte e domande preparate (una generazione
+del lettore dopo gli argomenti). Lezioni e mini-app arrivano con la #297. I conti: file, pagine
+(lette), argomenti, non letti; mentre lavora «al file 3 di 12».
+
+**Stato su disco** (schema «studio» alla versione 13): `studio_importazioni` (verifica, persona, chi
+l'ha mandata, il file arrivato, il nome come dato, stato `in_coda`/`in_corso`/`fermata`/`finita`/
+`errore`, la prossima voce, i conti e le righe in JSON) e `studio_materiali.importazione`. Dopo un
+riavvio le `in_corso` tornano `in_coda` e ripartono dalla prossima voce.
+
+**Tenuta.** Le pagine sono della verifica (60 giorni dopo la data, per sempre se archiviata). Il
+file arrivato si toglie a lavoro finito; se resta (fermata) va via con la verifica, con «Annulla»,
+con «dimentica», con `--svuota` e, senza riga, dalla rotazione degli orfani dopo un giorno (i file
+`.imp` sono fra i `conosciuti` di `dati.cancella`). `studio_importazioni` è in `TABELLE` e in
+`conserva.TABELLE_STUDIO`.
+
+**La condivisione dal telefono e Family Link** (la terza parte, da provare sul vero). Android
+(Chrome) manda un file a una PWA **installata** che dichiara `share_target` nel manifest; iOS non lo
+supporta per le PWA: lì «Aggiungi materiali» col selettore, che apre anche File e Drive. Il telefono
+di un minore con Family Link e il browser bloccato non installa la PWA né usa lo share target: lì
+funziona il selettore se il browser apre la pagina dello Studio; altrimenti importa il tutore dal suo
+telefono o dal PC personale nella verifica del minore, o il minore dal PC personale. Da scrivere qui
+con la prova vera.
+
+**Non fatti, per dopo.** Il Takeout di Classroom (corsi, materiali per argomento, compiti con le
+scadenze come proposte nel piano) e il calendario scolastico come materiale (commento del 29/10);
+lo share target; a voce «ho finito di preparare…»; il testo nascosto per colore o grandezza (si
+vede solo `w:vanish`); le immagini dentro i documenti Word e PowerPoint (si prende solo il testo).
+Il passo manuale per la prova col Takeout vero: [`prove/manuali/studio-takeout-vero.md`](../../prove/manuali/studio-takeout-vero.md).
+
+Prove: `prova_studio_importa.py` (a secco, ~25 s, col sottoprocesso e il server veri: tipi e tipi
+falsi, nomi strani, ZIP ostili, le pagine, i permessi, i limiti, ferma, riprendi, il riavvio a
+metà, la tenuta) e `prova_studio_importa_pagina.py` (il browser a 390×844, 320×693 col testo al 125
+% e sul PC). Le prove dello Studio che controllavano lo schema 12 e il service worker v35 sono
+passate alla 13 e alla v38 (la v36 è della libreria, la v37 delle mini-app, #297).
+
+### 31/10: la terza revisione della PR #364 (importazione)
+
+Le correzioni della seconda reggono (A e B rifiutati con 79 MB, i 9 casi UTF-16, gli archivi veri
+passano). Tre difese in più, che non dipendono dalla versione di Python:
+1. *Due record ZIP64.* Le versioni di `zipfile` senza la correzione dell'offset leggono il record
+   ZIP64 subito prima del localizzatore, le nuove quello a `reloff` (sulla DGX Python 3.12.3 legge
+   `reloff`). `voci_dichiarate` li legge tutti e due e, se ci sono e sono diversi, l'archivio è
+   «fatto in modo strano»: lo script del revisore (300 000 voci, 15,8 MB, che `zipfile` senza la
+   correzione apriva) dà None.
+2. *La dichiarazione XML* si legge fino a «?>» (non i soli primi 256 byte: 600 spazi prima di
+   `encoding` la scavalcavano); «utf_8» vale come UTF-8; una dichiarazione senza «?>» non si apre.
+3. *Le voci dei sistemi* (`__MACOSX/`, `.DS_Store`, `Thumbs.db`, `desktop.ini`) si saltano per nome,
+   senza una riga «non letto».
+
+### 31/10: la seconda revisione della PR #364 (importazione)
+
+Il «blocco per minuti» del secondo caso non c'era (era la pipe della prova del revisore); restano
+due difetti, corretti:
+1. *Il controllo della fine dell'archivio si aggirava.* (A) Un EOCD con «0xFFFF» voci senza il
+   localizzatore ZIP64 dava None e `zipfile` caricava 900 000 voci (522 MB); (B) i byte
+   «PK» scritti dentro i campi dell'EOCD vero ingannavano `rfind` (524 MB). Ora
+   `voci_dichiarate` sceglie lo stesso EOCD di `zipfile` (prima quello senza commento esattamente
+   alla fine, poi l'ultima firma) e chiede che il commento arrivi esattamente alla fine del file;
+   il localizzatore ZIP64 vale sempre, come in `zipfile`; «0xFFFF» senza ZIP64 valido è None; un
+   file che comincia con «PK» e dà None si rifiuta («archivio rovinato o fatto in modo strano»), e
+   anche una directory centrale dichiarata oltre `massimo × CD_PER_VOCE`. Con gli script del
+   revisore: A rifiutato in 1,1 s, B in 1,2 s («19280 file»), 79 MB (il solo avvio di Python).
+2. *Le parti XML in UTF-16.* `allegati._zip_sicuro` cercava i byte ASCII di «<!DOCTYPE»: un ODT in
+   UTF-16 con un'ENTITY si espandeva. Ora una parte `.xml` o `.rels` con il BOM di UTF-16 o UTF-32,
+   o che comincia in UTF-16 senza BOM, o che dichiara un `encoding` diverso da UTF-8, non si apre
+   («codifica non ammessa»): 9 casi su 9 del revisore rifiutati (XXE, billion laughs, entità
+   interna; docx e ODT).
+E l'avanzamento dell'invio (un `role="status"`) si aggiorna ogni 25 % e non più ogni 5 %.
+
+### 31/10: la revisione della PR #364 (importazione)
+
+Il revisore indipendente ha dato «da correggere» (script fuori dal repository: `attacchi.py`,
+`figlio.py`, `memoria.py`). Corretto:
+1. *Un archivio di pochi KB teneva il lavoro di sfondo per minuti.* 500 voci con lo stesso nome
+   sugli stessi byte compressi: ora «l'archivio ha nomi ripetuti» in un secondo; le voci
+   sovrapposte coi nomi diversi «voci sovrapposte»; il rapporto su tutto l'archivio; il testo
+   troppo lungo per le pagine libere scartato prima di leggerlo; il tempo massimo degli archivi e
+   delle voci. Lo ZIP onesto da 0,37 MB con 500 testi molto comprimibili (210 MB decompressi) ora
+   finisce in 0,6 s: 131 «sono 200 pagine», 368 «oltre il tetto dell'archivio». *Il tempo di 8–9
+   minuti misurato dal revisore su questo secondo caso veniva anche dalla sua prova, che non
+   leggeva l'uscita del sottoprocesso finché non finiva e lo bloccava sulla pipe; il lavoro vero la
+   legge con un thread.*
+2. «Annulla» mentre si scrive una voce: niente più TypeError, l'importazione finisce «fermata».
+3. «Riprendi» mentre il «Ferma» della corrente non ha ancora agito non lo toglie più.
+4. La directory centrale enorme è rifiutata dalla fine dell'archivio, prima di aprirlo (1,2 s e 79
+   MB invece di 615 MB).
+E: il DOCTYPE cercato in tutta la parte XML; il tetto e l'avanzamento dell'invio nella pagina; la
+voce scritta una volta sola anche con un riavvio fra le pagine e la prossima voce
+(`studio_materiali.voce`, nello schema 13 ancora non uscito).
 
 ## Le mini-app della libreria (31/10, issue #297, parte 2, ramo `issue-297-miniapp`)
 

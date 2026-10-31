@@ -366,6 +366,38 @@
         return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
       } catch (e) { return { ok: false, status: 0, dati: {} }; }
     },
+    // L'importazione dei materiali scaricati (31/10, #298, studio_importa.js): un file o un ZIP
+    // nei byte nudi, {verifica, nome} in «X-Calliope-Studio» → {importazione}
+    // Con XMLHttpRequest per l'avanzamento dell'invio: `avanti(mandati, totale)` in byte
+    // (revisione della PR #364: fetch non dice quanto è partito)
+    studioImporta(blob, meta, avanti) {
+      if (!S.sessione) return Promise.resolve({ ok: false, status: 0, dati: {} });
+      return new Promise((fatto) => {
+        const x = new XMLHttpRequest();
+        x.open("POST", "/api/studio/importa");
+        x.setRequestHeader("Content-Type", "application/octet-stream");
+        x.setRequestHeader("X-Calliope-Sessione", S.sessione || "");
+        x.setRequestHeader("X-Calliope-Studio", encodeURIComponent(JSON.stringify(meta || {})));
+        if (avanti && x.upload) {
+          x.upload.onprogress = (ev) => { try { avanti(ev.loaded, ev.total || blob.size); } catch (e) { /* niente */ } };
+        }
+        x.onload = () => {
+          let d = {};
+          try { d = JSON.parse(x.responseText || "{}"); } catch (e) { /* vuota */ }
+          fatto({ ok: x.status === 200, status: x.status, dati: d || {} });
+        };
+        x.onerror = x.onabort = x.ontimeout = () => fatto({ ok: false, status: 0, dati: {} });
+        try { x.send(blob); } catch (e) { fatto({ ok: false, status: 0, dati: {} }); }
+      });
+    },
+    // {verifica, azione?, importazione?} → le importazioni con le fasi e i conti
+    async studioImportazioni(dati) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        const r = await postSessione("/api/studio/importazioni", dati || {});
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
     // Gli argomenti di una verifica e la conferma (30/10, passo 4.4, #283, studio.js):
     // {verifica, azione?, argomento?, titolo?} → {argomenti, verifica, estrazione, lettura, prova}
     // La home dello Studio (30/10, passo 4.5, #284, studio.js): {} → verifiche, piano, lettura…

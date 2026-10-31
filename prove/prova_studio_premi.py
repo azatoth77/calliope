@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 e un orologio finto. Persone di fantasia: Andrea tutore di Leo e di Sofia, Bruno adulto, Carla
 amministra, un conoscente; Leo e Sofia minori di casa.
 
-1. **Schema**: «studio» alla versione 12, `studio_stelle`, `studio_premi`, `studio_duelli` in
+1. **Schema**: «studio» alla versione 13 (12 coi premi), `studio_stelle`, `studio_premi`, `studio_duelli` in
    `TABELLE` e `conserva.TABELLE_STUDIO`.
 2. **Funzioni pure**: il giorno di studio (soglie), la serie con le pause, i giorni senza piano,
    oggi che aspetta, i giorni dopo oggi che non contano; la prova superata coi soli esiti del
@@ -164,8 +164,8 @@ TITOLI = [a["titolo"] for a in MAT["argomenti"]]
 print("— schema")
 st = studio(cfg_nuova("schema.db"))
 from calliope.conserva import TABELLE_STUDIO  # noqa: E402
-verifica("schema «studio» alla versione 13 (13 con la preparazione, #297)", D.versione_schema(st.dati.db) == 13
-         and len(D.MIGRAZIONI) == 13)
+verifica("schema «studio» alla versione 14 (13 con l'importazione, 14 con la preparazione)", D.versione_schema(st.dati.db) == 14
+         and len(D.MIGRAZIONI) == 14)
 verifica("le tabelle dei premi in TABELLE e in conserva.TABELLE_STUDIO",
          {"studio_stelle", "studio_premi", "studio_duelli", "studio_pratica"} <= set(D.TABELLE)
          and set(TABELLE_STUDIO) == set(D.TABELLE))

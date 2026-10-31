@@ -1,6 +1,6 @@
 """
 La preparazione dello Studio dietro le quinte (31/10, issue #297, parte 3, epic #251, decisione
-0035 punto 48): per ogni verifica aperta il lettore delle pagine (lo stesso thread, la stessa
+0035 punto 52): per ogni verifica aperta il lettore delle pagine (lo stesso thread, la stessa
 guardia della DGX) chiede a qwen3.6, **quando la DGX è libera e la voce ferma** (la guardia del
 lettore: vLLM libero, nessun lavoro dell'agente; `arbitro_memoria.quiete`), dal **solo testo
 letto** delle pagine:

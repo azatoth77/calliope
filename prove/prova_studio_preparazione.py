@@ -2,7 +2,7 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 """La preparazione dello Studio dietro le quinte a secco (31/10, issue #297, parte 3, epic #251,
-decisione 0035 punto 48; calliope/studio/preparazione.py, studio/lettura.py `prepara`, le attività
+decisione 0035 punto 52; calliope/studio/preparazione.py, studio/lettura.py `prepara`, le attività
 della libreria coi parametri). Un modello finto (la risposta scritta qui), un orologio finto,
 persone e pagine di fantasia (Leo, il tutore Andrea).
 
