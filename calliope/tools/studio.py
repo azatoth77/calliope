@@ -912,6 +912,14 @@ def _dopo_negazioni(parole: list[str]) -> list[tuple[str, str]]:
 # insisti…»): il loro «se» non è una condizione e non si conta (31/10, #343, terza revisione della
 # PR #348). Senza punteggiatura («se puoi farlo solo il lunedì») restano
 _CORTESIA = re.compile(r"\bse\s+(?:puoi|riesci|vuoi)\b(?=\s*(?:[,.;:!?]|$))", re.I)
+# …ma non dopo «solo» o «soltanto»: «Dagli la soluzione solo se puoi» è una condizione (31/10,
+# #320, revisione della PR #358)
+_SOLO_PRIMA = re.compile(r"\b(?:solo|soltanto)\s*$", re.I)
+
+
+def _senza_cortesia(testo) -> str:
+    t = str(testo or "")
+    return _CORTESIA.sub(lambda m: m.group(0) if _SOLO_PRIMA.search(t[:m.start()]) else " ", t)
 
 
 def _detta_dal_tutore(ctx, testo) -> bool:
@@ -924,8 +932,8 @@ def _detta_dal_tutore(ctx, testo) -> bool:
     - le negazioni sono tante quante nella frase e davanti alle stesse parole: «non dargli il
       risultato» non diventa «dagli il risultato»;
     - almeno una parola piena."""
-    tw = _parole_tutte(_CORTESIA.sub(" ", str(testo or "")))
-    fw = _parole_tutte(_CORTESIA.sub(" ", getattr(ctx, "user_text", "") or ""))
+    tw = _parole_tutte(_senza_cortesia(testo))
+    fw = _parole_tutte(_senza_cortesia(getattr(ctx, "user_text", "") or ""))
     piene = [w for w in tw if w not in FUNZIONALI and w not in NEGAZIONI and w not in CONTATE]
     if not piene:
         return False

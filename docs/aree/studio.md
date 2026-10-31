@@ -2260,6 +2260,15 @@ macchina», il compito di casa nella frase del turno) chiedono da dove viene la 
 prima), i contrari (la domanda del modello, un'altra data, «no»), la pagina ostile → proposta →
 «sì» → la domanda con la fonte → «sì» → sposta, i quattro scenari e i casi del tema.
 
+Nella stessa PR, due ritocchi della revisione della PR #358 (#343):
+- `_detta_dal_tutore`: la forma di cortesia non si toglie dopo «solo» o «soltanto» («Dagli la
+  soluzione solo se puoi» è una condizione: «dagli solo la soluzione» non passa);
+- `argomenti._pezzi`: il meno attaccato alla cifra con uno spazio (o l'inizio, una parentesi, un
+  operatore) prima è un numero negativo, un pezzo a sé (`NEGATIVO`): «la temperatura scese a -5»
+  trova «-5»; con lo spazio anche dopo («a - 5», «10 - 5») o attaccato a una parola («x-5»,
+  «10-12») resta la sottrazione. Gli script del revisore (`funzioni.py` della PR #346,
+  `nominate.py` della PR #350) danno gli stessi esiti del ramo della #343.
+
 **Dopo la seconda revisione della PR #319 (30/10 sera):** con `data` bersaglio, dopo una pagina
 letta anche le date dette dalla persona chiedevano, perché il modello scrive l'anno che nessuno
 dice. Ora per `studio.data` (`valore.DATE_DETTE`) una data vale della persona se dalle sue frasi
