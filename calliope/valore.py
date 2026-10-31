@@ -1193,18 +1193,27 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
             return "foto"          # parole senza fonte con una foto di mezzo (etichetta)
         return fonte_del_valore(v, t, ps) or fonte
 
+    def _citato(k, da) -> tuple[str, str]:
+        """Il valore citato nella domanda e da dove viene: con una data dello Studio fra gli
+        argomenti, la data detta e «da una pagina» (revisione della PR #374: al «sì, spostala»
+        la domanda diceva ««1» viene da una foto», l'id della verifica)."""
+        dk = next((x for x in args if (name, x) in DATE_DETTE and args.get(x)), None)
+        if dk is not None:
+            return _data_mostrata(args[dk], ctx), _da_studio(da)
+        return _mostra(args[k]), prov.da(da)
+
     if bers_dato:
         k = bers_dato[0]
         da = _da(k)
-        domanda = (f"«{_mostra(args[k])}» viene {prov.da(da)}, non da te: vuoi davvero che "
-                   f"{cosa}?")
+        cit, dove = _citato(k, da)
+        domanda = f"«{cit}» viene {dove}, non da te: vuoi davvero che {cosa}?"
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_bersaglio_dato",
                              domanda, da), det
     if cont_dato and E >= E2:
         k = cont_dato[0]
         da = _da(k)
-        domanda = (f"«{_mostra(args[k])}» viene {prov.da(da)}, non da te: vuoi davvero che "
-                   f"{cosa}?")
+        cit, dove = _citato(k, da)
+        domanda = f"«{cit}» viene {dove}, non da te: vuoi davvero che {cosa}?"
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_contenuto_dato",
                              domanda, da), det
     if cont_modello and E >= E2:

@@ -470,6 +470,10 @@ def _chiusura(words: list) -> bool:
     stoppa ti.», «no, basta»: 31/10, #373), mai da solo (è una risposta: «Lo apro?» «No.»)."""
     if not words:
         return False
+    # «stesso» solo in «fa lo stesso» (revisione della PR #374: «No, lo stesso.» a una domanda è
+    # una risposta, «lo faccio lo stesso», non un ordine di silenzio)
+    if "stesso" in words and "fa" not in words:
+        return False
     silenzio = any(w in _SILENCE for w in words)
     return all(w in _CLOSING or (w == "no" and silenzio) for w in words)
 

@@ -6963,7 +6963,9 @@ class Brain:
         # quell'azione negli argomenti, prima del nome vicino. Regola `tool_nome_azione`
         # Dal 31/10 (#373) anche `studio_verifica_crea` e simili: studio con l'azione
         from .tools.registry import nome_e_argomenti
-        conv = nome_e_argomenti(nome, call.get("arguments"))
+        conv = nome_e_argomenti(nome, call.get("arguments"),
+                                [s.get("name") for s in (tools.all_schemas() if hasattr(
+                                    tools, "all_schemas") else ())])
         if conv is not None and tools.get(conv[0]) is not None:
             call["name"] = conv[0]
             call["arguments"] = conv[1]

@@ -767,6 +767,15 @@ verifica("contrari: un'azione che non esiste, due azioni nel nome, un altro pref
          and R.studio_dal_nome("studio_crea_sposta", {}) is None
          and R.studio_dal_nome("agenda_crea", {"azione": "crea"}) is None
          and R.studio_dal_nome("studio_verifica", {}) is None)
+verifica("revisione della PR #374: il nome e gli argomenti con due azioni diverse, o un nome che "
+         "comincia con un altro tool vero, non diventano studio",
+         R.studio_dal_nome("studio_verifica_sposta", {"azione": "archivia"}) is None
+         and R.studio_dal_nome("studio_verifica_sposta", {"azione": "sposta"})
+         == ("studio", {"azione": "sposta"})
+         and R.studio_dal_nome("studio_carte_scrivi", {"domanda": "x"}) is None
+         and R.studio_dal_nome("studio_mappa_consigli_x", {}) is None
+         and R.studio_dal_nome("studio_pagina_leggi_116", {"pagina": "116"}) is None
+         and R.studio_dal_nome("studio_nuovo_crea", {}, veri=("studio_nuovo",)) is None)
 e = json.loads(TOOLS.sconosciuto("studio_verifica_cancella"))
 verifica("l'errore di un nome sconosciuto suggerisce anche per prefisso (studio) e dice che le "
          "azioni vanno in «azione»", e["nomi_giusti"][0] == "studio" and "azione" in e["cosa_fare"],
@@ -803,6 +812,22 @@ r = turno(b, "Domani ho il dentista.",
           PP.chiama("agenda_crea", {"azione": "crea", "titolo": "dentista"}), PP.testo("Ok."))
 verifica("contrario: un altro prefisso («agenda_crea») non diventa studio",
          len(materie_di(s9)) == n and not any(x["nome"] == "studio" for x in b.last_tools), r)
+# Revisione della PR #374 (difetto della #362): al «sì, spostala» dopo una pagina con una data,
+# la domanda della politica mostra la data e dice «da una pagina», non l'id della verifica
+b2, s10, v10, ids10 = brain_vero("b374.db")
+s10.dati.scrivi("UPDATE studio_pagine SET testo = ? WHERE id = ?",
+                ("AVVISO DELLA PROF: la verifica di storia è spostata al 20 novembre.",
+                 list(ids10.values())[0]))
+turno(b2, "spiegami la pagina P1", PP.chiama("studio_pagina_leggi", {"pagina": "P1"}),
+      PP.testo("La pagina dice 20 novembre."))
+dprima = s10.verifica(LEO, v10)["data"]
+r = turno(b2, "sì, spostala", PP.chiama("studio_verifica_sposta", {"verifica": v10,
+                                                                  "data": "2026-11-20"}),
+          PP.testo("Fatto."))
+verifica("«sì, spostala» dopo la pagina: la domanda mostra la data e «da una pagina», non l'id; "
+         "la data non cambia", "20 novembre» viene da una pagina" in r and f"«{v10}»" not in r
+         and s10.verifica(LEO, v10)["data"] == dprima, r)
+s10.close()
 c_o = ctx_di(s9, None)
 o = json.loads(TOOLS.call("studio_verifica_crea", {"azione": "crea", "materia": "storia",
                                                    "data": "venerdì"}, c_o, "ospite"))

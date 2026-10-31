@@ -108,33 +108,50 @@ def argomenti_con_azione(extra: dict, arguments) -> dict:
     return args
 
 
-def studio_dal_nome(name, arguments) -> tuple[str, dict] | None:
+# I tool veri `studio_*`: un nome che comincia con uno di loro («studio_carte_scrivi») è di quel
+# tool, non un'azione di `studio` (revisione della PR #374). Il chiamante aggiunge i nomi del suo
+# registro (anche quelli che verranno)
+STUDIO_VERI = frozenset({"studio_pagina_leggi", "studio_carte", "studio_interroga",
+                         "studio_attivita", "studio_ascolta", "studio_esercizio",
+                         "studio_mappa_consigli"})
+
+
+def studio_dal_nome(name, arguments, veri=()) -> tuple[str, dict] | None:
     """Un nome inventato `studio_<oggetto>_<azione>` (31/10, #373: gemma4 26B chiamava
     `studio_verifica_crea` e la verifica non si creava) → ("studio", argomenti con l'azione):
     l'azione degli argomenti se è un'azione di `studio`, altrimenti l'unica azione di `studio`
     fra le parole del nome («crea», «sposta», «salta_oggi»). Correzione della forma di una
     scelta già fatta dal modello (principio 10, regola `tool_nome_azione`). Gli argomenti che
     `studio` non conosce si tolgono. None senza un'azione che esiste, con due azioni diverse nel
-    nome, o per un altro prefisso. Il chiamante controlla prima che il nome non sia un tool vero."""
+    nome, o per un altro prefisso. Il chiamante controlla prima che il nome non sia un tool vero.
+    Revisione della PR #374: None anche se il nome dice un'azione diversa da quella degli
+    argomenti (`studio_verifica_sposta` con «archivia»), e se comincia col nome di un altro tool
+    vero (`studio_carte_scrivi`, `studio_mappa_consigli_x`: `veri` e `STUDIO_VERI`)."""
     n = str(name or "").strip().lower().replace("-", "_").replace(" ", "_")
     if not n.startswith("studio_"):
         return None
+    if any(n.startswith(v + "_") for v in set(STUDIO_VERI) | {str(x) for x in veri or ()}
+           if v != "studio"):
+        return None
     from .studio import AZIONI, PARAMETRI
     args = dict(arguments) if isinstance(arguments, dict) else {}
+    parti = [x for x in n.split("_")[1:] if x]
+    trovate, i = [], 0
+    while i < len(parti):
+        for k in (3, 2, 1):
+            w = "_".join(parti[i:i + k])
+            if len(parti[i:i + k]) == k and w in AZIONI:
+                trovate.append(w)
+                i += k
+                break
+        else:
+            i += 1
+    trovate = list(dict.fromkeys(trovate))
     a = str(args.get("azione") or "").strip().lower()
-    if a not in AZIONI:
-        parti = [x for x in n.split("_")[1:] if x]
-        trovate, i = [], 0
-        while i < len(parti):
-            for k in (3, 2, 1):
-                w = "_".join(parti[i:i + k])
-                if len(parti[i:i + k]) == k and w in AZIONI:
-                    trovate.append(w)
-                    i += k
-                    break
-            else:
-                i += 1
-        trovate = list(dict.fromkeys(trovate))
+    if a in AZIONI:
+        if trovate and trovate != [a]:
+            return None                      # il nome e gli argomenti dicono due azioni
+    else:
         if len(trovate) != 1:
             return None
         a = trovate[0]
@@ -144,13 +161,13 @@ def studio_dal_nome(name, arguments) -> tuple[str, dict] | None:
     return "studio", args
 
 
-def nome_e_argomenti(name, arguments) -> tuple[str, dict] | None:
+def nome_e_argomenti(name, arguments, veri=()) -> tuple[str, dict] | None:
     """Il tool vero e gli argomenti di un nome inventato con l'azione dentro: `sviluppo_<azione>`
     (10/10) e `studio_<…>_<azione>` (31/10, #373); None per gli altri."""
     conv = nome_con_azione(name)
     if conv is not None:
         return conv[0], argomenti_con_azione(conv[1], arguments)
-    return studio_dal_nome(name, arguments)
+    return studio_dal_nome(name, arguments, veri)
 NOME_DISTANZA_MAX = 2
 NOME_LUNGHEZZA_MIN = 6
 NOME_SUGGERIMENTI_MAX = 4
@@ -275,7 +292,7 @@ class ToolRegistry:
         completano (la proposta in sospeso di lavoro_affida)."""
         spec = self._tools.get(name)
         if spec is None:
-            conv = nome_e_argomenti(name, arguments)
+            conv = nome_e_argomenti(name, arguments, self._tools)
             if conv is not None and self._tools.get(conv[0]) is not None:
                 spec, arguments = self._tools[conv[0]], conv[1]
             else:
@@ -328,7 +345,7 @@ class ToolRegistry:
             # nome vicino (`sviluppo_chiudi` è a una lettera da sviluppo_chiedi); dal 31/10
             # (#373) `studio_verifica_crea` e simili: studio con l'azione. Permessi e politica
             # qui sotto sono quelli del tool vero
-            conv = nome_e_argomenti(name, arguments)
+            conv = nome_e_argomenti(name, arguments, self._tools)
             if conv is not None and self._tools.get(conv[0]) is not None:
                 note_rule(ctx, "tool_nome_azione")
                 name, spec = conv[0], self._tools[conv[0]]
