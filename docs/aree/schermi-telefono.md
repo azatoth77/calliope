@@ -1998,6 +1998,37 @@ service worker `calliope-telefono-pagina-v22` (la v21 era già della #309) con `
 canvas, non URL blob (la CSP del telefono li vieta per le immagini). Il resto, coi controlli del
 server e le misure, nell'area [studio](studio.md).
 
+## Il corpo letto prima di chiudere: niente reset sotto carico (30/10, issue #274, ramo `issue-274-raccolte-reset`)
+
+Sotto carico (`prove/manuali/carico.py prova_raccolte.py --corsie 3 --giri 8 --carico 16`) `prova_raccolte`
+cadeva in 8–10 giri su 24 con `ConnectionResetError` (WinError 10054) dentro `chiedi`, su richieste diverse,
+anche `/api/accedi`. La causa è nel server: `urllib` di Python 3.14 manda le intestazioni e il corpo con due
+`send`, e un endpoint che risponde senza leggere il corpo (`/api/accedi` non lo legge mai; i rifiuti 401,
+403, 413 e 429 rispondono prima) faceva chiudere a uvicorn la connessione con il corpo ancora in arrivo. Con
+dati non letti la chiusura diventa un RST (Windows e Linux), e il client che non ha ancora letto la risposta
+la perde. Misura sul portatile, 3000 richieste in fila con 20 processi di carico: 29 reset col ciclo
+proactor (quello di serie su Windows), 2508 col ciclo a selettori; dopo la correzione 0 e 0.
+
+Correzione: il middleware `_LeggiIlResto` (`schermi/server.py`, il più esterno) legge il resto del corpo
+prima dell'ultima parte della risposta, solo per un corpo JSON con `Content-Length` fino a 64 kB
+(`CORPO_RESTO_MAX`) e al più per 2 s (`CORPO_RESTO_S`); gli invii grossi o lenti, come le foto dello Studio
+(`application/octet-stream`), restano alle regole dei loro endpoint. Vale anche per i telefoni veri, che
+perdevano allo stesso modo un 401 o un 429. Dopo la correzione, con `carico.py` (3 corsie, 8 giri, 16
+processi): `prova_raccolte` 48 giri senza un reset; `prova_pagina_documenti`, `prova_pagina_ufficio` e
+`prova_pagine_cose` 24 su 24 ciascuna. Nelle stesse corse `prova_raccolte` cadeva nell'ultimo minuto prima
+di mezzanotte (il promemoria «fra un minuto» è di domani): le tessere ora girano alle 12:00
+(`prove.orologio.ora_del_giorno`).
+
+Limiti noti (revisione della PR #331): con `Expect: 100-continue` il resto non si legge (il corpo arriva
+solo dopo il «100 Continue», e su un rifiuto aspettarlo vorrebbe dire 2 s per niente), quindi un client che lo
+manda lo stesso può ancora vedere il reset; e un 401 o un 403 su una foto mandata come JSON in base64 oltre i
+64 kB può ancora finire in un reset, perché un corpo così grande non si legge apposta.
+
+Prova: `prove/prova_raccolte.py`, sezione 3b (il middleware a secco con i contrari: JSON letto, corpo già
+letto, octet-stream, oltre il tetto, senza `Content-Length`, corpo lento lasciato dopo il tempo; sul server
+vero il corpo mandato a parte → 401 intero senza reset, e senza il corpo la chiusura solo dopo averlo
+aspettato, che senza la correzione cade).
+
 ## Numeri riusati: tre resti dopo la PR #270 (30/10, issue #275, ramo `issue-275-schermi-id-riusati`)
 
 Il numero di uno schermo si riusa dopo una revoca (#266); l'identità è il numero con l'istante
@@ -2023,3 +2054,100 @@ Prova: `prove/prova_agenda_pagina.py`, `elementi_in_coda` (il tocco in coda con 
 contrario, la risposta scritta, `evento_a` e `invia_a` con l'istante di prima, la corsa simulata con
 `abbinati()` che rilegge l'elenco dopo averlo dato vecchio per `invia` e `invia_a`, che senza il controllo
 nel lock cade, e `ascolto` con l'hub che toglie un posto) e il server che mette l'istante nell'elemento.
+
+## Cambio di proprietario dello stesso schermo (31/10, issue #338, ramo `issue-338-schermi-proprietario`)
+
+Trovato nella revisione della PR #332 leggendo il codice, poi **riprodotto** con
+`prove/prova_schermi_proprietario.py` prima di correggere. «Rendilo personale di Bianca»
+(`tools/schermi.py`) e il satellite reso personale da terminale (`ServerSatelliti._allinea_schermo`)
+lasciano lo stesso numero e lo stesso istante dell'abbinamento, quindi per l'hub lo schermo restava
+quello di prima. Sul codice di prima la prova dava, per tutte e due le strade:
+
+- la scheda personale di Dario nella cronologia in memoria tornava alla pagina di Bianca al
+  collegamento (anche nel benvenuto vero del flusso SSE): `collega` toglieva le schede personali solo
+  se lo schermo non aveva più un proprietario;
+- la risposta scritta e il tocco di Dario ancora in coda (lista ed esito) andavano allo schermo di
+  Bianca, e la risposta finiva anche nella cronologia su disco di Bianca;
+- la pagina aperta di Dario restava collegata e riceveva le schede di Bianca;
+- le corse fra `abbinati()` e il lock in `invia`, `invia_a` ed `_a_personali` (la scheda «Conversazione»,
+  `apri_pagina`) consegnavano ciò che era di Dario.
+
+**La correzione: il proprietario fa parte dell'identità** (`Schermi.identita` = numero, istante,
+proprietario). L'altra strada, svuotare coda e cronologia al cambio, non chiude un turno già in corso
+(la risposta arriva dopo il cambio) né le corse col lock, e la coda dell'ingresso è del ciclo. Con
+l'identità invece valgono da sole le difese della #275:
+
+- il server mette negli elementi in coda anche `schermo_proprietario`; `archivio.di_quale_schermo` lo
+  passa come `proprietario` a `Schermi.schermo`, `valido`, `invia_a` ed `evento_a` (il segnaposto
+  `QUALUNQUE` vuol dire «non controllare», None «schermo di stanza»);
+- `_identita_cambiate` vede anche un proprietario diverso. `_schermi_via` svuota cronologia, traccia,
+  «Scarica», posti nei giochi e la vista dello Studio di quel numero. Le pagine con l'identità di prima
+  ricevono il nuovo evento **«proprietario»**: non è «revocato», perché il token vale ancora. La pagina
+  (`schermo.js`) svuota ciò che mostra e rifà l'accesso (*[storico: fino alla revisione della PR #341; dal 31/10 sera si ricarica da capo, vedi sotto]*); il flusso del server si chiude. Il controllo del
+  ping manda «proprietario» anche a una pagina che si fosse persa l'evento;
+- `_stesso` e `_sue` confrontano anche il proprietario. `collega` con una riga letta prima del cambio non
+  dà la cronologia e manda «proprietario». `_a_personali` e `contesto` consegnano solo alle pagine dello
+  schermo di adesso;
+- chi sceglie gli schermi personali da un elenco e poi chiama `invia_a` passa l'identità letta (`cassetto`,
+  `sviluppo`, `conoscenti`, `cruscotto`, `pulisci_schede`, `aggiorna`);
+- il tool e `_allinea_schermo` chiamano `abbinati()` subito dopo il cambio, così la pagina di prima riceve
+  l'evento adesso e non alla scheda dopo.
+
+I due **difetti bassi** della revisione della PR #332, chiusi:
+
+1. `abbinati()` aggiorna le identità e fa `_schermi_via` prima di pubblicare l'elenco in cache. Prima, una
+   scheda legittima per lo schermo appena riabbinato poteva perdersi in quell'istante: la riga era nuova e
+   `_identita` ancora vecchia. Una lettura con una versione più vecchia dell'ultima non sostituisce più
+   identità e cache.
+2. L'aggiornamento della scheda pubblica del tocco porta l'identità dello schermo d'origine
+   (`Mittente.schermo_identita`, dal ciclo). Lo schermo del tocco riceve solo se è ancora quello; gli altri
+   ricevono con l'identità letta con l'elenco.
+
+**La nota su `per_schermo`** era un difetto vero, e ne nascondeva un secondo. `Collegamento.schermo_id`
+resta al satellite anche quando il suo schermo viene revocato e il numero passa a un telefono nuovo.
+Una frase scritta da quel telefono veniva quindi detta a voce dal satellite di prima, in un'altra stanza,
+che diventava anche l'attivo per il follow-up. E `_allinea_schermo` avrebbe cambiato il proprietario del
+telefono nuovo. Ora il collegamento tiene anche l'istante (`schermo_creato`): `per_schermo` e
+`_allinea_schermo` valgono solo se la riga con quel numero è ancora la stessa, cioè stesso istante e,
+quando la riga lo dice, stesso satellite (`_schermo_suo`). Altrimenti niente voce e niente cambio.
+
+Le pagine che si ricollegano dopo l'arresto del server, col token rinnovato, col flusso riaperto o con lo
+stesso proprietario rimesso (dall'archivio, dal tool «è già personale», dal satellite) non ricevono
+«proprietario» e ritrovano la loro cronologia (contrari nella prova). Da condiviso a personale la pagina
+della stanza rifà l'accesso e la cronologia riparte vuota. Non toccati: lo Studio (`studio/`), dove la
+vista è solo tolta dall'hub, e il middleware `_LeggiIlResto` del server (PR #331 in parallelo).
+
+Prova: `prove/prova_schermi_proprietario.py`. Le altre prove degli schermi restano verdi; i finti di
+`invia_a` in `prova_cassetto`, `prova_raccolte`, `prova_stanza_conoscenti` e `prova_searxng_aggiorna`
+accettano l'identità.
+
+**Revisione della PR #341** (31/10 sera). Restavano due strade, ora chiuse:
+
+1. **La pagina aperta teneva Le mie cose e lo Studio del proprietario di prima.** Riprodotto nel
+   browser: Dario su `#/cose/agenda`, lo schermo diventa di Bianca, e dopo il nuovo accesso il
+   promemoria di Dario restava, con tessere e conti. Lo stesso valeva per Documenti, Ufficio,
+   Cassetto, la ricerca, la pagina dello Studio e le sezioni del telefono. All'evento
+   «proprietario» la pagina ora **si ricarica da capo** (`ricaricaDaCapo`, poi `location.reload()`),
+   senza il percorso di prima. Il token resta salvato. Se il browser non lo tiene (storage bloccato),
+   torna nel frammento `#t=`, che non va mai al server. Prova nel browser su PC e telefono:
+   `prove/prova_schermi_proprietario_pagina.py`. Al posto del controllo sulla sola stringa di
+   `schermo.js` c'è questa prova, che cade col codice di prima.
+2. **Il benvenuto di `/eventi` usava la riga di prima.** Lo schermo poteva cambiare mentre `/eventi`
+   preparava la ripresa. Allora il benvenuto portava la conversazione e il contesto di Dario, e
+   «Scarica» della chat restava registrato per lui. Le correzioni:
+   - `collega` segna la pagina accettata (`_Connessione.accettata`);
+   - conversazione e contesto si calcolano solo per una pagina accettata;
+   - subito prima del benvenuto si ricontrolla `valido(id, creato, proprietario)`, e se non torna
+     parte solo «proprietario» (o «revocato»);
+   - `registra_chat` ricontrolla l'identità nel lock, e la voce «chat» di «Scarica» ha
+     `solo_persona`. Lo stesso controllo vale in `chat_nuovi`.
+
+Nello stesso giro:
+- `pulisci_schede` tocca solo gli schermi ancora della persona (`_stesso`) e le loro pagine (`_sue`);
+- i posti dei giochi tengono l'identità dello schermo (`Posto.identita`). `Giochi._evento` e
+  `Giochi._invia` la passano a `evento_a` e `invia_a`, invece di non controllarla.
+
+**Le sessioni restano `(id, creato)`**, senza il proprietario. Dopo il cambio la sessione della
+pagina vale per il nuovo proprietario: il dispositivo è suo, e ogni richiesta legge la riga di adesso
+(`_schermo_sessione`), quindi l'elemento in coda nasce con il proprietario nuovo. Ciò che la pagina
+mostrava prima lo toglie il ricaricamento.

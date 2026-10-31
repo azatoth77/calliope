@@ -2508,7 +2508,9 @@ class Sviluppi:
             card = self.scheda(sv)
             for s in hub.abbinati():
                 if s.get("proprietario") == sv.persona:
-                    hub.invia_a(s["id"], card)
+                    # Con l'identità letta adesso (#338): passato a un'altra persona, non va
+                    hub.invia_a(s["id"], card, creato=s.get("creato"),
+                                proprietario=s.get("proprietario"))
         except Exception as e:  # noqa: BLE001 — lo schermo non ferma niente
             self.log(f"[SVILUPPO] scheda non inviata agli schermi: {type(e).__name__}: {e}")
 

@@ -7,7 +7,13 @@ pulizia, conversazione corrente su disco), la compressione (soglie, ciclo separa
 riassume → pulisce, riassunto subito dopo il prompt, turni intatti e azione in sospeso, soglia
 dura con i tagli, il riassunto della voce che cede quando qualcuno parla), la fine della
 conversazione con il riassunto di chiusura e la ripresa, i tool conversazione_cerca e
-conversazioni_dimentica, «ricominciamo». Niente rete: backend, riassuntori ed embedding finti."""
+conversazioni_dimentica, «ricominciamo». Niente rete: backend, riassuntori ed embedding finti.
+
+L'ora (30/10, issue #313): le scene stanno minuti o ore prima di adesso e i controlli dicono
+«oggi» o «ieri»; subito dopo la mezzanotte una scena di venti minuti fa è di ieri, e la prova
+cadeva (00:01 del 30/10). La prova gira con `time.time()` alle 12:00 di oggi
+(`prove.orologio.ora_del_giorno`); `prova_mezzanotte` controlla apposta le etichette a cavallo
+della mezzanotte."""
 
 import json
 import tempfile
@@ -27,6 +33,7 @@ from calliope.tools.builtin import build_registry
 from calliope.tools.conversazioni import (NOTA, _conversazione_cerca, _conversazioni_dimentica,
                                           quando_detto)
 from calliope.wakeword import nuova_conversazione
+from prove.orologio import adesso_alle, ora_del_giorno
 
 errori = 0
 
@@ -1200,20 +1207,73 @@ def prova_ripetuta():
     verifica("contrario: rete spenta → come prima", parla(b, "E quindi?") == NOLAN)
 
 
-prova_oggetto()
-prova_ripetuta()
-prova_conversazione_nuova()
-prova_dopo_la_pausa()
-prova_luogo_funzione()
-prova_fonte()
-prova_turni()
-prova_archivio()
-prova_brain_archivio()
-prova_compressione()
-prova_fine_e_ripresa()
-prova_tool()
-prova_cronologico()
-prova_non_so()
-prova_varie()
+# ─────────────────────────── 10. a cavallo della mezzanotte (30/10, #313) ───────────────────────────
+def prova_mezzanotte(giorno=None):
+    """Le etichette a un adesso fisso, `giorno` alle 00:00:30, e il periodo detto a voce contato
+    dallo stesso adesso delle etichette (revisione della PR #329). Si prova anche il giorno dopo
+    il cambio dell'ora (26/10/2026 e 29/03/2027): «ieri» si conta dalla data, mai togliendo
+    86400 secondi, che quel giorno porta a un'ora diversa."""
+    from calliope.tools.conversazioni import _periodo
+    import datetime
+    giorno = giorno or datetime.date.today()
+    ieri = giorno - datetime.timedelta(days=1)
+    nome = f"mezzanotte del {giorno.isoformat()}"
+    adesso = adesso_alle(0, 0, giorno, secondi=30)
+    verifica(f"{nome}: venti minuti fa è «ieri alle 23:40»",
+             quando_detto(adesso - 1200, adesso) == "ieri alle 23:40",
+             quando_detto(adesso - 1200, adesso))
+    verifica(f"{nome}: venti secondi fa è «oggi alle 0:00»",
+             quando_detto(adesso - 20, adesso) == "oggi alle 0:00")
+    verifica(f"{nome}: ieri alla stessa ora è «ieri alle 0:00»",
+             quando_detto(adesso_alle(0, 0, ieri, secondi=30), adesso) == "ieri alle 0:00",
+             quando_detto(adesso_alle(0, 0, ieri, secondi=30), adesso))
+    due = giorno - datetime.timedelta(days=2)
+    verifica(f"{nome}: due giorni fa ha la data",
+             quando_detto(adesso_alle(0, 1, due), adesso).startswith(f"il {due.day} "))
+    verifica(f"{nome}: un periodo a cavallo dice dalle… a…",
+             _periodo(adesso - 1200, adesso - 20, adesso)
+             == "ieri dalle 23:40 a oggi alle 0:00", _periodo(adesso - 1200, adesso - 20, adesso))
+    # Il periodo detto a voce dal tool: «ieri» va da ieri a mezzanotte, contato dallo stesso adesso
+    # (finto, time.time()) delle etichette, e non da datetime.now()
+    a = archivio(f"notte-{giorno.isoformat()}.db")
+    c = Conversazione()
+    with ora_del_giorno(0, 0, giorno, secondi=30) as ora:
+        riempi(a, c, "p-dario", "Dario", False, [("Parliamo del lago di Bracciano",
+                                                  "Volentieri.")], quando=ora - 1200)
+        a.attendi()
+        ctx = Ctx(a)
+        r = _conversazione_cerca(ctx, "lago", quando="ieri")
+        verifica(f"{nome}: «ieri» trova la conversazione di venti minuti fa",
+                 r["ok"] and r["risultati"]
+                 and r["risultati"][0]["quando"] == "ieri alle 23:40" and "periodo" not in r,
+                 json.dumps(r, ensure_ascii=False)[:300])
+        r = _conversazione_cerca(ctx, "lago", quando="oggi")
+        verifica(f"contrario, {nome}: «oggi» non la trova nel periodo e lo dice («niente oggi»)",
+                 str(r.get("periodo", "")).startswith("niente oggi"),
+                 json.dumps(r, ensure_ascii=False)[:300])
+    a.close()
+
+
+# Tutta la prova a un'ora nota di oggi (#313): le scene «venti minuti fa» restano di oggi
+with ora_del_giorno(12, 0):
+    prova_oggetto()
+    prova_ripetuta()
+    prova_conversazione_nuova()
+    prova_dopo_la_pausa()
+    prova_luogo_funzione()
+    prova_fonte()
+    prova_turni()
+    prova_archivio()
+    prova_brain_archivio()
+    prova_compressione()
+    prova_fine_e_ripresa()
+    prova_tool()
+    prova_cronologico()
+    prova_non_so()
+    prova_varie()
+# Oggi, e il giorno dopo il cambio dell'ora (fine e inizio dell'ora legale)
+import datetime as _dt  # noqa: E402
+for _giorno in (None, _dt.date(2026, 10, 26), _dt.date(2027, 3, 29)):
+    prova_mezzanotte(_giorno)
 print(f"\n{errori} errori" if errori else "\nTutto bene")
 sys.exit(1 if errori else 0)

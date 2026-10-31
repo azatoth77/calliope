@@ -52,19 +52,22 @@ def appena_acceso(*moduli, inizio: float = 5.0):
         yield finto
 
 
-def adesso_alle(ore: int, minuti: int = 0, giorno: datetime.date | None = None) -> float:
-    """L'epoch di `giorno` (di serie oggi) alle `ore`:`minuti`, ora locale."""
+def adesso_alle(ore: int, minuti: int = 0, giorno: datetime.date | None = None,
+                secondi: int = 0) -> float:
+    """L'epoch di `giorno` (di serie oggi) alle `ore`:`minuti`:`secondi`, ora locale."""
     giorno = giorno or datetime.date.today()
-    return datetime.datetime(giorno.year, giorno.month, giorno.day, ore, minuti).timestamp()
+    return datetime.datetime(giorno.year, giorno.month, giorno.day, ore, minuti,
+                             secondi).timestamp()
 
 
 @contextlib.contextmanager
-def ora_del_giorno(ore: int, minuti: int = 0, giorno: datetime.date | None = None):
+def ora_del_giorno(ore: int, minuti: int = 0, giorno: datetime.date | None = None,
+                   secondi: int = 0):
     """Dentro il blocco `time.time()` di tutto il processo parte da `giorno` (di serie oggi)
     alle `ore`:`minuti` e avanza come quello vero. Solo `time.time()`: `datetime.now()` e
     `time.monotonic()` restano veri (le scene che dipendono dall'ora si scrivono da
     `time.time()`). Rende l'epoch di partenza."""
     vero = time.time
-    scarto = adesso_alle(ore, minuti, giorno) - vero()
+    scarto = adesso_alle(ore, minuti, giorno, secondi) - vero()
     with mock.patch.object(time, "time", lambda: vero() + scarto):
         yield vero() + scarto
