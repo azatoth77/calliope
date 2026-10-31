@@ -9,7 +9,7 @@
   4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
   materiali», sotto); il passo 4.3 (lettura) il 30/10 sul ramo `issue-282-studio-lettura`
   (sezione «La lettura delle pagine», sotto); il passo 4.4 (argomenti e conferma) il 30/10 sul
-  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33); la seconda parte (la generazione dal lettore) il 30/10 sera sul ramo `issue-246-studio-carte-genera` (punto 34). Il passo 7 (la mappa concettuale, prima parte: scheletro a mano, la mia mappa, a memoria, controllo, PDF) il 30/10 sera sul ramo `issue-247-studio-mappa` (punto 35). La seconda parte (lo scheletro generato dal lettore) il 30/10 sera sul ramo `issue-247-studio-mappa-genera` (punto 36). Il passo 8 (verifica finta e interrogazione dai materiali) il 31/10 sul ramo `issue-248-studio-verifica-finta` (punti 40 e 41).
+  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33); la seconda parte (la generazione dal lettore) il 30/10 sera sul ramo `issue-246-studio-carte-genera` (punto 34). Il passo 7 (la mappa concettuale, prima parte: scheletro a mano, la mia mappa, a memoria, controllo, PDF) il 30/10 sera sul ramo `issue-247-studio-mappa` (punto 35). La seconda parte (lo scheletro generato dal lettore) il 30/10 sera sul ramo `issue-247-studio-mappa-genera` (punto 36). Il passo 8 (verifica finta e interrogazione dai materiali) il 31/10 sul ramo `issue-248-studio-verifica-finta` (punti 40 e 41). Il passo 9 (ripasso da ascoltare) il 31/10 sul ramo `issue-249-studio-ripasso-ascolto` (punto 42).
 - **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -543,6 +543,64 @@ dell'eco della stanza.
     pagine e gli avvisi delle carte. `studio_domande_genera` è **in ombra di serie**. Si passa ad
     «attiva» col banco (fase `prove`, i criteri nel documento d'area) e la rilettura dell'ombra;
     in «attiva» nessuna domanda entra in una prova senza la conferma della persona o del tutore.
+
+
+## Il ripasso da ascoltare (passo 9, #249, 31/10)
+
+42. **Il ripasso da ascoltare legge ciò che la persona ha confermato, con un copione scritto dal
+    codice.** Analisi nel commento della #249; i dettagli nel documento d'area.
+    - **Il testo.** Le pagine lette degli argomenti del piano (ogni pagina una volta,
+      nell'ordine dell'elenco, in parti di al più `PARTE_MAX_CAR`) e le carte attive (domanda,
+      4 secondi, risposta). Nessun modello scrive il testo: il riassunto del lettore (in ombra di
+      serie, con la guardia, i controlli frase per frase e una fase del banco) è una seconda parte
+      del passo.
+    - **Il testo per la voce lo ripulisce il codice** (forma, principio 10): via numeri di pagina,
+      elenchi, markdown e `[[ ]]`; formule, sigle, romani e simboli a parole solo nel ripasso
+      (`pronuncia.per_ripasso`). Non si dicono mai le frasi con un indirizzo, col nome di
+      Calliope (anche storpiato, e le altre parole che svegliano in uso), i messaggi per un
+      assistente (anche di un'altra marca), gli annunci della scuola e, sulle pagine con
+      istruzioni, gli ordini; al loro posto una frase del codice (revisione della PR #345).
+    - **Due voci di Piper**: le frasi del codice nella voce di Calliope, il materiale nella «voce
+      del libro» (`studio_ascolta_voce`). Nessuna frase del codice contiene testo delle pagine
+      (niente frasi pronte con dati non fidati); `riferire` non serve, perché nessun modello
+      scrive.
+    - **A voce** il tool `studio_ascolta` (classe «sicuro», **senza fonte non fidata**: il
+      risultato ha solo conti e la frase del codice) prepara la lettura, e il ciclo la fa dopo la
+      risposta, a pezzi di 3 frasi. Il guardiano del nome è quello della risposta: half-duplex,
+      niente trascrizioni mentre legge, «Calliope, basta» la ferma. L'audio dell'interruzione
+      diventa un turno solo con la voce di una persona registrata: il nome detto dal libro ferma
+      e basta. Col satellite decide lui, con l'impronta della voce della stessa veglia; senza,
+      il seme vale (seconda revisione della PR #345). Un messaggio scritto arrivato intanto la ferma come un timer (revisione della PR
+      #345). Il testo non entra nella
+      storia, negli eventi, nello schermo né nel registro (`Uscita.leggi`, `turno_lettura`).
+      «Riprendi» e «ripeti» (dall'inizio del paragrafo) usano la posizione delle frasi sentite per
+      intero, in memoria 2 ore; nei dati del turno una riga coi soli numeri.
+    - **Sullo schermo** «Ascolta» suona il WAV di una parte da un URL blob preso con la sessione,
+      con pausa, −15 s, velocità e «Scarica». Si ferma quando Calliope ascolta, pensa o parla, e
+      riparte da sola entro 2 minuti. Sul telefono, mentre suona, la stanza vale «Calliope
+      parla»; sul PC legato a un satellite la sua stanza va in pausa col motivo «ripasso», mai
+      sopra una pausa scelta da una persona.
+    - **Durante una prova aperta il ripasso si blocca per tutti**, anche per il tutore (l'audio si
+      sente nella stanza): il tool rifiuta, la lettura a voce si ferma al pezzo dopo, le parti e
+      l'audio dello schermo no, la pagina butta gli audio in memoria. Alla consegna torna. Un file
+      salvato con «Scarica» resta sul dispositivo, come il libro.
+    - **L'audio dello schermo è una cache del testo** (`studio_cartella/ascolta/`):
+      `studio_ascolta_giorni` (7) dall'ultimo ascolto, mai oltre la verifica, via con
+      «dimentica» (non le archiviate) e `--svuota`; un file finito dopo che la verifica è andata
+      via non si tiene. I minori come gli adulti (0031), gli ospiti mai. L'audio a voce non si
+      salva.
+    - **Interruttori**: `studio_ascolta` attiva di serie con lo Studio (nessun modello),
+      `studio_ascolta_voce`, `studio_ascolta_giorni`. Schema «studio» invariato (10).
+
+    Alternative scartate:
+    - il riassunto del lettore subito nel ripasso: il controllo del codice è di forma, non di
+      significato;
+    - il materiale nella voce di Calliope: la pagina sembrerebbe parlare per lei;
+    - un indirizzo con un gettone per l'audio: il lettore ne fa molte richieste, e il gettone
+      finirebbe nell'URL;
+    - lasciare suonare il ripasso durante una prova, «tanto è il libro»: l'audio passa nella stanza
+      e può dare le risposte;
+    - la posizione su disco: è una comodità di pochi minuti, non un dato da tenere.
 
 ## Da completare con i passi 4.3–4.5
 

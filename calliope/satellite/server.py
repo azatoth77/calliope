@@ -80,10 +80,17 @@ def contesto_tls(cfg):
 
 class SeedRemoto(list):
     """Il barge-in è avvenuto sul satellite, che tiene l'audio con il nome: qui basta un
-    segnale vero da passare a `listen(seed=…)`, che lo chiede al satellite."""
+    segnale vero da passare a `listen(seed=…)`, che lo chiede al satellite. Dal 31/10 (seconda
+    revisione della PR #345) porta anche il motivo e, se in questa veglia il satellite ha chiesto
+    l'impronta della voce (livello B), il suo esito: chi lo usa (il ripasso da ascoltare) decide
+    senza l'audio, che resta sul satellite."""
 
-    def __init__(self):
+    remoto = True
+
+    def __init__(self, motivo=None, voce_ok=None):
         super().__init__([True])
+        self.motivo = motivo
+        self.voce_ok = voce_ok
 
 
 def _numero(v, minimo: float, massimo: float, predefinito: float = 0.0) -> float:
@@ -1601,6 +1608,7 @@ class AscoltoRemoto:
                      and coll.eco <= self.cfg.barge_in_echo_max)
         coll.invia(tipo="veglia", id=wid, livello_b=livello_b)
         fine = None
+        ultimo_ok = None            # l'esito dell'impronta chiesta in questa veglia (livello B)
         while True:
             if stop.is_set() and fine is None:
                 coll.invia(tipo="fine_veglia", id=wid)
@@ -1619,11 +1627,14 @@ class AscoltoRemoto:
                 continue
             if tipo == "voce":
                 ok = bool(voice_ok(P.da_pcm(d["pcm"]))) if voice_ok is not None else False
+                ultimo_ok = ok
                 coll.invia(tipo="esito_voce", id=wid, ok=ok)
             elif tipo == "interruzione":
                 print(f"\n   [BARGE-IN] {d.get('motivo') or 'interrotta'} sul satellite",
                       flush=True)
-                return SeedRemoto()
+                motivo = d.get("motivo")
+                # «tocco»: «Parla» dalla pagina dello schermo personale, cioè una persona
+                return SeedRemoto(motivo, True if motivo == "tocco" else ultimo_ok)
             elif tipo == "veglia_finita":
                 return None
 

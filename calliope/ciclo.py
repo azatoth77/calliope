@@ -24,6 +24,7 @@ import json
 import re
 import threading
 import time
+import types
 import wave
 from pathlib import Path
 
@@ -1253,6 +1254,7 @@ class Ciclo:
         self._rispondi(t)
         self._registra_risposta(t)
         self._dopo_la_risposta(t)
+        self._leggi_ripasso(t)
         return None
 
     def _dialogo_prima_di_brain(self, t, fase, foto):
@@ -4264,6 +4266,13 @@ class Ciclo:
         """Il modello risponde in streaming, frase per frase verso la voce (con i controlli
         di ciò che dice e, per minori e ospiti, il guardiano)."""
         s, cfg, brain, speaker, u = self.s, self.s.cfg, self.brain, self.speaker, self.uscita
+        # Il ripasso da ascoltare (31/10, #249) vale solo per la risposta che lo chiede: uno
+        # rimasto da un giro finito con un errore non si legge dopo un'altra domanda
+        if getattr(self, "tool_ctx", None) is not None:
+            try:
+                self.tool_ctx.ascolta = None
+            except AttributeError:
+                pass
         # In compagnia, una frase senza il nome nella finestra d'ascolto: il giudizio «rivolta a
         # Calliope» parte adesso, in parallelo alla risposta (09/10, calliope/rivolta.py)
         t.rivolta = self._avvia_rivolta(t)
@@ -5034,6 +5043,102 @@ class Ciclo:
                  f"frasi, una alla volta. {speaker_ctx.enroll_prompt}", "registrazione")
             u.aspetta()
         self.awake_until = time.monotonic() + cfg.followup_s
+
+    def _leggi_ripasso(self, t):
+        """Il ripasso da ascoltare chiesto in questa risposta (31/10, passo 9, #249,
+        `studio_ascolta`): la lettura a pezzi dopo la risposta (`studio/ascolta.leggi`), fuori
+        dalla conversazione, con la voce del libro per il materiale. Half-duplex come la
+        risposta: mentre legge si ascolta solo il nome (`_ascolta_il_nome`, livelli A e B),
+        niente trascrizioni; «Calliope, basta» la ferma e la frase dopo il nome va al giro
+        successivo come ogni barge-in, ma solo se nell'audio dell'interruzione c'è la voce di una
+        persona registrata (revisione della PR #345): la voce del libro che dice il nome, anche
+        storpiato, ferma la lettura e basta, senza diventare un turno. Prima di ogni pezzo una
+        prova aperta, gli orari, lo Studio spento, un annuncio in coda o un messaggio scritto
+        arrivato intanto la fermano (la posizione resta). Nel registro dei turni solo i conti."""
+        ctx = getattr(self, "tool_ctx", None)
+        lettura = getattr(ctx, "ascolta", None) if ctx is not None else None
+        if lettura is None:
+            return
+        ctx.ascolta = None
+        st = getattr(self.s, "studio", None)
+        speaker, u = self.speaker, self.uscita
+        if (st is None or not isinstance(lettura, dict) or t.watch.get("seed") or t.non_rivolta
+                or getattr(speaker, "muto", False)):
+            return
+        from .studio import ascolta as ascolta_mod
+        cfg = self.s.cfg
+        voce = str(getattr(cfg, "studio_ascolta_voce", "") or "")
+        voce = voce if voce and Path(voce).is_file() else None
+
+        def controlla():
+            if self._annunci_pronti():
+                return ("annuncio", "Metto in pausa il ripasso: c'è un avviso.")
+            # Un messaggio scritto da uno schermo, o la sveglia del ciclo (revisione della PR
+            # #345): non aspetta la fine della lettura, che si ferma come per un timer
+            ingresso = getattr(self, "ingresso", None)
+            sveglia = getattr(self, "sveglia", None)
+            if ingresso is not None and not ingresso.vuoto():
+                return ("messaggio", "Metto in pausa il ripasso: è arrivato un messaggio.")
+            if sveglia is not None and sveglia.is_set():
+                # Un avviso di un'altra corsia o un tocco: niente «messaggio» (seconda revisione)
+                return ("sveglia", "Metto in pausa il ripasso.")
+            return st.ascolto_vale(lettura)
+
+        w = types.SimpleNamespace()
+        self._ascolta_il_nome(w)
+        try:
+            esito = ascolta_mod.leggi(lettura, u, speaker, controlla=controlla,
+                                      voce_libro=voce, log=lambda m: print(m, flush=True))
+        except Exception as e:  # noqa: BLE001 — la lettura non ferma il ciclo
+            print(f"   [STUDIO] ripasso a voce interrotto da un errore: {type(e).__name__}: {e}",
+                  flush=True)
+            esito = {"pos": int(lettura.get("da", 0)), "motivo": "errore", "frasi": 0,
+                     "sentite": 0}
+            try:
+                u.turno_lettura()
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            w.watch_stop.set()
+            if w.watcher is not None:
+                w.watcher.join()
+        st.ascolto_fermo(lettura, esito)
+        if self.rec is not None:
+            # Solo i conti: mai il testo delle pagine (decisione 0035, punti 6 e 42)
+            self.rec["ripasso"] = {k: esito.get(k) for k in ("motivo", "frasi", "sentite")}
+            self.rule("studio_ripasso_letto")
+        seme = w.watch.get("seed")
+        if seme and self._seme_di_persona(seme):
+            # Interrotta da una persona registrata: si ascolta subito, dall'audio col nome
+            self.barge_seed = seme
+        elif seme:
+            # Il nome sentito senza la voce di una persona registrata: era il libro (o la TV).
+            # La lettura si ferma e basta: niente turno dall'audio del materiale
+            if self.rec is not None:
+                self.rule("studio_ripasso_fermato_senza_voce")
+            print("   [STUDIO] ripasso fermato dal nome senza una voce registrata: niente turno",
+                  flush=True)
+        self.awake_until = time.monotonic() + cfg.followup_s
+
+    def _seme_di_persona(self, seme) -> bool:
+        """L'audio dell'interruzione è di una persona registrata (`known_voice`, come il barge-in
+        di livello B)? Nel dubbio no: il ripasso resta fermo e la persona richiama.
+
+        Col satellite (`SeedRemoto`, seconda revisione della PR #345) l'audio resta lì e decide
+        lui: l'esito dell'impronta della voce, se in questa veglia l'ha chiesta (livello B, o un
+        tocco di «Parla»); senza esito il seme si tiene, perché il libro non dice più il nome
+        (`ascolta.nome_dentro`) e il satellite che suona ignora già il proprio nome. Così
+        «Calliope, ripeti» arriva."""
+        if getattr(seme, "remoto", False):
+            esito = getattr(seme, "voce_ok", None)
+            return True if esito is None else bool(esito)
+        try:
+            parti = [np.asarray(x).reshape(-1) for x in seme if x is not None]
+            if not parti:
+                return False
+            return bool(self.known_voice(np.concatenate(parti)))
+        except Exception:  # noqa: BLE001
+            return False
 
     def _storia_come_detta(self, t):
         """Nella storia la risposta di Calliope è ciò che la persona ha sentito (10/10, giro

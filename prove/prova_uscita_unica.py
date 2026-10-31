@@ -37,7 +37,9 @@ from calliope.eventi.uscita import Uscita, per_voce  # noqa: E402
 
 RADICE = Path(__file__).resolve().parent.parent
 PERMESSI = {Path("calliope/eventi/uscita.py"), Path("calliope/tts.py")}
-VIETATI = {"say", "say_cached", "chime", "suono", "suono_ascolto", "sintetizza", "start_turn"}
+VIETATI = {"say", "say_cached", "chime", "suono", "suono_ascolto", "sintetizza", "start_turn",
+           # Il silenzio in coda del ripasso da ascoltare (31/10, #249): solo da Uscita.pausa
+           "silenzio"}
 VOCI = {"speaker", "sp", "voce"}
 STREAM = {"stream_reply", "stream_continuation"}
 LETTORI_STREAM = {"_rispondi", "_ricerca_promessa"}

@@ -111,6 +111,11 @@ Indirizzi:
                                  a memoria, il controllo del codice; «pdf» → application/pdf della
                                  mia mappa. Fuori dalla conversazione come le carte, in ombra solo
                                  chi amministra
+  POST /api/studio/ascolta       «X-Calliope-Sessione», {verifica, azione?, parte?, firma?, suona?}
+                                 → il ripasso da ascoltare (31/10, #249, studio/ascolta.py): senza
+                                 azione le parti; «audio» il WAV di una parte (202 mentre si
+                                 prepara); «suona» il battito mentre suona; 409 con una prova
+                                 aperta
   POST /api/studio/pagina        «X-Calliope-Sessione», byte nudi (octet-stream), i dati in
                                  «X-Calliope-Studio» (URI): una foto di una pagina con i suoi
                                  angoli, o un PDF intero (29/10, #281, studio/pagine.py), nello
@@ -171,6 +176,9 @@ _SICUREZZA = {
     # prova a navigare verso un altro sito lo ferma questa regola, prima della richiesta
     "Content-Security-Policy": ("default-src 'self'; script-src 'self'; style-src 'self'; "
                                 "img-src 'self' data:; connect-src 'self'; frame-src 'self'; "
+                                # Il ripasso da ascoltare (31/10, #249): l'audio dal blob preso
+                                # con la sessione, come sul telefono
+                                "media-src 'self' blob:; "
                                 "frame-ancestors 'none'; base-uri 'none'; form-action 'none'"),
 }
 
@@ -1937,6 +1945,128 @@ def crea_app(hub: Schermi) -> Starlette:
                                          f'attachment; filename="mappa-{vid}.pdf"'})
         return _json(out)
 
+    # Il ripasso da ascoltare (31/10, passo 9, #249, studio/ascolta.py): le parti, l'audio di una
+    # parte (WAV, preso dalla pagina con la sessione nell'intestazione e suonato da un URL blob:
+    # niente gettoni nell'indirizzo) e il battito mentre suona. Con una prova aperta niente (409)
+    letture_ascolta: dict[int, list[float]] = {}
+    # La pausa della stanza del satellite del PC mentre il ripasso suona: 2 minuti (l'analisi
+    # della #249), rinnovata dal battito di 30 s quando ne restano meno di 75 s; dopo una pagina
+    # chiusa senza «non suona più» scade da sola
+    ASCOLTA_PAUSA_STANZA_MIN = 2.0
+    ASCOLTA_RINNOVA_S = 75.0
+    # Gli schermi che suonano il ripasso per satellite (revisione della PR #345): {sat: {schermo:
+    # ultimo battito}}. La stanza si riprende solo quando nessuno suona più
+    suonano: dict = {}
+    suonano_lock = threading.Lock()
+
+    def stanza_del_ripasso(schermo: dict, suona: bool) -> bool:
+        """Half-duplex sul PC personale legato a un satellite: mentre il ripasso suona la stanza
+        di quel satellite va in pausa con motivo «ripasso» (rinnovata dal battito); quando smette
+        su tutti i suoi schermi si riprende, solo se la pausa è ancora la sua. La pausa scelta da
+        una persona non si tocca mai. True se c'è una pausa del ripasso."""
+        stanza = getattr(getattr(hub, "servizi", None), "stanza", None)
+        sat = schermo.get("satellite")
+        if stanza is None or not sat:
+            return False
+        ora = time.time()
+        with suonano_lock:
+            chi = suonano.setdefault(sat, {})
+            if suona:
+                chi[schermo.get("id")] = ora
+            else:
+                chi.pop(schermo.get("id"), None)
+            for k in [k for k, t in chi.items() if ora - t > 3 * 30.0]:
+                chi.pop(k, None)                 # una pagina chiusa senza dirlo
+            altri = bool(chi)
+        try:
+            p = stanza.stato_pausa(sat)
+            nostra = p is not None and p.get("motivo") == "ripasso"
+            if suona:
+                fino = (p or {}).get("fino")
+                if p is None or (nostra and fino and fino - ora < ASCOLTA_RINNOVA_S):
+                    stanza.pausa(sat, "ripasso", minuti=ASCOLTA_PAUSA_STANZA_MIN)
+                    return True
+                return nostra
+            if nostra and not altri:
+                stanza.riprendi(sat)
+        except Exception as e:  # noqa: BLE001 — la stanza non ferma il ripasso
+            hub.log(f"[STUDIO] pausa della stanza per il ripasso: {type(e).__name__}")
+        return False
+
+    async def studio_ascolta(request: Request):
+        """{verifica, azione?, parte?, firma?, suona?} → senza azione le parti del ripasso
+        (`Studio.ascolto_parti`, anche fuori orario: è una lettura); `audio` il WAV di una parte
+        (200, audio/wav) o 202 {pronto: false, fatto} mentre si prepara (per un minore dentro gli
+        orari); `suona` il battito mentre suona ({prova}). Permessi dello Studio: la persona e il
+        tutore del minore; ospiti mai. Il titolo delle parti è un dato: la pagina usa textContent."""
+        schermo, errore = schermo_personale(request, letture_ascolta, 2 * LETTURE_AL_MINUTO,
+                                            TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 1024)
+        if errore is not None:
+            return errore
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            return errore
+        from ..studio import ascolta as A
+        if A.modo(hub.cfg) != "attiva":
+            return _json({"errore": "Il ripasso da ascoltare qui non è acceso."}, 404)
+        vid, azione = dati.get("verifica"), dati.get("azione")
+        if not _intero(vid) or vid < 1 or azione not in (None, "audio", "suona"):
+            return _json({"errore": "richiesta non valida"}, 400)
+        parte, firma = dati.get("parte"), dati.get("firma")
+        if azione == "audio" and (not _intero(parte) or not 1 <= parte <= 500 or (
+                firma is not None and (not isinstance(firma, str) or len(firma) > 32))):
+            return _json({"errore": "richiesta non valida"}, 400)
+        from .. import minori
+        from ..studio import NonPermesso, NonTrovata
+        if azione == "audio":
+            orario = minori.fuori_orario(prof)
+            if orario:
+                return _json({"errore": minori.frase_fuori_orario(prof, orario),
+                              "codice": "fuori_orario"}, 403)
+
+        def fai():
+            if azione == "suona":
+                suona = bool(dati.get("suona"))
+                try:
+                    prova = st.prova_in_corso(prof, vid) is not None
+                except (NonTrovata, NonPermesso):
+                    raise
+                pausa = stanza_del_ripasso(schermo, suona and not prova)
+                return {"prova": prova, "stanza_in_pausa": pausa}
+            if azione == "audio":
+                return st.ascolto_audio(prof, vid, parte, firma)
+            return st.ascolto_parti(prof, vid)
+        try:
+            out = await asyncio.to_thread(fai)
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        except A.ProvaAperta:
+            return _json({"errore": "C'è una prova in corso: il ripasso torna dopo la consegna.",
+                          "prova": True}, 409)
+        except ValueError:
+            return _json({"errore": "Questa parte non c'è più: ricarico il ripasso.",
+                          "cambiato": True}, 409)
+        if azione != "audio":
+            return _json(out)
+        if out.get("cambiato"):
+            return _json({"errore": "Il ripasso è cambiato: ricarico le parti.", "cambiato": True,
+                          "firma": out.get("firma")}, 409)
+        if out.get("senza_voce"):
+            return _json({"errore": "Qui l'audio del ripasso non si può preparare: chiedimelo a "
+                                    "voce."}, 503)
+        if "file" not in out:
+            return _json({"pronto": False, "fatto": out.get("fatto") or 0.0}, 202)
+        hub.log(f"[STUDIO] ripasso della verifica {vid}: parte {parte} allo schermo")
+        return FileResponse(out["file"], media_type="audio/wav",
+                            headers={"Cache-Control": "no-store",
+                                     "X-Content-Type-Options": "nosniff",
+                                     "Content-Security-Policy": "sandbox",
+                                     "Content-Disposition":
+                                         f'inline; filename="ripasso-{vid}-parte-{parte}.wav"'})
+
     def meta_studio(request: Request):
         """I dati dell'invio da «X-Calliope-Studio» (JSON codificato come URI, al più 2 KB):
         {verifica, materiale?, angoli?, nome?}, o None se non sono validi."""
@@ -2160,6 +2290,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/studio/carte", studio_carte, methods=["POST"]),
         Route("/api/studio/prova", studio_prova, methods=["POST"]),
         Route("/api/studio/mappa", studio_mappa, methods=["POST"]),
+        Route("/api/studio/ascolta", studio_ascolta, methods=["POST"]),
         Route("/api/studio/pagina", studio_pagina, methods=["POST"]),
         # Il rilevatore dei bordi e la pagina dello Studio (29/10, #281), del telefono e del PC
         Route("/bordi.js", file("bordi.js", "text/javascript; charset=utf-8")),

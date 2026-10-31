@@ -70,6 +70,7 @@ from . import dati as D
 from . import piano as P
 from . import padronanza as PD
 from . import resoconto as R
+from .ascolta import Ascolti
 from .mappe import Mappe
 from .prove import Prove
 
@@ -210,9 +211,10 @@ def _data(valore) -> datetime.date:
     return datetime.date.fromisoformat(str(valore).strip()[:10])
 
 
-class Studio(Mappe, Prove):
+class Studio(Mappe, Prove, Ascolti):
     """Lo Studio di questa installazione: un oggetto per processo. Le mappe concettuali (passo 7,
-    #247) sono in `mappe.py`, le domande e le prove (passo 8, #248) in `prove.py`."""
+    #247) sono in `mappe.py`, le domande e le prove (passo 8, #248) in `prove.py`, il ripasso da
+    ascoltare (passo 9, #249) in `ascolta.py`."""
 
     def __init__(self, cfg, registry=None, log=print, adesso=None):
         self.cfg = cfg
@@ -251,7 +253,12 @@ class Studio(Mappe, Prove):
                        # modello nell'orale e quante uguali alla decisione di chi rivede
                        "prove": {"domande": 0, "iniziate": 0, "consegnata": 0, "scaduta": 0,
                                  "annullate": 0, "riviste": 0, "esiti": {}, "proposte": 0,
-                                 "proposte_confrontate": 0, "proposte_uguali": 0}}
+                                 "proposte_confrontate": 0, "proposte_uguali": 0},
+                       # Il ripasso da ascoltare (passo 9, #249): conti, mai il testo
+                       "ascolta": {"letture": 0, "frasi": 0, "sentite": 0, "interrotte": 0,
+                                   "riprese": 0, "ripetute": 0, "fermate": {},
+                                   "bloccate_prova": 0, "parti_schermo": 0,
+                                   "audio_serviti": 0, "saltate": {}}}
         # Il lettore delle pagine (passo 4.3, studio/lettura.py): lo crea `avvia_lettura`
         self.lettore = None
         # Perché non c'è il lettore (passo 4.5, nota della revisione della PR #314): None prima di
@@ -1983,6 +1990,8 @@ class Studio(Mappe, Prove):
         self._sessioni.pop(str(persona or ""), None)
         self._carte_in_corso.pop(str(persona or ""), None)
         self._orali.pop(str(persona or ""), None)
+        # Il ripasso da ascoltare in pausa (passo 9, #249): la posizione va con «dimentica»
+        self.__dict__.get("_ascolti", {}).pop(str(persona or ""), None)
 
     def nota_sessione(self, persona) -> str:
         """La nota per i dati del turno (un dato, non un ordine; principio 10): come regolare
@@ -2044,6 +2053,8 @@ class Studio(Mappe, Prove):
                 "sessione": ({"verifica": sess["verifica"], "conoscenza": sess.get("conoscenza"),
                               "umore": sess.get("umore")} if sess else None),
                 "conoscenza": list(CONOSCENZA), "umori": list(UMORI),
+                # Il ripasso da ascoltare (passo 9, #249): la sezione «Ascolta» c'è se è acceso
+                "ascolta": self.ascolto_acceso(),
                 "prova": not self.per_schermi()}
 
     def _home_verifica(self, chi, vid, di, da_decidere) -> dict:
