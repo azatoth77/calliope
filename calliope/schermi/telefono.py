@@ -21,6 +21,9 @@ Indirizzi (sullo stesso host e porta della pagina degli schermi):
   GET /telefono/ort/<file>       onnxruntime-web (cartella telefono_web), gzip se accettato
   GET /telefono/modelli/<nome>   VAD e wake word: solo con il token di un satellite abbinato
   GET /telefono/calliope-ca.crt  la CA di casa da installare sul telefono (tls.py)
+  POST /telefono/condividi       la condivisione da un'altra app (share_target, 31/10, #298):
+                                 la riceve il service worker; se arriva qui, 303 senza leggere
+                                 il corpo («?condividi=0»)
   GET /telefono/api/stato        cosa c'è e cosa manca (nessun segreto)
   POST /telefono/api/diagnostica «Prova il microfono»: due registrazioni brevi dal telefono
                                  (token del satellite, solo telefoni personali), salvate come
@@ -60,6 +63,8 @@ FILE_PAGINA = {
     "voce.js": "text/javascript; charset=utf-8",
     "microfono.js": "text/javascript; charset=utf-8",
     "schermo-acceso.js": "text/javascript; charset=utf-8",
+    # La condivisione da un'altra app (31/10, #298 parte 3)
+    "condividi.js": "text/javascript; charset=utf-8",
     "sw.js": "text/javascript; charset=utf-8",
     "telefono.css": "text/css; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json",
@@ -356,6 +361,15 @@ def rotte(hub) -> list:
             h["Service-Worker-Allowed"] = "/telefono/"
         return FileResponse(p, media_type=tipo, headers=h)
 
+    async def condividi(request: Request):
+        """La condivisione da un'altra app (31/10, #298 parte 3) arrivata qui invece che al
+        service worker (non ancora attivo, o il certificato non fidato): il server non prende
+        file senza la sessione di uno schermo personale, quindi non legge il corpo e manda la
+        pagina a dire di riprovare. Una strada sola per i file: /api/studio/importa."""
+        return RedirectResponse("/telefono/?condividi=0#/cose", status_code=303,
+                                headers={"Connection": "close", "Cache-Control": "no-store",
+                                         **_BASE})
+
     async def ort(request: Request):
         nome = request.path_params["nome"]
         p = cartella_ort(cfg) / nome
@@ -479,6 +493,7 @@ def rotte(hub) -> list:
         Route("/telefono/calliope-ca.crt", ca),
         Route("/telefono/ort/{nome}", ort),
         Route("/telefono/modelli/{nome}", modello),
+        Route("/telefono/condividi", condividi, methods=["GET", "POST"]),
         Route("/telefono/{nome}", statico),
         WebSocketRoute("/telefono/ws/abbina", ws_abbina),
         WebSocketRoute("/telefono/ws/sessione", ws_sessione),

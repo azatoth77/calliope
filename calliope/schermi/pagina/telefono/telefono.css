@@ -761,3 +761,11 @@ button.grande.secondario { background: transparent; color: var(--accento); borde
 .studio-tolto .studio-testo b { text-decoration: line-through; color: var(--tenue); }
 .studio-rinomina { font: inherit; font-size: 1.05rem; min-height: 2.75rem; padding: 0.3rem 0.6rem; border-radius: 0.6rem;
   border: 1px solid var(--accento); background: var(--pannello); color: var(--testo); width: 100%; box-sizing: border-box; }
+
+/* I file condivisi con Calliope da un'altra app (31/10, #298 parte 3: condividi.js), in cima a Le mie
+   cose: i nomi vanno a capo sempre */
+.condividi { display: flex; flex-direction: column; gap: 0.6rem; margin: 0 0 1rem; padding: 0.9rem 1rem;
+  border-radius: 1rem; background: var(--accento-fondo, #141018); border: 1px solid var(--accento-bordo, #3a3150); }
+.condividi-file { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.condividi-voce { overflow-wrap: anywhere; font-size: 1rem; }
+.condividi h2:focus { outline: none; }

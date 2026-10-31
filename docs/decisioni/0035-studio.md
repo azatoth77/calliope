@@ -844,6 +844,23 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     - un'importazione con tutti i file scelti insieme: ognuno è la sua, così un file rotto o
       fermato non ferma gli altri.
 
+52. **La condivisione dal telefono passa dalla stessa importazione** (#298, parte 3, 31/10). Su
+    Android la PWA installata dichiara uno `share_target` (POST multipart a
+    `/telefono/condividi`, i soli formati dell'importazione): il POST lo prende il **service
+    worker**, che tiene i file sul telefono (IndexedDB, al più 10, al più un'ora, la condivisione
+    nuova sostituisce la vecchia) e apre la pagina. Lì la persona vede i file e **sceglie la
+    verifica** (mai una scelta del codice), e i file partono con `POST /api/studio/importa`, la
+    sessione dello schermo personale, gli stessi tetti, orari e permessi; poi si tolgono dal
+    telefono. Il server non riceve mai un file dalla condivisione: un POST che arriva a lui (il
+    service worker non c'è ancora) torna indietro senza leggere il corpo. iOS non ha lo share
+    target per le PWA: resta «Scegli i file». Il telefono di un minore con Family Link e il
+    browser bloccato non apre la PWA: lì importa il tutore, o il minore da un altro schermo
+    personale.
+
+    Alternative scartate: un endpoint del server per la condivisione (riceverebbe file senza la
+    sessione dello schermo: una strada laterale); la verifica scelta da sola (la più vicina): il
+    materiale può essere di un'altra; tenere i file sul server in attesa della scelta.
+
 ## Da completare con i passi 4.3–4.5
 
 - *[fatto il 29/10, passo 4.1: dove si conservano le pagine e come si applica il punto 4 (punti

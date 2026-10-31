@@ -44,7 +44,7 @@ sotto); dal 31/10 anche le **mini-app** (#297, seconda parte: otto giochi della 
 aperti con `studio_attivita`). Dal 31/10 i **premi** (#296): la
 serie di giorni di studio, le stelle e i duelli fra persone di casa, calcolati dal codice dalla
 pratica vera, con la regola per i minori (sezione sotto). Dal 31/10 l'**importazione dei materiali
-scaricati** (#298, prima parte: file e ZIP con l'avanzamento; Takeout e condivisione dopo; sezione
+scaricati** (#298, prima parte: file e ZIP con l'avanzamento; dal 31/10 sera la **condivisione dal telefono**, parte 3; il Takeout dopo; sezioni
 sotto). Lo
 Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
@@ -67,7 +67,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Vista del tutore (padronanza alla cieca in ombra, giudizio del tutore, «Da guardare tu», prove, ripasso, mappa) e indicazioni dei tutori nei dati del turno del minore (dal 31/10, passo 10, #250 e #285; schema «studio» alla versione 11; `studio_indicazioni`, acceso di serie con lo Studio, `studio_indicazioni_giorni`) | SQLite (`studio_indicazioni`, `studio_tentativi` tipo «giudizio»); libreria standard, niente modello | `calliope/studio/tutore.py` → `forma_indicazione`, `CORNICE`, `Tutore` (in `Studio`): `vista_tutore`, `giudica`, `rivedi_da_tutore`, `scrivi_indicazione`, `cambia_indicazione`, `togli_indicazione`, `togli_indicazioni`, `indicazioni`, `nota_indicazioni`; `calliope/studio/padronanza.py` → `GIUDIZI`, `accordo`; `calliope/brain.py` → `_nota_studio`; `calliope/tools/studio.py` → azioni `indica`, `indicazioni`, `indicazioni_togli`; `calliope/schermi/server.py` → `POST /api/studio/tutore`; `calliope/schermi/pagina/studio.js` («Per te che lo segui», «Indicazioni di chi ti segue»); prove `prove/prova_studio_tutore.py`, `prove/prova_studio_tutore_pagina.py` |
 | Libreria: schede degli argomenti e mazzi di carte nel repository (dati fidati, JSON), il formato e la verità, l'indice per argomento, la scelta del codice con la padronanza solo mostrata, «Dalla libreria» nella home, «Aggiungi le carte», la lettura `libreria` a voce (dal 31/10, #297, prima parte; schema «studio» invariato; `studio_libreria`, attiva di serie con lo Studio) | libreria standard, niente modello; i contenuti in `calliope/studio/libreria/contenuti/<materia>/*.json` | `calliope/studio/libreria/formato.py` → `valida`, `leggi_file`, `FORMULE`; `calliope/studio/libreria/indice.py` → `Libreria` (`carica`, `controlla`, `trova`, `di_scheda`), `parole`, `radice`, `materia_vale`, `scegli`; `calliope/studio/libreria/studio.py` → `DallaLibreria` (in `Studio`): `proposte_libreria`, `scheda_libreria`, `soluzione_libreria`, `aggiungi_mazzo`, `_libreria_home`; `calliope/tools/studio.py` → azione `libreria`; `calliope/schermi/server.py` → `POST /api/studio/libreria`; `calliope/schermi/pagina/libreria.js`; prove `prove/prova_studio_libreria.py`, `prove/prova_studio_libreria_pagina.py`, `prove/verita_libreria.py`; passo manuale `prove/manuali/libreria-studio.md` |
 | Premi: la serie di giorni di studio con le pause, le stelle dei traguardi, i duelli fra persone di casa, gli interruttori per persona (il tutore per un minore) (dal 31/10, #296; schema «studio» alla versione 12; `studio_serie`, `studio_stelle` accese di serie con lo Studio, `studio_serie_pause` 1, `studio_duelli` spento di serie) | SQLite (`studio_stelle`, `studio_premi`, `studio_duelli`, `studio_pratica`); libreria standard, niente modello | `calliope/studio/premi.py` → `pratica`, `studiato`, `serie`, `superata`, `frase_serie`, `frase_stelle_nuove`, `Premi` (in `Studio`): `premi`, `impostazioni_premi`, `imposta_premi`, `aggiorna_stelle`, `frase_premi`, `frase_premi_letti`, `persone_per_duello`, `proponi_duello`, `accetta_duello`, `rispondi_duello`, `consegna_duello`, `annulla_duello`, `vista_duello`; `calliope/tools/studio.py` → azione `premi`, «fatto» con la serie; `calliope/schermi/server.py` → `POST /api/studio/premi`, `POST /api/studio/duello`; `calliope/schermi/pagina/studio.js` («I tuoi traguardi», «Duelli», «Premi» nella vista del tutore); prove `prove/prova_studio_premi.py`, `prove/prova_studio_premi_pagina.py` |
-| Importazione dei materiali scaricati: «Aggiungi materiali» sulla verifica, file e ZIP (PDF, immagini, Word, PowerPoint, Excel, OpenDocument, testo, Markdown, CSV, HTML), un lavoro di sfondo in un sottoprocesso coi tetti di dimensione e di tempo, le pagine di testo già lette, le fasi sullo schermo (dal 31/10, #298; schema «studio» alla versione 13; `studio_importa`, acceso di serie con lo Studio, e i tetti `studio_importa_*`) | libreria standard (`zipfile`, `html.parser`, `subprocess`), i lettori di `allegati.py` (python-docx, python-pptx, openpyxl), pypdfium2 e Pillow come la 4.2; niente modello, niente librerie native nuove | `calliope/studio/importa.py` → `classifica`, `nome_strano`, `elenca`, `leggi_voce`, `testi`, `html_in_testo`, `a_pagine`, `elabora`, `lavora` (il sottoprocesso), `Importi` (il lavoro di sfondo), `Importazioni` (in `Studio`): `registra_importazione`, `aggiungi_testi`, `importazioni`, `azione_importazione`, `importazione_viva`, `avvia_importi`; `calliope/studio/pagine.py` → `apri_nuovo`; `calliope/schermi/server.py` → `POST /api/studio/importa`, `POST /api/studio/importazioni`; `calliope/schermi/pagina/studio_importa.js`; prove `prove/prova_studio_importa.py`, `prove/prova_studio_importa_pagina.py` |
+| Importazione dei materiali scaricati: «Aggiungi materiali» sulla verifica, file e ZIP (PDF, immagini, Word, PowerPoint, Excel, OpenDocument, testo, Markdown, CSV, HTML), un lavoro di sfondo in un sottoprocesso coi tetti di dimensione e di tempo, le pagine di testo già lette, le fasi sullo schermo (dal 31/10, #298; schema «studio» alla versione 13; `studio_importa`, acceso di serie con lo Studio, e i tetti `studio_importa_*`) | libreria standard (`zipfile`, `html.parser`, `subprocess`), i lettori di `allegati.py` (python-docx, python-pptx, openpyxl), pypdfium2 e Pillow come la 4.2; niente modello, niente librerie native nuove | `calliope/studio/importa.py` → `classifica`, `nome_strano`, `elenca`, `leggi_voce`, `testi`, `html_in_testo`, `a_pagine`, `elabora`, `lavora` (il sottoprocesso), `Importi` (il lavoro di sfondo), `Importazioni` (in `Studio`): `registra_importazione`, `aggiungi_testi`, `importazioni`, `azione_importazione`, `importazione_viva`, `avvia_importi`; `calliope/studio/pagine.py` → `apri_nuovo`; `calliope/schermi/server.py` → `POST /api/studio/importa`, `POST /api/studio/importazioni`; `calliope/schermi/pagina/studio_importa.js`; la condivisione dal telefono (dal 31/10 sera, parte 3): `schermi/pagina/telefono/manifest.webmanifest` (lo share target), `telefono/sw.js`, `telefono/condividi.js`, `schermi/telefono.py` → `POST /telefono/condividi` (ripiego); prove `prove/prova_studio_importa.py`, `prove/prova_studio_importa_pagina.py`, `prove/prova_studio_condividi.py`, `prove/prova_studio_condividi_pagina.py` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
@@ -75,7 +75,8 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 
 - L'importazione (#298) è provata solo con file e archivi di fantasia: il Takeout vero di Classroom
   non è ancora stato guardato (passo manuale in `prove/manuali/studio-takeout-vero.md`), la
-  condivisione dal telefono non c'è, e sul telefono con Family Link non è provata. Del testo
+  condivisione dal telefono (dal 31/10 sera, share target) non è provata sul vero (passo manuale
+  `prove/manuali/studio-condividi-android.md`), e col telefono con Family Link nemmeno. Del testo
   nascosto si riconosce solo quello marcato nascosto in Word e le diapositive nascoste.
 
 - I premi (#296, revisione della PR #355): una sessione del piano con «Inizia» e «Fatto» a 10
@@ -119,6 +120,52 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   (storia, «Magellano») resta un collegamento debole «da controllare» e il criterio «una parte sola
   ≥ 90 %» non si raggiunge; il prompt nuovo della seconda passata e i codici al posto dei concetti
   sono da rimisurare col banco vero.
+
+## La condivisione dal telefono (31/10, issue #298 parte 3, ramo `issue-298-studio-condividi`)
+
+*Terza parte della #298 (la seconda, il Takeout, aspetta il passo manuale di chi amministra).
+Decisione [0035](../decisioni/0035-studio.md) punto 52.*
+
+**Come funziona.** Il manifest della PWA del telefono dichiara uno `share_target`: su Android, con
+Calliope **installata** (Chrome, «Installa app» o «Aggiungi a schermata Home»), Calliope compare fra
+le app di «Condividi» per PDF, foto, documenti Office e OpenDocument, testi e ZIP (gli stessi formati
+dell'importazione; niente eseguibili, script o «tutti i file»). Il sistema manda un POST multipart a
+`/telefono/condividi`, che prende il **service worker** (`telefono/sw.js`): tiene i file in IndexedDB
+sul telefono (al più 10; una condivisione nuova sostituisce quella di prima) e apre la pagina con
+«?condividi=1». In Le mie cose compare «Condiviso con Calliope» (`telefono/condividi.js`) coi nomi dei
+file (solo textContent) e «In quale verifica?»: le verifiche aperte della persona e, da tutore,
+quelle dei minori (`POST /api/studio/verifiche`). «Aggiungi ai materiali» resta spento finché la
+persona non sceglie: il materiale non va mai da solo in una verifica. Poi i file partono uno alla volta
+con `studioImporta`, cioè `POST /api/studio/importa` con la sessione dello schermo personale: la
+**stessa** importazione di «Aggiungi materiali», con gli stessi tetti, orari, permessi e controlli
+(e l'avanzamento ogni 25 %). Mandati o no, i file si tolgono dal telefono; quelli non mandati entro
+un'ora si tolgono alla prossima apertura. «Apri lo Studio» porta a «Aggiungi materiali» della verifica
+con le importazioni.
+
+**Una strada sola.** Il server non riceve mai un file dalla condivisione: se il POST arriva a lui (il
+service worker non è ancora attivo, per esempio al primo avvio o col certificato non fidato) risponde
+303 a «?condividi=0» senza leggere il corpo, e la pagina dice «La condivisione non è arrivata: apri
+Calliope una volta, poi condividi di nuovo». Il testo o il link condivisi senza file non entrano.
+
+**Cosa funziona e cosa no.**
+- *Android* con Chrome e la PWA installata: sì. Senza installarla, Calliope non compare in
+  «Condividi».
+- *iPhone e iPad*: Safari non ha lo share target per le PWA; resta «Aggiungi materiali» → «Scegli i
+  file», che apre anche File e Drive.
+- *Il telefono del minore con Family Link e il browser bloccato*: Chrome bloccato vuol dire niente
+  pagina e niente PWA, quindi niente «Condividi» verso Calliope. Se il genitore permette Chrome solo
+  per l'indirizzo di Calliope, la PWA si installa da lì e la condivisione funziona come sopra, dentro
+  gli orari del minore (il server li controlla all'invio). Altrimenti importa il tutore, dal suo
+  telefono o dal PC, nella verifica del minore, o il minore dal PC personale. Da confermare sul vero
+  (passo manuale).
+
+**Versioni.** Pagina e service worker v39; `condividi.js` nella cache. Schema invariato (13).
+
+Prove: `prova_studio_condividi.py` (a secco: manifest, service worker, pagina, il POST al server senza
+service worker) e `prova_studio_condividi_pagina.py` (il browser col service worker vero: il POST
+multipart fatto dalla pagina e preso dal service worker, il riquadro a 390 e 320 px col testo al 125
+%, la scelta, l'invio, «Apri lo Studio»). Il «Condividi» del sistema non si emula: il passo manuale è
+[`prove/manuali/studio-condividi-android.md`](../../prove/manuali/studio-condividi-android.md).
 
 ## L'importazione dei materiali scaricati: file e ZIP (31/10, issue #298, ramo `issue-298-studio-importa`)
 
@@ -227,7 +274,7 @@ con la prova vera.
 
 **Non fatti, per dopo.** Il Takeout di Classroom (corsi, materiali per argomento, compiti con le
 scadenze come proposte nel piano) e il calendario scolastico come materiale (commento del 29/10);
-lo share target; a voce «ho finito di preparare…»; il testo nascosto per colore o grandezza (si
+*[lo share target: fatto il 31/10, sezione sopra]*; a voce «ho finito di preparare…»; il testo nascosto per colore o grandezza (si
 vede solo `w:vanish`); le immagini dentro i documenti Word e PowerPoint (si prende solo il testo).
 Il passo manuale per la prova col Takeout vero: [`prove/manuali/studio-takeout-vero.md`](../../prove/manuali/studio-takeout-vero.md).
 

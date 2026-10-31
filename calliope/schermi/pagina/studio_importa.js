@@ -116,6 +116,12 @@
       sez.append(t);
       return sez;
     }
+    // Aperta senza dati (da «Apri lo Studio» dopo una condivisione, prima che la home ci fosse):
+    // le importazioni si leggono appena la sezione è nella pagina
+    if (!s.dati && !s.carica) {
+      s.carica = true;
+      setTimeout(() => { carica(vid).finally(() => { s.carica = false; }); }, 0);
+    }
     const d = s.dati || {};
     const mb = Number(d.max_mb) || 100;
     sez.append(nodo("p", "studio-h-riga", "Scegli uno o più file, al più " + mb + " MB ciascuno: PDF, foto (JPEG, PNG, WebP), " +
@@ -258,6 +264,9 @@
 
   window.CalliopeImporta = {
     sezione,
+    // «Apri lo Studio» dopo una condivisione (parte 3, telefono/condividi.js): la sezione della
+    // verifica scelta si apre già, con le importazioni appena mandate
+    apri(vid) { if (Number.isInteger(vid) && vid > 0) { di(vid).aperta = true; carica(vid); } },
     // Per le prove: lo stato per verifica (mai i nomi dei file)
     stato() {
       const out = {};
