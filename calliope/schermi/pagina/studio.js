@@ -676,7 +676,8 @@
     }
     // La libreria (31/10, #297, libreria.js): le proposte del server; null → niente sezione
     if (window.CalliopeLibreria && Array.isArray(v.libreria)) {
-      art.append(window.CalliopeLibreria.sezione(v, { ridisegna: disegnaHome, ricarica: caricaHome, vista }));
+      art.append(window.CalliopeLibreria.sezione(v, { ridisegna: disegnaHome, ricarica: caricaHome, vista,
+        tocchi: !!(home.dati && home.dati.tocchi) }));
     }
     // Le prove (passo 8, #248): la verifica finta e le domande; l'orale si fa a voce
     if (v.stato === "aperta") art.append(sezioneProve(v));

@@ -466,8 +466,10 @@ def permessi_nuovi(vecchio: dict | None, nuovo: dict) -> list[str]:
             if k not in prima]
 
 
-def valida(d, tempo_max_s: float = 30.0, memoria_max_mb: int = 512, nomi_tool=()) -> dict:
-    """Il manifesto normalizzato, o ManifestoNonValido."""
+def valida(d, tempo_max_s: float = 30.0, memoria_max_mb: int = 512, nomi_tool=(),
+           riservato: bool = False) -> dict:
+    """Il manifesto normalizzato, o ManifestoNonValido. `riservato`: solo per le mini-app della
+    libreria dello Studio (studio/libreria/miniapp.py), che usano il prefisso «libreria_»."""
     if not isinstance(d, dict):
         raise ManifestoNonValido("il manifesto deve essere un oggetto JSON")
     nome = d.get("nome")
@@ -475,6 +477,11 @@ def valida(d, tempo_max_s: float = 30.0, memoria_max_mb: int = 512, nomi_tool=()
         raise ManifestoNonValido(f"«nome» {json.dumps(nome, ensure_ascii=False)[:40]} non va: "
                                  "minuscole, cifre e trattini bassi, da 3 a 31 caratteri, "
                                  "prima una lettera")
+    if nome.startswith("libreria_") and not riservato:
+        # Il prefisso delle mini-app della libreria dello Studio (#297, revisione della PR #366,
+        # nota 3): un'estensione dell'archivio non lo può usare
+        raise ManifestoNonValido("«nome» che comincia con «libreria_» è riservato alle attività "
+                                 "della libreria dello Studio: scegline un altro")
     titolo = _testo(d, "titolo", 60)
     # La descrizione va nel tool che il modello legge a ogni turno: è un canale per dargli
     # istruzioni. Dal 06/10 la compone il codice (cosa_fa) e passa il controllo dei testi

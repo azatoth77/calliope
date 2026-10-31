@@ -453,7 +453,14 @@ def prova_controllo():
         # sola); dopo una parola o all'inizio sì
         ("-5", "10 - 5 = 5", False), ("-5", "poi x - 5 = 2", False),
         ("-5", "vale -5 gradi", True), ("-5", "-5 è il minimo", True),
-        ("x = -5", "la soluzione x = -5", True)]
+        ("x = -5", "la soluzione x = -5", True),
+        # #320 (revisione della PR #358): il meno attaccato alla cifra con lo spazio prima è un
+        # numero negativo, anche dopo una lettera sola («a -5»); con lo spazio anche dopo («a -
+        # 5») o attaccato a una parola («x-5», «10-12») è una sottrazione
+        ("-5", "la temperatura scese a -5", True), ("−5", "la temperatura scese a -5", True),
+        ("-5", "la temperatura scese a - 5", False), ("-5", "poi x-5 = 2", False),
+        ("-12", "le pagine 10-12", False), ("x = -5", "la soluzione x = 5", False),
+        ("5", "la temperatura scese a -5", True), ("x = -5", "vale x=-5", True)]
     sbagli = [(t, pg) for t, pg, att in VARIANTI if A.controlla(t, ["P1"], {"P1": pg})[1] != att]
     verifica("controllo: la stessa formula scritta in modi diversi («3 x», «2·x», «x**2», «<=», "
              "«½», «Fe³⁺», «−5») sì; una formula diversa («≤» e «≥», «≠» e «=», «x = -5») no; "

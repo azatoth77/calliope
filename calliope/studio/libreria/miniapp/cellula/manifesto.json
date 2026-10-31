@@ -1,0 +1,36 @@
+{
+  "nome": "libreria_cellula",
+  "titolo": "Dentro la cellula",
+  "cosa_fa": {"verbo": "mostra", "oggetto": "le strutture della cellula, poi un quiz"},
+  "input": {"type": "object", "properties": {}, "required": []},
+  "permessi": {},
+  "scheda": {"tipo": "gioco", "file": ["logica.js"], "giocatori": {"min": 1, "max": 1},
+             "salva": false, "azioni": [],
+             "macchina": {
+               "anchio": false,
+               "inizio": "esplora",
+               "fasi": {
+                 "esplora": {"pagina": "scelte", "turni": false, "verso": ["domanda", "esito", "fine"],
+                             "comandi": {
+                               "prossima": {"forme": ["la prossima", "prossima struttura", "la successiva"],
+                                            "etichetta": "La prossima"},
+                               "precedente": {"forme": ["quella prima", "la precedente"],
+                                              "etichetta": "Quella prima"},
+                               "quiz": {"forme": ["al quiz", "fammi il quiz", "facciamo il quiz"],
+                                        "etichetta": "Al quiz"},
+                               "finito": {"forme": ["ho finito", "basta cellule"],
+                                          "etichetta": "Ho finito"}}},
+                 "domanda": {"pagina": "scelte", "turni": false, "verso": ["esito", "fine"],
+                             "comandi": {
+                               "si": {"forme": ["sì", "sì c'è", "c'è"], "etichetta": "Sì, c'è"},
+                               "no": {"forme": ["no", "non c'è"], "etichetta": "No, non c'è"},
+                               "risposta": {"forme": ["la risposta {n}", "risposta {n}", "la {n}"],
+                                            "n": {"valori": {"a": ["a", "prima"], "b": ["b", "bi", "seconda"], "c": ["c", "ci", "terza"]}},
+                                            "etichetta": "Risposta {n}"},
+                               "finito": {"forme": ["ho finito", "basta cellule"],
+                                          "etichetta": "Ho finito"}}}
+               }
+             }},
+  "livello": "familiare",
+  "limiti": {"tempo_s": 5, "memoria_mb": 128}
+}

@@ -186,6 +186,8 @@ f("Interrogami di storia", "studio_interroga")
 f("Fammi ascoltare il ripasso di storia", "studio_ascolta")
 # L'esercizio guidato (31/10, #278)
 f("Aiutami col problema di geometria a passi", "studio_esercizio")
+# le attività della libreria (31/10, #297, parte 2)
+f("Apri l'attività per bilanciare le reazioni", "studio_attivita")
 # ── senza tool: chiacchiere e cultura generale ──
 f("Raccontami una barzelletta")
 f("Come stai oggi?")
