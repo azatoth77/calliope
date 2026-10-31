@@ -322,3 +322,15 @@ risponde «non c'è più» invece di avviarne uno nuovo.
 
 Prova: `prove/prova_agenda_pagina.py` (i bordi di mezzanotte, il sesto e il settimo giorno, l'ora legale;
 il timer toccato fra due senza nome).
+
+## L'ultimo cambiamento delle liste su disco (30/10, issue #263, ramo `issue-263-liste-ultimo-cambio`)
+
+Il pallino della tessera Liste del telefono ([schermi-telefono](schermi-telefono.md)) si accende con
+`Liste.ultimo_cambio()`. Fino al 30/10 l'ora di una voce tolta stava solo in memoria (le voci tolte non
+lasciano righe in `liste`): dopo un riavvio il pallino si accendeva solo per le voci aggiunte. Dalla
+versione 2 dello schema «liste» l'ora dell'ultimo cambiamento sta nella tabella `liste_cambi` (una riga,
+`quando` in epoch), scritta nella stessa transazione di ogni aggiunta e di ogni voce tolta, «tutto»
+compreso; un doppione o una voce che non c'è non cambiano niente. Per un database di prima vale l'ultima
+voce aggiunta che c'è ancora, finché non cambia qualcosa.
+
+Prova: `prove/prova_liste.py` (voce tolta, riavvio, «tutto», i contrari e il database della versione 1).

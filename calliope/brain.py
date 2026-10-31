@@ -1424,8 +1424,19 @@ CARTA_TOLTA = ("{\"ok\": true, \"nota\": \"il testo della carta è stato tolto: 
 # web_cerca e delle estensioni, i fatti e la notizia del tool notizie (13/10)
 # «testo» e «argomenti»: studio_pagina_leggi (30/10, seconda revisione della PR #317)
 # «domanda» e «risposta»: studio_carte (30/10, passo 6, #246)
+# «mappa_tua»: studio_mappa_consigli (30/10, passo 7c, #328)
 _CHIAVI_DATO = ('"risultati"', '"fatti"', '"notizia"', '"testo"', '"argomenti"', '"domanda"',
-                '"risposta"')
+                '"risposta"', '"mappa_tua"')
+# La mappa e lo scheletro di «Parliamone» (studio_mappa_consigli, passo 7c, #328), tolti allo
+# stesso modo
+MAPPA_TOLTA = ("{\"ok\": true, \"nota\": \"la mappa e lo scheletro sono stati tolti: per "
+               "riparlarne usa studio_mappa_consigli\"}")
+# La passata di misura di «Parliamone» in ombra (revisione della PR #330): una alla volta in
+# tutto il processo, a voce ferma da tanti secondi (al più tanta attesa), corta
+CONSIGLI_OMBRA_LOCK = threading.Lock()
+CONSIGLI_OMBRA_QUIETE_S = 1.0
+CONSIGLI_OMBRA_ATTESA_S = 120.0
+CONSIGLI_OMBRA_TOKEN = 300
 
 
 class TextCallGuard:
@@ -1682,10 +1693,16 @@ class OllamaBackend:
             raise RuntimeError("Ollama non ha detto i tempi della lettura")
         return int(n), n / (ns / 1e9)
 
-    def stream(self, messages, tools):
-        """Yields ("text", str) oppure ("calls", [call, ...])."""
+    def stream(self, messages, tools, num_predict=None, think=None):
+        """Yields ("text", str) oppure ("calls", [call, ...]). `num_predict` e `think` (la passata
+        di misura di «Parliamone», #328): un tetto ai token e il thinking per questa richiesta;
+        non fanno ricaricare il modello (num_ctx resta)."""
         n = 0
-        with self.http.stream("POST", "/api/chat", json=self._body(messages, tools)) as r:
+        corpo = self._body(messages, tools, **({"num_predict": int(num_predict)}
+                                                if num_predict else {}))
+        if think is not None:
+            corpo["think"] = bool(think)
+        with self.http.stream("POST", "/api/chat", json=corpo) as r:
             if r.status_code >= 400:
                 r.read()
                 if r.status_code == 400:
@@ -1794,10 +1811,14 @@ class OpenAIBackend:
             raise RuntimeError("il server non ha detto i token del prompt")
         return int(n), n / dt
 
-    def stream(self, messages, tools):
+    def stream(self, messages, tools, num_predict=None, think=None):
         kwargs = dict(model=self.cfg.llm_model,
                       messages=[self._openai(m) for m in messages],
                       temperature=self.cfg.llm_temperature, stream=True, **self.extra)
+        if num_predict:
+            # Il tetto della passata di misura di «Parliamone» (#328); il thinking del server
+            # compatibile resta quello del profilo (`think` qui non si cambia)
+            kwargs["max_tokens"] = int(num_predict)
         # I token veri nell'ultimo pezzo (05/10: vLLM, Ollama /v1 e llama-server lo fanno)
         kwargs["stream_options"] = {"include_usage": True}
         if tools:
@@ -3067,6 +3088,9 @@ class Brain:
             if politica.consenso_avversativo(user_text or ""):
                 self._rule("consenso_avversativo")
         self._letto_ora = ""      # un tool non fidato ha già risposto in questa risposta
+        # «Parliamone» in questa risposta (studio_mappa_consigli, passo 7c, #328): la misura dei
+        # concetti svelati a risposta finita
+        self._consigli_mappa = None
         # Le frasi che non sono contenuto del modello (frasi pronte dei tool, ripieghi, la riga
         # dello sviluppo): chi le dice (l'uscita unica, passo 2 del registro degli eventi) ne
         # scrive l'autore e l'atto all'invio
@@ -3098,6 +3122,9 @@ class Brain:
                         self._aggiungi_detto(coda)
                     yield " " + self._marca(coda, "atto", "riga_sviluppo")
         finally:
+            # «Parliamone» (passo 7c, #328): i concetti svelati nella risposta detta, prima che
+            # i dati escano dalla storia
+            self._consigli_chiudi(start)
             if Brain.eventi_attivo(self):
                 # Passo 3: la storia del turno vivo non si sigilla a mano. La sigillano gli
                 # eventi (riservato, personale, non fidato decisi alla scrittura) e la risposta
@@ -4139,13 +4166,14 @@ class Brain:
         provenienza.marca(self.history)
         for m in self.history:
             if m.get("role") != "tool" or m.get("content") in (WEB_TOLTO, PAGINA_TOLTA,
-                                                                CARTA_TOLTA):
+                                                                CARTA_TOLTA, MAPPA_TOLTA):
                 continue
             spec = self.tools.get(m.get("name") or "")
             if (spec is not None and getattr(spec, "non_fidato", False)
                     and not getattr(spec, "resta_in_storia", False)):
                 m["content"] = (PAGINA_TOLTA if m.get("name") == "studio_pagina_leggi"
                                 else CARTA_TOLTA if m.get("name") == "studio_carte"
+                                else MAPPA_TOLTA if m.get("name") == "studio_mappa_consigli"
                                 else WEB_TOLTO)
 
     def rules_fired(self) -> list[str]:
@@ -5848,6 +5876,17 @@ class Brain:
                 # schermo.» due volte)
                 said = " ".join(f for i, f in enumerate(finals)
                                 if f.strip() not in " ".join(finals[:i]))
+                # «Parliamone» in ombra (passo 7c, #328): la voce dice la frase del codice; la
+                # passata del modello si fa in secondo piano, con i messaggi di adesso, e si misura
+                # soltanto
+                cm = getattr(self, "_consigli_mappa", None)
+                if isinstance(cm, dict) and cm.get("modo") == "ombra":
+                    # Copie: a risposta finita i dati escono dalla storia (_togli_non_fidati),
+                    # mentre la passata in secondo piano li deve ancora leggere
+                    cm["messaggi"] = [dict(m) for m in with_memory(system)]
+                    # Gli stessi tool della passata vera: il prefisso resta nella cache di
+                    # Ollama (#95); le chiamate della passata di misura si ignorano
+                    cm["schemi"] = schemas
                 self.history.append({"role": "assistant", "content": said})
                 if self._passata == 1 and dopo_tool_s1.modo(self.cfg) != dopo_tool_s1.SPENTO:
                     # Già senza seconda passata (casa_comando, documenti): per la misura
@@ -5980,6 +6019,99 @@ class Brain:
             # Interrotta (la voce chiude lo stream): chiude anche la passata, cioè la richiesta
             # al modello, come farebbe `yield from`
             passata.close()
+
+    # ── «Parliamone» dopo la mappa libera (30/10, passo 7c, #328, studio_mappa_consigli) ──
+    def _consigli_chiudi(self, start: int):
+        """A risposta finita (anche interrotta): con `studio_mappa_consigli` attivo la risposta
+        detta si dà allo Studio, che conta i concetti nascosti che dice (`misura_consigli`, devono
+        essere 0: nel registro solo id e conti) e la regola `studio_mappa_svelato`; in ombra la
+        passata del modello, mai detta, si fa in secondo piano coi messaggi del turno e si misura
+        allo stesso modo. Lo Studio ricalcola da sé i concetti nascosti: Brain non li vede."""
+        cm, self._consigli_mappa = getattr(self, "_consigli_mappa", None), None
+        if not isinstance(cm, dict):
+            return
+        st = getattr(getattr(self, "tool_ctx", None), "studio", None)
+        if st is None:
+            return
+        try:
+            from .tools.studio import chi_di
+            chi = chi_di(self.tool_ctx)
+        except Exception:  # noqa: BLE001 — la misura non ferma la risposta
+            return
+        if chi is None:
+            return
+        vid = cm.get("verifica")
+        if cm.get("modo") == "ombra":
+            msgs = cm.get("messaggi")
+            if not msgs:
+                return
+            # Una passata alla volta (revisione della PR #330): se ce n'è una in corso, questa
+            # si salta e il registro lo dice
+            if not CONSIGLI_OMBRA_LOCK.acquire(blocking=False):
+                try:
+                    st._registra(f"verifica {vid}: «Parliamone» in ombra saltata, un'altra "
+                                 "misura è in corso")
+                except Exception:  # noqa: BLE001
+                    pass
+                return
+            t = threading.Thread(target=self._consigli_ombra,
+                                 args=(st, chi, vid, list(msgs), cm.get("schemi") or []),
+                                 daemon=True, name="parliamone-ombra")
+            self.__dict__["_consigli_thread"] = t
+            try:
+                t.start()
+            except Exception:  # noqa: BLE001
+                CONSIGLI_OMBRA_LOCK.release()
+            return
+        testo = " ".join(str(m.get("content") or "") for m in self.history[start:]
+                         if m.get("role") == "assistant")
+        try:
+            r = st.misura_consigli(chi, vid, testo, "attiva")
+        except Exception as e:  # noqa: BLE001
+            print(f"   [STUDIO] «Parliamone» non misurata ({type(e).__name__})", flush=True)
+            return
+        if r.get("svelati"):
+            self._rule("studio_mappa_svelato")
+
+    def _consigli_ombra(self, st, chi, vid, messaggi: list, schemi: list):
+        """La passata di «Parliamone» in ombra: il testo del modello, mai detto, solo misurato
+        (revisione della PR #330): parte a voce ferma (`arbitro_memoria.quiete`, la definizione
+        unica; senza i segnali dell'arbitro vale la fine del turno, che è già passata), con gli
+        stessi tool della passata vera (il prefisso in cache), al più `CONSIGLI_OMBRA_TOKEN`
+        token e il thinking spento; le chiamate si ignorano. Tiene `CONSIGLI_OMBRA_LOCK`."""
+        think, testo = ThinkFilter(), ""
+        try:
+            from .arbitro_memoria import quiete
+            t0 = time.monotonic()
+            while not quiete(CONSIGLI_OMBRA_QUIETE_S):
+                if time.monotonic() - t0 > CONSIGLI_OMBRA_ATTESA_S:
+                    st._registra(f"verifica {vid}: «Parliamone» in ombra saltata, la voce non "
+                                 "si è fermata")
+                    return
+                time.sleep(0.2)
+            try:
+                flusso = self.backend.stream(messaggi, schemi,
+                                             num_predict=CONSIGLI_OMBRA_TOKEN, think=False)
+            except TypeError:                # un backend senza le opzioni (le prove)
+                flusso = self.backend.stream(messaggi, schemi)
+            for kind, payload in flusso:
+                if kind in ("calls", "usage"):
+                    continue
+                if isinstance(payload, str):
+                    testo += think.feed(payload)
+            testo += think.flush()
+            if not testo.strip():
+                # Una risposta vuota (sul backend OpenAI finita tutta nel ragionamento) non è
+                # «0 svelati»: non è misurata (seconda revisione della PR #330)
+                st._registra(f"verifica {vid}: «Parliamone» in ombra non misurata, risposta "
+                             "vuota")
+                return
+            st.misura_consigli(chi, vid, testo, "ombra")
+        except Exception as e:  # noqa: BLE001 — una misura in secondo piano
+            print(f"   [STUDIO] «Parliamone» in ombra non misurata ({type(e).__name__})",
+                  flush=True)
+        finally:
+            CONSIGLI_OMBRA_LOCK.release()
 
     def _dopo_tool_chiudi(self):
         """Fine della risposta: in ombra, la frase del codice confrontata con quella del modello
@@ -6925,6 +7057,12 @@ class Brain:
               flush=True)
         try:
             parsed = json.loads(result)
+            # «Parliamone» (passo 7c, #328): verifica, mappa e modo sono per Brain (la misura a
+            # risposta finita), non per il modello
+            if isinstance(parsed, dict) and "_consigli" in parsed:
+                info = parsed.pop("_consigli")
+                self._consigli_mappa = info if isinstance(info, dict) else None
+                result = json.dumps(parsed, ensure_ascii=False)
             # L'azione proposta con una domanda («Lo apro?») è per Brain, non per il modello
             if isinstance(parsed, dict) and "in_sospeso" in parsed:
                 self._offer = parsed.pop("in_sospeso")

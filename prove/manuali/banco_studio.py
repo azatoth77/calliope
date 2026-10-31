@@ -37,7 +37,11 @@ vere con la loro verità da `--foto-vere` (vedi il passo manuale).
   (`mappa_genera.scheletro`). Misure: concetti e collegamenti, quanti puliti e quanti per avviso, i
   concetti nelle pagine, le voci ostili (le regex `non_deve` dei materiali sui testi e sui verbi) e
   quelle ostili pulite, quelle su una pagina ostile, l'italiano, secondi e token. Come le carte, si
-  chiede con `--fasi mappa` (dal testo della verità) o `--fasi lettura,mappa`.
+  chiede con `--fasi mappa` (dal testo della verità) o `--fasi lettura,mappa`. Dal passo 7c (#328)
+  anche la **seconda passata** di connessione come in Calliope (solo con più parti) e le misure di
+  forma: parti connesse prima e dopo, collegamenti uniti, doppioni permutati (devono essere 0) e
+  quelli uniti dal codice, composti sciolti, grado della radice, isolati; nel riepilogo la
+  percentuale di verifiche con una parte sola, criterio ≥ 90 %.
 
 **Non disturbare** (`Guardia`): prima di ogni richiesta, vLLM senza richieste di altri in corso né
 in coda (`/metrics`), non in pausa (`/is_paused`: l'arbitro ferma vLLM quando parla la voce),
@@ -1074,6 +1078,7 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
     Calliope (mappa_genera.py), sugli argomenti della verità come argomenti confermati."""
     from calliope.studio import argomenti as A
     from calliope.studio import genera as G
+    from calliope.studio import mappa as M
     from calliope.studio import mappa_genera as MG
     out = {}
     for vid, ver in materiali.items():
@@ -1094,7 +1099,19 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
         r = cli.chat(MG.messaggi(v, rif, arif), max_token=MG.MAX_TOKENS, schema=MG.SCHEMA,
                      temperatura=MG.TEMPERATURA, presence=MG.PRESENCE)
         grezzi = MG.leggi(r.get("testo", "")) or []
-        nodi, coll = MG.scheletro(grezzi, rif, arif, 12)
+        fm = {}
+        nodi, coll = MG.scheletro(grezzi, rif, arif, 12, titolo=v.get("argomento"), misure=fm)
+        # La seconda passata come in Calliope (passo 7c, #328): solo con più parti connesse
+        prima = M.forma(nodi, coll)
+        uniti, secondi2 = 0, 0.0
+        if prima["componenti"] > 1:
+            r2 = cli.chat(MG.messaggi_connessione(v, rif, arif, nodi, coll),
+                          max_token=MG.MAX_TOKENS_CONNESSIONE, schema=MG.SCHEMA_CONNESSIONE,
+                          temperatura=MG.TEMPERATURA, presence=MG.PRESENCE)
+            uniti = len(MG.connetti(MG.leggi_connessione(r2.get("testo", "")) or [], nodi, coll,
+                                    rif, 12))
+            secondi2 = float(r2.get("secondi") or 0)
+        dopo = M.forma(nodi, coll)
         proibiti = _proibiti_risposta(ver) + [o["regex"] for x in ver.get("ostili") or []
                                               for o in x["non_deve"] if o.get("tipo") ==
                                               "argomento"]
@@ -1124,15 +1141,34 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
                 "su_pagina_ostile_pulite": sum(x["su_pagina_ostile"] and not x["avvisi"]
                                                for x in voci),
                 "italiano": italiano(json.dumps([x["parole"] for x in voci], ensure_ascii=False)),
-                "secondi": r.get("secondi"), "token_out": r.get("token_out"), "nodi": nodi,
+                # La forma (passo 7c, #328): parti connesse prima e dopo la seconda passata,
+                # doppioni permutati (devono essere 0), uniti e sciolti dal codice, grado della
+                # radice, isolati
+                "componenti_prima": prima["componenti"], "componenti": dopo["componenti"],
+                "uniti": uniti, "doppioni": dopo["doppioni"],
+                "doppioni_uniti": fm.get("doppioni", 0), "composti": fm.get("composti", 0),
+                "grado_radice": dopo["grado_radice"], "isolati": dopo["isolati"],
+                "secondi": round(float(r.get("secondi") or 0) + secondi2, 2),
+                "token_out": r.get("token_out"), "nodi": nodi,
                 "collegamenti_": coll}
         out[vid] = riga
         with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(riga, ensure_ascii=False) + "\n")
         log(f"[mappa] {vid}: {riga['concetti']} concetti, {riga['collegamenti']} collegamenti, "
-            f"pulite {riga['pulite']}, ostili {riga['ostili']} (pulite {riga['ostili_pulite']}) "
-            f"in {r.get('secondi', 0):.1f} s")
+            f"pulite {riga['pulite']}, ostili {riga['ostili']} (pulite {riga['ostili_pulite']}), "
+            f"parti {riga['componenti_prima']} → {riga['componenti']}, radice di grado "
+            f"{riga['grado_radice']} in {riga['secondi']:.1f} s")
     return out
+
+
+# Il criterio della forma (passo 7c, #328): una parte connessa sola in almeno tante verifiche
+CRITERIO_CONNESSE = 90
+
+
+def connesse_pc(mappa: dict) -> int:
+    """La percentuale di verifiche con lo scheletro in una parte sola."""
+    righe = [x for x in mappa.values() if x.get("concetti")]
+    return round(100 * sum(x.get("componenti") == 1 for x in righe) / len(righe)) if righe else 0
 
 
 # ─────────────────────────── giro e riepilogo ───────────────────────────
@@ -1235,6 +1271,14 @@ def scrivi_riepilogo(uscita: Path, riep: dict):
                          f"{x['ostili']} (pulite {x['ostili_pulite']}) su_pagina_ostile "
                          f"{x['su_pagina_ostile']} (pulite {x['su_pagina_ostile_pulite']}) "
                          f"italiano {x['italiano']} {x['secondi']} s")
+            righe.append(f"     forma: parti {x.get('componenti_prima', '?')} → "
+                         f"{x.get('componenti', '?')} (uniti {x.get('uniti', 0)}), doppioni "
+                         f"{x.get('doppioni', 0)} (uniti dal codice {x.get('doppioni_uniti', 0)}), "
+                         f"composti sciolti {x.get('composti', 0)}, grado della radice "
+                         f"{x.get('grado_radice', 0)}, isolati {x.get('isolati', 0)}")
+        pc = connesse_pc(riep["mappa"])
+        righe.append(f"  una parte sola: {pc} % delle verifiche (criterio ≥ {CRITERIO_CONNESSE} %"
+                     f": {'sì' if pc >= CRITERIO_CONNESSE else 'no'})")
     for fase in ("domande", "risposte"):
         if riep.get(fase):
             righe.append(f"\n{fase.upper()}")

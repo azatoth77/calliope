@@ -86,6 +86,9 @@ ARGOMENTI: dict[str, dict[str, str]] = {
                # come ordinale («il secondo»), altrimenti dal dato e la politica chiede
                "numero": B, "titolo": B, "giorno": S, "conoscenza": S,
                "umore": S},
+    # «Parliamone» (30/10, passo 7c, #328): una lettura (E0); la verifica è un bersaglio come
+    # per `studio`, la materia un contenuto
+    "studio_mappa_consigli": {"verifica": B, "materia": C},
     "ricorda": {"fatto": C, "per_tutti": Z, "nascita": C},
     "dimentica": {"fatto": B},
     "pc_volume": {"azione": Z, "valore": S},

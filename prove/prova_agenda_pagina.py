@@ -699,6 +699,170 @@ def numero_riusato():
         a.db.close()
 
 
+def elementi_in_coda():
+    """Tre resti dopo la PR #270 (#275). 1. Gli elementi in coda (tocco, scritto, modulo, foto)
+    portano anche l'istante dell'abbinamento (`schermo_creato`): se lo schermo viene revocato e
+    il numero riabbinato da terminale mentre l'elemento aspetta, né le schede né l'esito del tocco
+    né la risposta scritta vanno allo schermo nuovo. 2. La corsa fra `abbinati()` e il lock di
+    `invia`/`invia_a`: l'identità si ricontrolla dentro il lock. 3. `Giochi.ascolto` scorre una
+    copia dei posti: l'hub può toglierne uno mentre si leggono i nomi degli schermi."""
+    from calliope.rispondi import Instradamento
+    from calliope.schermi import Mittente
+    from calliope.schermi import giochi as G
+    b, c, sc, liste, turni, voce, finto, _ = pr.prepara_ciclo()
+    pr.CORRENTE["liste"] = liste
+    cfg = Config()
+    cfg.config_dir = str(TMP)
+    cfg.memory_db = str(TMP / "memoria-coda.db")
+    hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db), log=lambda m: None)
+    hub.profilo = c.s.registry.by_id
+    terminale = ArchivioSchermi(cfg.memory_db)          # un altro processo, sullo stesso file
+    c.s.schermi = b.tool_ctx.schermi = hub
+    c.ingresso = hub.ingresso
+    sc.current_speaker, sc.identified_by = "Bianca", "voce"
+    hub.archivio.crea_con_token("cucina")
+
+    def nuovo_tel(chi, nome):
+        riga, _ = hub.archivio.crea_con_token("telefono", proprietario=chi, proprietario_nome=nome)
+        hub._rinfresca()
+        return next(s for s in hub.abbinati() if s["id"] == riga["id"])
+
+    def riabbina(sid, chi, nome):
+        """Il telefono `sid` revocato da terminale e uno nuovo di `chi` col suo numero."""
+        assert terminale.revoca(sid)
+        nuovo, _ = terminale.crea_con_token("telefono", proprietario=chi, proprietario_nome=nome)
+        assert nuovo["id"] == sid
+        hub._rinfresca()
+        riga = next(s for s in hub.abbinati() if s["id"] == sid)
+        loop = CicloFinto()
+        conn, _ = hub.collega(riga, loop)
+        return riga, loop, conn
+
+    def tocco(riga, persona, voce):
+        item = pr.voce_tocco(persona, voce, sid=riga["id"])
+        item["schermo_creato"] = riga["creato"]
+        return item
+
+    def giro():
+        c.giro()
+        if c.rec is not None:
+            c._scrivi_turno(c.rec)
+            c.rec = None
+
+    try:
+        # 1. Un tocco in coda dal telefono di Bianca; il telefono revocato e riabbinato a Dario
+        tel_b = nuovo_tel("bianca", "Bianca")
+        verifica("coda: il telefono ha l'istante dell'abbinamento", tel_b.get("creato") is not None)
+        assert hub.ingresso.metti(tocco(tel_b, "bianca", "uova"))
+        riga_d, loop_d, conn_d = riabbina(tel_b["id"], "dario", "Dario")
+        giro()
+        verifica("coda: il tocco del telefono revocato non manda schede né l'esito al telefono nuovo",
+                 not loop_d.arrivati and not hub.storia(riga_d["id"]), str(loop_d.arrivati)[:300])
+        # Il tocco in sé vale: era di Bianca, dal suo telefono, quando l'ha fatto
+        verifica("coda: il tocco fatto prima della revoca vale (la voce è tolta)",
+                 "uova" not in liste.read("spesa")[1], str(liste.read("spesa")[1]))
+        hub.scollega(conn_d)
+        # Contrario: lo stesso tocco con l'istante giusto arriva
+        loop_ok = CicloFinto()
+        conn_ok, _ = hub.collega(riga_d, loop_ok)
+        pr.tocca(c, tocco(riga_d, "dario", "pane"))
+        verifica("contrario: col suo istante il tocco manda la lista e l'esito al suo telefono",
+                 any(t == "tocco" for t, _ in loop_ok.arrivati)
+                 and any(t == "scheda" for t, _ in loop_ok.arrivati), str(loop_ok.arrivati)[:300])
+        hub.scollega(conn_ok)
+        # La risposta a una frase scritta: con l'istante di prima non va, col suo sì
+        tel_x = nuovo_tel("bianca", "Bianca")
+        scritto_b = {"tipo": "scritto", "testo": "che ore sono?", "schermo_id": tel_x["id"],
+                     "schermo_creato": tel_x["creato"], "persona": "bianca"}
+        riga_x, loop_x, conn_x = riabbina(tel_x["id"], "dario", "Dario")
+        ist = Instradamento.__new__(Instradamento)
+        ist.schermi = hub
+        verifica("coda: la risposta scritta del telefono revocato non va al telefono nuovo",
+                 ist.risposta_scritta(scritto_b, "che ore sono?", "Sono le dieci.") is False
+                 and not loop_x.arrivati and not hub.storia(riga_x["id"]), str(loop_x.arrivati)[:200])
+        scritto_d = dict(scritto_b, schermo_creato=riga_x["creato"], persona="dario")
+        verifica("contrario: col suo istante la risposta scritta arriva",
+                 ist.risposta_scritta(scritto_d, "che ore sono?", "Sono le dieci.") is True
+                 and bool(loop_x.arrivati), str(loop_x.arrivati)[:200])
+        verifica("coda: evento_a con l'istante di prima non arriva, col suo sì",
+                 hub.evento_a(riga_x["id"], "tocco", {}, creato=tel_x["creato"]) == 0
+                 and hub.evento_a(riga_x["id"], "tocco", {}, creato=riga_x["creato"]) == 1)
+        verifica("coda: invia_a con l'istante di prima non arriva",
+                 hub.invia_a(riga_x["id"], {"tipo": "testo", "testo": "x"}, creato=tel_x["creato"]) is False)
+        hub.scollega(conn_x)
+
+        # 2. La corsa fra abbinati() e il lock: un altro thread rilegge l'elenco proprio lì, dopo
+        #    la revoca e il riabbinamento da terminale. Qui lo fa abbinati() stesso, dopo aver dato
+        #    l'elenco vecchio
+        bianca = Mittente(persona="bianca", nome="Bianca", livello="familiare", certo=True)
+        nota = {"tipo": "testo", "chiave": "nota:p", "visibilita": "personale", "testo": "di Bianca"}
+        for nome in ("invia", "invia_a"):
+            tel_y = nuovo_tel("bianca", "Bianca")
+            vero = Schermi.abbinati
+            stato = {"fatto": False}
+
+            def abbinati_in_corsa(self=hub, tel_y=tel_y, stato=stato, vero=vero):
+                righe = vero(self)
+                if not stato["fatto"]:
+                    stato["fatto"] = True
+                    assert terminale.revoca(tel_y["id"])
+                    terminale.crea_con_token("telefono", proprietario="dario", proprietario_nome="Dario")
+                    self._rinfresca()
+                    stato["riga"] = next(s for s in vero(self) if s["id"] == tel_y["id"])
+                    stato["loop"] = CicloFinto()
+                    stato["conn"], _ = self.collega(stato["riga"], stato["loop"])
+                return righe
+            hub.abbinati = abbinati_in_corsa
+            try:
+                if nome == "invia":
+                    hub.invia(dict(nota), bianca, forza=True)
+                else:
+                    hub.invia_a(tel_y["id"], dict(nota))
+            finally:
+                del hub.abbinati
+            sid = tel_y["id"]
+            verifica(f"corsa ({nome}): la scheda di Bianca non arriva al telefono nuovo di Dario",
+                     stato["riga"]["proprietario"] == "dario" and not stato["loop"].arrivati
+                     and not [x for x in hub.storia(sid) if x.get("chiave") == "nota:p"],
+                     f"{stato['loop'].arrivati} {[x.get('chiave') for x in hub.storia(sid)]}")
+            hub.scollega(stato["conn"])
+        # Contrario: senza corsa la scheda personale arriva al telefono di Bianca
+        tel_z = nuovo_tel("bianca", "Bianca")
+        loop_z = CicloFinto()
+        conn_z, _ = hub.collega(tel_z, loop_z)
+        hub.invia(dict(nota, chiave="nota:q"), bianca, forza=True)
+        verifica("contrario: senza corsa la scheda arriva al telefono di Bianca",
+                 any("nota:q" in str(x) for x in loop_z.arrivati), str(loop_z.arrivati)[:200])
+        hub.scollega(conn_z)
+
+        # 3. Giochi.ascolto: l'hub, letto fuori dal lock dei giochi, toglie un posto proprio lì
+        class HubGiochi:
+            tolto = False
+
+            def schermo(self, sid, creato=None):
+                if not self.tolto:
+                    self.tolto = True
+                    gio.schermi_via({2})           # la cache scaduta: lo schermo 2 non c'è più
+                return {"id": sid, "nome": f"schermo {sid}"}
+        gio = G.Giochi(Config(), HubGiochi(), log=lambda *a: None)
+        m = Mittente(persona="dario", nome="Dario", livello="amministra", certo=True)
+        part = G.Partita("tris", 1, {"titolo": "Tris", "scheda": {"ascolta": {"comandi": {"su": ["su"]}}}}, m)
+        for sid, n in ((1, 1), (2, 2), (3, 3)):
+            po = G.Posto(sid, m, False)
+            po.giocatore, po.aperto, po.contatto, po.istantanea = n, True, time.time(), {"comandi": ["su"]}
+            part.posti[sid] = po
+        gio.partite[part.id] = part
+        try:
+            r, errore = gio.ascolto([1]), None
+        except RuntimeError as e:
+            r, errore = None, e
+        verifica("giochi: ascolto non cade se l'hub toglie un posto mentre legge i nomi",
+                 errore is None and r is not None and r["partita"] == part.id and 2 not in part.posti,
+                 str(errore))
+    finally:
+        liste.db.close()
+
+
 def hub_vero():
     """La scheda pubblica del timer con l'hub vero e due stanze (#266, nota 3 della revisione
     della PR #265, e revisione della PR #270). Una scheda che c'è già (stessa chiave) si aggiorna
@@ -891,6 +1055,10 @@ def server():
                  and item.get("bersaglio") == {"timer": tid, "chiave": chiave}
                  and item.get("pagina") == {"chiave": chiave} and item.get("persona") == "bianca",
                  f"{st} {d} {item}")
+        riga_tel = hub.archivio.per_token(tok)
+        verifica("server: l'elemento porta anche l'istante dell'abbinamento dello schermo (#275)",
+                 item.get("schermo_id") == riga_tel["id"] and item.get("schermo_creato") is not None
+                 and item.get("schermo_creato") == riga_tel["creato"], f"{item} {riga_tel}")
         verifica("server: il tocco non tocca l'agenda (la cambia il ciclo)", a.get(tid) is not None)
         codici = [pr.chiedi(port, "/api/tocco", sess, corpo={"tocco": "timer_piu",
                                                             "chiave": "timer:999-1"})[0] for _ in range(30)]
@@ -931,6 +1099,7 @@ def main():
         senza_bersaglio_e_corsia()
         hub_vero()
         numero_riusato()
+        elementi_in_coda()
         conv_archivio()
         print("— 5. il server")
         server()
