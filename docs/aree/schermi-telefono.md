@@ -2019,6 +2019,11 @@ processi): `prova_raccolte` 48 giri senza un reset; `prova_pagina_documenti`, `p
 di mezzanotte (il promemoria «fra un minuto» è di domani): le tessere ora girano alle 12:00
 (`prove.orologio.ora_del_giorno`).
 
+Limiti noti (revisione della PR #331): con `Expect: 100-continue` il resto non si legge (il corpo arriva
+solo dopo il «100 Continue», e su un rifiuto aspettarlo vorrebbe dire 2 s per niente), quindi un client che lo
+manda lo stesso può ancora vedere il reset; e un 401 o un 403 su una foto mandata come JSON in base64 oltre i
+64 kB può ancora finire in un reset, perché un corpo così grande non si legge apposta.
+
 Prova: `prove/prova_raccolte.py`, sezione 3b (il middleware a secco con i contrari: JSON letto, corpo già
 letto, octet-stream, oltre il tetto, senza `Content-Length`, corpo lento lasciato dopo il tempo; sul server
 vero il corpo mandato a parte → 401 intero senza reset, e senza il corpo la chiusura solo dopo averlo

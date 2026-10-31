@@ -236,7 +236,11 @@ class _LeggiIlResto:
             dichiarato = int(intest.get(b"content-length", b"-1"))
         except ValueError:
             dichiarato = -1
-        if tipo != b"application/json" or not 0 < dichiarato <= CORPO_RESTO_MAX:
+        # Con «Expect: 100-continue» il corpo arriva solo dopo il «100 Continue»: su un rifiuto il
+        # client non lo manda, e leggerlo vorrebbe dire aspettare CORPO_RESTO_S per niente
+        # (revisione della PR #331)
+        if (tipo != b"application/json" or not 0 < dichiarato <= CORPO_RESTO_MAX
+                or b"expect" in intest):
             return await self.app(scope, receive, send)
         finito = False
 

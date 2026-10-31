@@ -384,6 +384,10 @@ def resto_del_corpo():
     _, n, _ = asyncio.run(giro({"type": "http", "headers": [(b"content-type", b"application/json")]},
                                list(corpo)))
     verifica("contrario: senza Content-Length non si legge", n == 0)
+    _, n, dt = asyncio.run(giro({"type": "http", "headers": [(b"content-type", b"application/json"),
+                                                         (b"content-length", b"2"),
+                                                         (b"expect", b"100-continue")]}, list(corpo)))
+    verifica("contrario: con «Expect: 100-continue» non si legge (né si aspetta)", n == 0, f"{n} {dt:.2f}s")
     prima = SRV.CORPO_RESTO_S
     SRV.CORPO_RESTO_S = 0.2
     try:
