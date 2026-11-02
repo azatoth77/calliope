@@ -2151,3 +2151,32 @@ frase parla della verifica o della data; mai dalle frasi più vecchie (terza rev
 calcetto» detto prima e una pagina «spostata a venerdì» spostavano la verifica). **Limite
 accettato**: con una pagina letta, un «sì» da solo alla proposta di Calliope (la data non detta
 dalla persona) resta senza esecuzione; la proposta vera è nella issue #320.
+
+## Il «sì» che girava in tondo con la stanza accesa (02/11, issue #376, ramo `issue-376-si-con-la-stanza`)
+
+Prova vera del 02/11 alle 11:46 sulla DGX, da un telefono, con `stanza_contesto` acceso: la verifica
+non si è creata in cinque turni. Al «Sì, grazie.» (a «Se vuoi, posso crearne una per venerdì.») la
+chiamata giusta di `studio` era `valore_non_ancorata (dati da stanza)`, e al «Sì.» di nuovo:
+`rifiutata_valore` vale per risposta, ogni «sì» è un turno nuovo e ripartiva dal rifiuto. Non
+riguardava solo lo Studio: ogni azione di un turno «sì», in ogni casa con la stanza accesa.
+- **Le righe della persona non sono un dato estraneo** (`stanza/contesto.esterno_altri`, `_voci`,
+  `Brain._voce_della_persona`): con la voce certa per la politica (riconosciuta o breve, senza
+  compagnia né dubbi con un minore) le sue righe sicure non contano e non contaminano. La grigia
+  («Carlo?»), un conoscente, «più voci», una riga della TV, il riassunto e ogni altra voce restano
+  un dato; con una voce incerta tutto come prima.
+- **Il «sì» che ancora** (`valore.si_ancorato`, regola `valore_si_ancorato`): la persona riconosciuta
+  risponde con una forma chiusa di consenso a una domanda o un'offerta di Calliope, e **tutti** i
+  valori distintivi li ha detti lei nelle sue ultime 3 frasi (`Brain.FRASI_PRIMA`), e la
+  domanda ne nomina uno o ha le parole del tool. Mai per E3–E4, per un tool con la sfida o senza parole dichiarate, con un
+  dato nuovo o letto ora; senza valori (un `pc_blocca({})`) niente ancora.
+- **L'anti-giro** (`Turno.giro_valore`, `GIRO_TURNI`): il rifiuto vale anche per i due turni dopo. Al
+  «sì» seguente c'è «Non me l'hai chiesto: vuoi che…?», e al «sì» a quella domanda si esegue.
+- **Un comando di un'altra voce non diventa un'azione** (`valore.dalla_stanza`, regola
+  `valore_dalla_stanza`): un valore che sta solo nelle righe della stanza, o le parole del tool dette
+  lì e mai dalla persona: dopo il primo rifiuto una frase del codice che chiude il turno («Questo
+  l'ho sentito nella stanza…»), mai una domanda che porti a eseguire, anche nella stessa risposta.
+  Solo per la stanza: per una pagina o una ricerca resta la domanda di sempre.
+
+Prove: `prova_studio_tool` attraverso Brain (Studio e agenda, coi contrari). Sulla voce (la frase di
+1,5 s a 0,375 presa per un ospite) in questa issue non cambia niente: va con la modalità studio.
+

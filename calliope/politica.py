@@ -815,6 +815,13 @@ class Turno:
     # La frase della persona del turno di prima, se Calliope ha chiuso la risposta con una
     # domanda (terza revisione della PR #319): «al 20 dicembre» → «Vuoi che la sposti?» → «sì»
     frase_prima_domanda: str = ""
+    # L'ultima risposta di Calliope se finisce con una domanda o un'offerta, e le ultime frasi
+    # della persona (02/11, #376, valore.si_ancorato); i rifiuti `valore_non_ancorata` della
+    # conversazione {tool: turno}, che valgono anche nel turno dopo (la lista viva), e il turno
+    domanda_prima: str = ""
+    frasi_prima: tuple = ()
+    giro_valore: dict | None = None
+    numero_turno: int = 0
     # La domanda della proposta in sospeso e che cosa propone (10/10: «Non ho capito: lo
     # chiudo?» a una risposta senza parole, `consenso_irriconoscibile`); `risposta_dato`: la
     # proposta chiede un dato, non un sì (la domanda dell'agente): lì vale qualunque risposta
@@ -2301,6 +2308,10 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
           + (f" (dati da {d.fonte})" if d.fonte else ""), flush=True)
     if d.esito == "blocca":
         return blocco_dopo_dato(name)
+    if d.esito == "rifiuta" and d.domanda:
+        # Il perché detto dal codice (02/11, #376, valore: un'azione che viene dalle righe della
+        # stanza di un'altra voce): chiude il turno, niente domanda né giro
+        return {"ok": False, "fatto": NIENTE, "conferma": d.domanda, "risposta_finale": d.domanda}
     if d.esito == "rifiuta":
         return {"ok": False, "fatto": NIENTE,
                 "errore": f"la persona non ha chiesto azioni: {prov.detta(d.fonte or 'web')} "

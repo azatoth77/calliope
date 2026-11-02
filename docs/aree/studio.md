@@ -171,6 +171,17 @@ che…?»: ora conta «1. vero, 2. falso», «la prima è vera», «il secondo �
 Sulla DGX col ramo: tutti gli 11 casi 3/3, la pagina 116 letta in 3 giri su 3 (e in 2 su 3 in un
 secondo giro del solo caso).
 
+## La verifica che non si creava col «sì» e il vicolo cieco (02/11, issue #376, ramo `issue-376-si-con-la-stanza`)
+
+Il giro del «sì» con la stanza accesa è in [sicurezza-politica](sicurezza-politica.md), stessa data.
+Qui il vicolo cieco: a «Venerdì ho la verifica di fisica sulle misure…» il modello chiamava
+`studio_proponi_data` con la verifica 1 inventata, e la frase pronta «Questa verifica non la trovo.»
+chiudeva il turno. Ora `proponi_data` e `sposta` senza una verifica non chiudono il turno: `cosa_fare`
+porta a «crea», senza risposta finale. Un id inventato con la materia di una verifica che c'è vale
+la materia; un id di un'altra materia non propone di spostare quella (esito ingannevole). La
+descrizione dice che `proponi_data` è solo per una verifica che c'è già. Prova col modello:
+`prova_studio_ollama` ha i casi con le righe della stanza, compreso il «sì» con l'offerta già detta.
+
 ## La condivisione dal telefono (31/10, issue #298 parte 3, ramo `issue-298-studio-condividi`)
 
 *Terza parte della #298 (la seconda, il Takeout, aspetta il passo manuale di chi amministra).

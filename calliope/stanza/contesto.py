@@ -158,6 +158,8 @@ class Blocco:
     # Per il primo pezzo di una conversazione (14/10 notte): la finestra allargata fino
     # all'inizio dell'ultimo scambio della stanza (al più RIAPERTURA_MAX_S)
     finestra_lunga: list = field(default_factory=list)
+    # Le righe con chi le ha dette, per la politica (02/11, #376: `_voci`, `esterno_altri`)
+    voci: tuple | None = None
 
     def per_registro(self) -> dict:
         """Solo numeri (il registro dei turni non ha mai le parole della stanza). Sempre lo
@@ -189,6 +191,8 @@ class Pezzo:
     # Il numero d'arrivo (seq) più alto delle sue righe: le righe arrivate prima e lasciate fuori
     # dal tetto non tornano dopo, fuori ordine (14/10 notte)
     seq_max: int = 0
+    # Le righe con chi le ha dette, per la politica (02/11, #376: `_voci`, `esterno_altri`)
+    voci: tuple | None = None
 
     @property
     def caratteri(self) -> int:
@@ -272,6 +276,41 @@ def _esterno(scelte: list[dict]) -> str:
     """Le parole delle persone (per la provenienza): né Calliope né la TV (che non si mostra)."""
     return "\n".join(str(r.get("testo") or "") for r in scelte
                      if r.get("chi") not in ("calliope", "tv"))
+
+
+def _voci(scelte: list[dict]) -> tuple:
+    """(nome o None, testo) delle righe che non sono di Calliope: il nome solo con la voce
+    riconosciuta sopra soglia di una persona (non «Carlo?», non un conoscente, non più voci). Una
+    riga della TV conta senza testo: non si mostra, ma c'è (`esterno_altri`)."""
+    out = []
+    for r in scelte:
+        chi = r.get("chi")
+        if chi == "calliope":
+            continue
+        if chi == "tv":
+            out.append((None, ""))
+            continue
+        sicura = (r.get("nome") and r.get("sicurezza") == "voce" and chi != "piu_voci"
+                  and not str(chi or "").startswith("conoscente:"))
+        out.append((str(r["nome"]) if sicura else None, str(r.get("testo") or "")))
+    return tuple(out)
+
+
+def esterno_altri(x, nome: str | None) -> str | None:
+    """Le parole di un blocco o di un pezzo della stanza che per la politica sono un dato estraneo
+    a `nome`, la persona riconosciuta che parla: le righe delle altre voci e il riassunto (02/11,
+    #376: con `stanza_contesto` acceso le righe contengono anche le sue frasi, e ogni azione di un
+    turno «sì» era `valore_non_ancorata`). None se non ce n'è nessuna. Con una voce incerta
+    (`nome` None) tutto, come prima."""
+    voci = getattr(x, "voci", None)
+    esterno = str(getattr(x, "esterno", "") or "")
+    if voci is None or not nome:
+        return esterno
+    altri = [t for n, t in voci if n != nome]
+    riass = str(getattr(x, "riassunto", "") or "")
+    if riass:
+        altri.append(riass)
+    return "\n".join(altri) if altri else None
 
 
 def scegli(righe: list[dict], ora: float, caldo_s: float, sempre_s: float,
@@ -376,7 +415,7 @@ def costruisci(stanza, sat, cfg, inizio_turno: float, mancano: int = 0,
                   caratteri=len(righe_txt), mancano=mancano,
                   segmenti={r.get("segmento") for r in scelte if r.get("segmento") is not None},
                   esterno=_esterno(scelte) + ("\n" + riass if riass else ""),
-                  riassunto=riass,
+                  riassunto=riass, voci=_voci(scelte),
                   righe_id={(sat, r.get("seq")) for r in scelte},
                   sat=sat, inizio=inizio_turno, finestra=_finestra(righe, inizio_turno, cfg),
                   dove=dove, presenti=presenti, cerca=cerca,
@@ -499,7 +538,7 @@ def pezzo(blocco: Blocco, mandate: set, cfg, n: int, primo: bool,
     if primo:
         testo = con_nota(testo)                  # fuori dalla busta (vedi STORPIATE)
     return Pezzo(n=n, sat=sat, testo=testo,
-                 esterno=_esterno(scelte),
+                 esterno=_esterno(scelte), voci=_voci(scelte),
                  ids=frozenset((sat, r.get("seq")) for r in scelte),
                  segmenti=frozenset((sat, "seg", r.get("segmento")) for r in scelte
                                     if r.get("segmento") is not None),

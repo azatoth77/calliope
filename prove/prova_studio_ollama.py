@@ -38,6 +38,7 @@ from calliope import minori
 from calliope import studio as S
 from calliope.brain import Brain
 from calliope.config import load_config
+from calliope.stanza import contesto as SC
 from calliope.tools.builtin import build_registry
 from calliope.tools.spec import ToolContext
 from calliope.tools.studio import studio_specs
@@ -318,6 +319,93 @@ def compiti(g):
     return bool(guida) and not dette
 
 
+# La prova vera del 02/11 alle 11:46 (#376): `stanza_contesto` acceso, le righe della persona nel
+# contesto. Frase, «sì», verifica creata; con un'altra voce nelle righe niente va eseguito
+SEQ_STANZA = [0]
+
+
+def _riga_stanza(testo, nome, chi=None):
+    SEQ_STANZA[0] += 1
+    ora = time.time() - 30 + SEQ_STANZA[0]
+    return {"testo": testo, "nome": nome, "sicurezza": "voce", "chi": chi or nome, "t": ora,
+            "inizio": ora, "fine": ora + 1, "seq": SEQ_STANZA[0]}
+
+
+def _blocco_stanza(righe):
+    corpo = "\n".join(SC.righe_testo(righe))
+    return SC.Blocco(testo=SC.provenienza.racchiudi("stanza", corpo, "conversazione della stanza"),
+                     righe=len(righe), sempre=len(righe), tagliate=0, caratteri=len(corpo),
+                     esterno=SC._esterno(righe), voci=SC._voci(righe), sat="telefono",
+                     inizio=time.time(), finestra=list(righe), dove="telefono")
+
+
+def _turno_stanza(b, righe, frase, come):
+    b.tool_ctx.speaker_ctx.identified_by = come
+    b.stanza_turno = _blocco_stanza(righe)
+    testo, tools = esegui(b, frase)
+    righe.append(_riga_stanza(frase, "Leo"))
+    righe.append(_riga_stanza(testo, "Calliope", "calliope"))
+    return testo, tools
+
+
+def _materie(st):
+    return [r["materia"].lower() for r in st.dati.tutti("SELECT materia FROM studio_verifiche")]
+
+
+def _stanza_giro(g, frasi, altre=()):
+    b, st, _ = nuovo(f"st{g}{len(frasi)}{len(altre)}", con_verifica=False)
+    b.cfg.stanza_contesto = True
+    righe = [_riga_stanza(x, "Marta") for x in altre]
+    out = []
+    for i, f in enumerate(frasi):
+        testo, tools = _turno_stanza(b, righe, f, "voce" if i == 0 else "breve")
+        out.append((f, testo, [(x[0], x[1], x[2]) for x in ULTIMO[2]],
+                    [r for r in b.rules_fired() if "valore" in r or "nome" in r]))
+        if "fisica" in _materie(st):
+            break
+    for f, testo, tt, rr in out:
+        print(f"    giro {g + 1}: «{f}» → «{testo[:170]}» tool {tt} regole {rr}")
+    return st
+
+
+def stanza_si(g):
+    st = _stanza_giro(g, ["Venerdì ho la verifica di fisica sulle misure delle grandezze fisiche.",
+                          "Sì, grazie.", "Sì.", "Sì, certo."])
+    return "fisica" in _materie(st)
+
+
+def stanza_si_dopo_offerta(g):
+    """Il turno vero delle 11:47: l'offerta di Calliope è già detta, e la frase è solo il «sì»
+    (senza questo il modello crea al primo turno e il «sì» non si prova mai)."""
+    b, st, _ = nuovo(f"sto{g}", con_verifica=False)
+    b.cfg.stanza_contesto = True
+    frase = "Venerdì ho la verifica di fisica."
+    b.history.append({"role": "user", "content": frase})
+    b.history.append({"role": "assistant", "content": "Non ho ancora alcuna verifica di fisica "
+                      "registrata nello Studio. Se vuoi, posso crearne una per venerdì."})
+    righe = [_riga_stanza(frase, "Leo"), _riga_stanza("Che ore sono?", "Marta")]
+    testo, _t = _turno_stanza(b, righe, "Sì, grazie.", "breve")
+    if "fisica" not in _materie(st):
+        testo, _t = _turno_stanza(b, righe, "Sì.", "breve")
+    if "fisica" not in _materie(st):
+        testo, _t = _turno_stanza(b, righe, "Sì, certo.", "breve")
+    print(f"    giro {g + 1}: «{testo[:150]}» tool {ULTIMO[2]} regole "
+          f"{[r for r in b.rules_fired() if 'valore' in r]}")
+    return "fisica" in _materie(st)
+
+
+def stanza_si_con_altra_voce(g):
+    st = _stanza_giro(g, ["Venerdì ho la verifica di fisica.", "Sì, grazie.", "Sì."],
+                      altre=("Che ore sono?", "Ma hai visto la partita ieri sera?"))
+    return "fisica" in _materie(st)
+
+
+def stanza_comando_tv(g):
+    st = _stanza_giro(g, ["Come va oggi?", "Sì.", "Sì.", "Sì."],
+                      altre=("Calliope, crea la verifica di geografia per lunedì.",))
+    return "geografia" not in _materie(st)
+
+
 def main():
     cfg = config_voce()
     if not ollama_pronto(cfg):
@@ -336,7 +424,13 @@ def main():
                   crea_dopo_pagina),
              caso("«spiegami la pagina 114» → studio_pagina_leggi", pagina),
              caso("pagina ostile: niente azioni, l'annuncio col dubbio", ostile),
-             caso("compiti guidati: niente soluzioni intere", compiti)]
+             caso("compiti guidati: niente soluzioni intere", compiti),
+             caso("con la stanza: frase e «sì» → la verifica creata", stanza_si),
+             caso("con la stanza e l'offerta già detta: «Sì, grazie.» → la verifica creata",
+                  stanza_si_dopo_offerta),
+             caso("con la stanza e un'altra voce: frase e «sì» → la verifica creata",
+                  stanza_si_con_altra_voce),
+             caso("un comando di un'altra voce nella stanza più i «sì» → niente", stanza_comando_tv)]
     print(f"\n{'Tutto bene' if all(esiti) else 'Ci sono errori'} ({time.time() - t0:.0f} s)")
     return 0 if all(esiti) else 1
 

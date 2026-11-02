@@ -893,6 +893,110 @@ def consenso_della_persona(ctx) -> bool:
             and getattr(sc, "identified_by", None) in ("voce", "breve"))
 
 
+# La forma chiusa del «sì»: anche con la cortesia in fondo («Sì, grazie.», «Certo, grazie»)
+_CORTESIA_FINE = re.compile(r"[\s,.;:!]+(?:grazie(?:\s+mille)?|per\s+favore)[\s.!]*$", re.I)
+
+
+def si_chiuso(testo: str) -> bool:
+    return pol.consenso_chiuso(_CORTESIA_FINE.sub("", str(testo or "")))
+
+
+def si_ancorato(name: str, args: dict, cl, t, ctx, tipi: dict | None, E: int, fidati=()) -> set:
+    """Gli argomenti di un «sì» che ancora l'azione, o un insieme vuoto (02/11, #376, caso vero del
+    02/11 alle 11:46: «Venerdì ho la verifica di fisica.», «Se vuoi, posso crearne una per
+    venerdì.», «Sì, grazie.» → `valore_non_ancorata`, con le righe della stanza, per sempre).
+
+    La persona riconosciuta risponde con una forma chiusa di consenso a una domanda o un'offerta
+    di Calliope, e i valori dell'azione li ha detti lei nelle sue ultime frasi: l'azione l'ha
+    chiesta lei. Tutti i valori distintivi, almeno uno, e la domanda ne nomina uno o ha le parole
+    del tool; una parola che sta solo nelle righe della stanza o che ha scritto il modello non vale. Mai per
+    un'azione importante (E3–E4, la sfida nella classe) né per un tool senza parole dichiarate,
+    mai con un dato nuovo o letto in questa risposta: un comando detto dalla TV resta un dato,
+    anche con un «sì»."""
+    frasi = tuple(x for x in (getattr(t, "frasi_prima", ()) or ()) if x)
+    domanda = str(getattr(t, "domanda_prima", "") or "")
+    if (not frasi or not domanda or E > E2 or E <= E0 or cl.sfida
+            or (cl.verbi is None and not cl.verbi_azione)
+            or not consenso_della_persona(ctx) or not si_chiuso(t.testo)
+            or t.dato_nuovo or t.letto_ora):
+        return set()
+    sc = getattr(ctx, "speaker_ctx", None)
+    if any(getattr(sc, k, None) for k in ("incerta", "minore_incerto", "minore_vicino")):
+        return set()
+    testo = " ".join(frasi)
+    base = Fonti.da(t, fidati)
+    f = replace(base, frase=prov.parole(testo), persona=set(), numeri_frase=_gettoni_numeri(testo),
+                numeri_persona=set(), foto=False)
+    oggi = _oggi_di(ctx)
+    dette, nominati = set(), False
+    parole_domanda = prov.parole(domanda)
+    numeri_domanda = _gettoni_numeri(domanda)
+    for k, v in (args or {}).items():
+        tipo = (tipi or {}).get(k, BERSAGLIO)
+        if tipo in (IGNORA, AZIONE, SCELTA) or v in (None, ""):
+            continue
+        if (name, k) in DATE_DETTE:
+            try:
+                from .tools.studio import data_detta_dalla_persona
+                ok = data_detta_dalla_persona(v, frasi, oggi)
+            except Exception:  # noqa: BLE001
+                ok = False
+            if not ok:
+                return set()
+            dette.add(k)
+            if (prov.parole(str(v)) & parole_domanda
+                    or _data_mostrata(v, ctx).split()[0].lower() in domanda.lower()):
+                nominati = True
+            continue
+        e = etichetta(v, tipo, f)
+        if e in (FIDATO, SCELTO):
+            continue
+        if e != DETTO:
+            return set()
+        dette.add(k)
+        testo_v = _testo(v) or ""
+        if prov.parole(testo_v) & parole_domanda or _gettoni_numeri(testo_v) & numeri_domanda:
+            nominati = True
+    # La domanda è su questa azione: nomina un valore o ha le parole del tool («lo segno in agenda»)
+    return dette if nominati or (dette and pol.chiesto_con_verbi(cl, domanda, args)) else set()
+
+
+def dalla_stanza(name: str, args: dict, cl, t, tipi: dict | None, fidati=()) -> bool:
+    """L'azione viene dalle righe della stanza di un'altra voce (02/11, #376): un valore che sta
+    solo lì, o le parole del tool dette lì e mai dalla persona. Un comando sentito dalla TV non
+    diventa un'azione nemmeno con un «sì» detto a una domanda: la persona lo chiede con le sue
+    parole. Solo per la stanza: per una pagina o una ricerca resta la domanda di sempre."""
+    if "stanza" not in (t.contaminazione or ()):
+        return False
+    stanza = " ".join(x for fonte, x in (t.esterni or ()) if fonte == "stanza")
+    if not stanza.strip():
+        return False
+    f = Fonti.da(t, fidati)
+    parole_stanza = prov.parole(stanza)
+    for k, v in (args or {}).items():
+        tipo = (tipi or {}).get(k, BERSAGLIO)
+        if tipo in (BERSAGLIO, CONTENUTO, LIBERO) and v not in (None, "") \
+                and etichetta(v, tipo, f) == DATO \
+                and prov.parole(_testo(v) or "") & parole_stanza:
+            return True
+    return (pol.chiesto_con_verbi(cl, stanza, args)
+            and not pol.chiesto_con_verbi(cl, f"{t.testo} {t.persona_txt}", args))
+
+
+# Il rifiuto `valore_non_ancorata` vale anche per i turni dopo (02/11, #376: ogni «sì» è un turno
+# nuovo e ripartiva dal rifiuto, si girava in tondo per sempre)
+GIRO_TURNI = 2
+SENTITO_IN_STANZA = ("Questo l'ho sentito nella stanza, non me l'hai chiesto tu: se lo vuoi, "
+                     "chiedimelo con le tue parole.")
+
+
+def _gia_rifiutata(name: str, t) -> bool:
+    giro = getattr(t, "giro_valore", None)
+    if not isinstance(giro, dict) or name not in giro:
+        return False
+    return 0 <= int(getattr(t, "numero_turno", 0) or 0) - int(giro[name]) <= GIRO_TURNI
+
+
 def ancorata(cl, name: str, args: dict, t) -> bool:
     """La frase di questo turno chiede proprio questo tool: le sue parole (Classe.verbi, per
     azione Classe.verbi_azione) non negate; un fatto della persona detto in questa frase
@@ -1123,12 +1227,29 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         if (getattr(t, "sfida_sospeso", False) and voce_frase
                 and not t.risposta.get("sfida_portata_usata")):
             det["sfida_portata"] = True
+    si_chiavi = set()
     if not risposta and not ancorata(cl, name, args, t):
-        if not t.risposta.get("rifiutata_valore"):
-            t.risposta["rifiutata_valore"] = True
-            return pol.Decisione("rifiuta", "valore_non_ancorata", "", fonte), det
-        return pol.Decisione("conferma", "valore_non_ancorata",
-                             f"Non me l'hai chiesto: vuoi che {cosa}?", fonte), det
+        si_chiavi = si_ancorato(name, args, cl, t, ctx, tipi, E, fidati)
+        if si_chiavi:
+            det["si_ancorato"] = True
+            from .tools.spec import note_rule
+            note_rule(ctx, "valore_si_ancorato")
+        else:
+            # Dalle righe della stanza di un'altra voce: mai una domanda che porti ad eseguire,
+            # il perché detto dal codice, dopo il primo rifiuto (02/11, #376)
+            giro = pol.consenso(t.testo) and consenso_della_persona(ctx) and _gia_rifiutata(name, t)
+            if not t.risposta.get("rifiutata_valore") and not giro:
+                t.risposta["rifiutata_valore"] = True
+                if isinstance(getattr(t, "giro_valore", None), dict):
+                    t.giro_valore[name] = int(getattr(t, "numero_turno", 0) or 0)
+                return pol.Decisione("rifiuta", "valore_non_ancorata", "", fonte), det
+            if isinstance(getattr(t, "giro_valore", None), dict):
+                t.giro_valore[name] = int(getattr(t, "numero_turno", 0) or 0)
+            if dalla_stanza(name, args, cl, t, tipi, fidati):
+                return pol.Decisione("rifiuta", "valore_dalla_stanza", SENTITO_IN_STANZA,
+                                     "stanza"), det
+            return pol.Decisione("conferma", "valore_non_ancorata",
+                                 f"Non me l'hai chiesto: vuoi che {cosa}?", fonte), det
     # 2. da dove vengono gli argomenti
     f = Fonti.da(t, fidati)
     # la data detta col mese a parole e scritta dal modello in cifre (#98), solo per un valore
@@ -1157,6 +1278,9 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         # l'anno che nessuno dice («il 12 novembre» → 2026-11-12). Solo per DATE_DETTE; una data
         # che sta solo in una pagina o in un titolo resta «dal dato»
         if (name, k) in DATE_DETTE and e != DETTO and data_della_persona(v, t, ctx):
+            e = PERSONA
+        # Controllato nelle sue ultime frasi dal «sì» che ha ancorato l'azione (02/11, #376)
+        if k in si_chiavi and e != DETTO:
             e = PERSONA
         # Un valore della chiamata di prima allo stesso tool, scelto prima del dato letto ora
         # (12/10 sera): l'etichetta che aveva allora, con i soli dati di allora
