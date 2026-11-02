@@ -111,9 +111,21 @@ class T:
                    f" return [b.x + b.width / 2, b.y + b.height / 2]; }})()")
         if not r:
             return False
-        for t in ("mousePressed", "mouseReleased"):
-            self.p._chiama("Input.dispatchMouseEvent", {"type": t, "x": r[0], "y": r[1],
-                                                         "button": "left", "clickCount": 1})
+        # Subito dopo un campo appena scritto o un file mandato, Chromium a volte perde il mouse
+        # sintetico: niente mousedown nella pagina, con il tasto giusto sotto le coordinate giuste
+        # (registrato il 02/11: 1 giro su 6 di prova_studio_esercizi_pagina). Si riprova solo se la
+        # pagina non l'ha visto, quindi mai due tocchi
+        self.v("""(() => { window.__mouse = 0; if (!window.__mouseIn) { window.__mouseIn = 1;
+            document.addEventListener('mousedown', () => { window.__mouse++; }, true); } return 1; })()""")
+        for _ in range(3):
+            for t in ("mousePressed", "mouseReleased"):
+                self.p._chiama("Input.dispatchMouseEvent", {"type": t, "x": r[0], "y": r[1],
+                                                             "button": "left", "clickCount": 1})
+            fine = time.time() + 0.5
+            while time.time() < fine:
+                if self.v("window.__mouse === 0") is not True:     # visto, o pagina cambiata
+                    return True
+                time.sleep(0.05)
         return True
 
     def file(self, percorsi):
