@@ -585,7 +585,7 @@ verifica("contrario: la conversazione pulita non ha domande", len(fatti) == 1, f
 st.close()
 
 print("— 15. la domanda dice tutto ciò che si esegue")
-dice("un'azione che la frase dice col verbo", {"cosa": "dentista", "quando": "giovedì", "cambia": "togli"}, "tolga")
+dice("un'azione che la frase dice col verbo", {"cosa": "dentista", "quando": "giovedì", "cambia": "togli"}, "anticipi")
 dice("per_tutti", {"fatto": "il codice è segreto", "per_tutti": True}, "per tutti", tool="ricorda")
 dice("una parola corta", {"azione": "crea", "materia": "fisica", "data": "venerdì", "per": "Ada"}, "Ada",
      tool="studio")
@@ -598,7 +598,8 @@ b, st, fatti = nuovo()
 b.tools.register(_br().get(A_))
 t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo faccia?"))
 r = t(b, "Sì.", [ALTRA], "breve", ch(A_, {"cosa": "dentista", "quando": "giovedì", "cambia": "togli"}), tx("Ok."))
-verifica("il tool vero `appuntamento_aggiungi` con `togli`: la domanda lo dice", "tolga" in r, r)
+verifica("il tool vero `appuntamento_aggiungi` con `togli`: la domanda dice ciò che fa (anticipa)",
+         "anticipi" in r and "tolga" not in r, r)
 st.close()
 
 print("— 16. la frase che chiude non afferma ciò che non sa")
@@ -714,6 +715,14 @@ verifica("«venerdì 13» non è «venerdì»; «20 novembre» è la sua data sc
          not V_._stessa_data("venerdì 13", "venerdì") and not V_._stessa_data("venerdì", "venerdì 13")
          and V_._stessa_data("venerdì", "venerdì") and V_._stessa_data("20 novembre", "2026-11-20")
          and not V_._stessa_data("venerdì 13", "2026-10-30"))
+for x_ in ("venerdì della prossima settimana", "il primo venerdì di dicembre", "venerdì di dicembre"):
+    verifica(f"«{x_}» non vale «venerdì» né la sua data", not V_._stessa_data(x_, "venerdì")
+             and not V_._stessa_data("venerdì", x_) and x_ and V_._stessa_data(x_, " " + x_.upper()))
+from calliope.tools.studio import _data_detta as _dd  # noqa: E402
+_ven = _dd("venerdì", __import__("datetime").date.today()).isoformat()
+verifica("contrari: «venerdì» e la sua data, «il prossimo venerdì», «venerdì prossimo» restano uguali",
+         V_._stessa_data("venerdì", _ven) and V_._stessa_data(_ven, "venerdì")
+         and V_._stessa_data("il prossimo venerdì", "venerdì") and V_._stessa_data("venerdì prossimo", _ven))
 b, st, fatti = nuovo()
 t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo faccia?"))
 r1 = t(b, "Sì.", [ALTRA], "breve", ch("agenda_annulla", {"cosa": "dentista non da te"}), tx("Ok."))
@@ -722,8 +731,10 @@ verifica("un valore con «non da te» non vale come fonte detta", b.pending.get(
 st.close()
 from calliope import politica as POL  # noqa: E402
 for tool_, a_, atteso, no in (
-        ("promemoria_imposta", {"testo": "dentista", "cambia": "togli"}, "tolga", "sposti"),
-        (A_, {"cosa": "dentista", "quando": "giovedì", "cambia": "togli"}, "tolga", "segni"),
+        ("promemoria_imposta", {"testo": "dentista", "cambia": "togli"}, "anticipi", "tolga"),
+        ("promemoria_imposta", {"testo": "dentista", "cambia": "aggiungi"}, "rimandi", "aggiunga"),
+        (A_, {"cosa": "dentista", "quando": "giovedì", "cambia": "togli"}, "anticipi", "tolga"),
+        (A_, {"cosa": "dentista", "quando": "giovedì", "cambia": "aggiungi"}, "rimandi", "aggiunga"),
         (A_, {"cosa": "dentista", "quando": "giovedì", "cambia": "imposta"}, "sposti", "segni"),
         (A_, DENT, "segni", "tolga")):
     c_ = POL._cosa(POL.classe_di(tool_, None), a_)
