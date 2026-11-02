@@ -819,6 +819,8 @@ class Turno:
     # `valore_non_ancorata` della conversazione {tool: (turno, quando)}, che valgono anche nei
     # turni dopo (la lista viva), e il turno
     frasi_prima: tuple = ()
+    # La domanda in sospeso ha detto da dove viene il valore (scritto quando è stata fatta)
+    fonte_detta_sospeso: bool = False
     giro_valore: dict | None = None
     numero_turno: int = 0
     # La domanda della proposta in sospeso e che cosa propone (10/10: «Non ho capito: lo
@@ -2099,7 +2101,10 @@ def _risultato(domanda: str, name: str, args: dict, regola: str, fonte: str = ""
     return {"ok": False, "fatto": f"{NIENTE}, chiedo conferma",
             "conferma": domanda, "risposta_finale": domanda,
             "in_sospeso": {"domanda": domanda, "cosa": "l'azione proposta", "tool": name,
-                           "argomenti": clean, "politica": regola}}
+                           "argomenti": clean, "politica": regola,
+                           # La domanda ha detto la fonte («viene da una pagina, non da te»): per la
+                           # metrica, al consumo (valore._registra_consumo)
+                           "fonte_detta": "non da te" in str(domanda)}}
 
 
 def _domanda_ripetuta(name: str, args: dict, cl: Classe, t: Turno | None) -> bool:
@@ -2257,14 +2262,10 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
             d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
     else:
         d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
-        # Anche con la conversazione tornata pulita (una stanza andata in pausa): il «sì» alla
-        # domanda vale per ciò che ha detto (02/11, #376)
-        if per_valore and t is not None and cl.classe not in (SICURO, VIETATO) \
-                and d.esito not in ("blocca", "vieta"):
-            c_ = valore.consumo_domanda(name, args or {}, cl, t, ctx, spec,
-                                        list(getattr(t, "fidati", None) or ()), cosa)
-            if c_ is not None:
-                d = c_
+        # Anche con la conversazione tornata pulita (una stanza andata in pausa)
+        g_ = (valore.consumo_zona_grigia(name, args or {}, cl, t, ctx, cosa)
+              if per_valore and cl.classe != SICURO else None)
+        d = g_ or d
     # Una domanda in più prima di eseguire (Classe.chiedi_se, 17/10): non al «sì» alla domanda,
     # e solo con la chiamata identica a quella chiesta (tutti gli argomenti: terza revisione
     # della PR #143, un «sì» con quale="tutti" o un altro minore eliminava altri file)

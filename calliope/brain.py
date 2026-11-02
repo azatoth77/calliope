@@ -4300,6 +4300,8 @@ class Brain:
             "scade": time.monotonic() + secondi_validi(self.cfg),
             # La domanda è della politica (09/10): la chiamata vale solo con un consenso
             "politica": offer.get("politica"),
+            # Ha detto da dove viene il valore (02/11, #376): per la metrica, al consumo
+            "fonte_detta": bool(offer.get("fonte_detta")),
             # Si risponde con un dato, anche «no» (10/10: la domanda dell'agente): un «no» non
             # la rifiuta (_rifiuto_proposta)
             "risposta": bool(offer.get("risposta")),
@@ -7077,6 +7079,12 @@ class Brain:
         # Gli argomenti che nominano qualcosa (08/10): le probabilità di Whisper partono adesso,
         # in parallelo al tool
         misure = self._argomenti_inizio(call["name"], spec, args, level)
+        # La domanda della politica vale per la chiamata identica, una volta, della persona che l'ha
+        # sentita (02/11, #376). Ogni altra chiamata fa il percorso normale, come se non ci fosse
+        senza_domanda = self._domanda_non_vale(call["name"], args, spec)
+        if senza_domanda:
+            self.turn_pending_tool = None
+            self._set_ctx("tool_in_sospeso", None)
         self._set_ctx("politica", self._turno_politica())
         self._set_ctx("strumenti", self.tools)
         self._set_ctx("politica_esito", None)
@@ -7086,6 +7094,9 @@ class Brain:
             result = self.tools.call(call["name"], args, self.tool_ctx, level)
         finally:
             self._set_ctx("politica", None)
+            if senza_domanda:
+                self.turn_pending_tool = call["name"]
+                self._set_ctx("tool_in_sospeso", call["name"])
         # La guardia degli esercizi guidati scattata nel registro dei tool (#278, seconda revisione
         # della PR #367): anche nelle regole di Brain, come quando scatta sulla voce
         if "studio_esercizio_svelato" in (getattr(self.tool_ctx, "regole", None) or ())                 and "studio_esercizio_svelato" not in (getattr(self, "last_rules", None) or ()):
@@ -7175,6 +7186,9 @@ class Brain:
         if ok and p and call["name"] == p.get("tool") and call["name"] == getattr(
                 self, "turn_pending_tool", None) and not self._offer:
             self.pending = None
+            # Consumata: una seconda chiamata nello stesso «sì» non ha più una domanda (02/11, #376)
+            self.turn_pending_tool = None
+            self._set_ctx("tool_in_sospeso", None)
         # Le intenzioni (calliope/valore.py, fase 2): riuscita si chiude, fallita resta aperta
         # (gli errori sono errori: la chiamata corretta non chiede di nuovo)
         try:
@@ -7573,6 +7587,19 @@ class Brain:
         conv.esterni.append((fonte, testo[:20000]))
         del conv.esterni[:-30]
 
+    def _domanda_non_vale(self, nome: str, args: dict, spec=None) -> bool:
+        """C'è una domanda della politica in sospeso per questo tool, ma non vale per questa
+        chiamata: è un'altra chiamata. Non per la frase di sfida superata, che ha la sua."""
+        p = getattr(self, "pending", None) or {}
+        if (getattr(self, "turn_pending_tool", None) != nome or p.get("tool") != nome
+                or not p.get("politica") or getattr(self, "_sfida_args", None) is not None):
+            return False
+        if not valore.stessa_chiamata(nome, args, p.get("args"), spec, self.tool_ctx):
+            self._rule("valore_chiamata_diversa")
+            return True
+        p["args"] = dict(args)           # la stessa, scritta magari in un altro modo (una data)
+        return False
+
     def _turno_politica(self) -> "politica.Turno":
         """Quello che la politica dei tool deve sapere del turno (ToolContext.politica)."""
         hist = self.history
@@ -7649,6 +7676,7 @@ class Brain:
             # La domanda di Calliope con nomi fidati a cui questa frase risponde (09/10)
             domanda_fidata=self._domanda_fidata(),
             frase_prima_domanda=self._frase_prima_domanda(hist),
+            fonte_detta_sospeso=bool(p.get("fonte_detta")) and p.get("tool") == tool,
             # Le sue frasi recenti e il giro dei rifiuti (02/11, #376)
             frasi_prima=self._frasi_prima(hist),
             giro_valore=self._giro_valore(),

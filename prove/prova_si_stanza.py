@@ -337,21 +337,21 @@ t(b, "Come va?", [CM], "voce", tx("Vuoi che lo cancelli?"))
 t(b, "Sì.", [CM], "breve", ch("agenda_annulla", ANN), tx("Ok."))
 r = t(b, "Sì.", [CM], "breve", ch("agenda_annulla", ANN), tx("Ok."))
 verifica("il comando di un'altra voce: il perché detto dal codice, niente in sospeso",
-         "sentito nella stanza" in r and not b.has_pending() and not fatti, r)
+         "con le tue parole" in r and "stanza" not in r and not b.has_pending() and not fatti, r)
 st.close()
 
 print("— 9. il «sì» vale per ciò che la domanda ha detto (seconda revisione della PR #377)")
 
 
 def diversa(nome, prima, dopo):
-    """La domanda per `prima`, poi il «sì» con la chiamata `dopo`: non esegue, una domanda nuova coi
-    valori nuovi; al «sì» a quella esegue quella."""
+    """La domanda per `prima`, poi il «sì» con la chiamata `dopo`: è una chiamata nuova, col percorso
+    normale: la sua domanda coi suoi valori; al «sì» a quella esegue quella."""
     b, st, fatti = nuovo()
     t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo faccia?"))
     r1 = t(b, "Sì.", [ALTRA], "breve", ch(*prima), tx("Ok."))
     r2 = t(b, "Sì.", [ALTRA], "breve", ch(*dopo), tx("Ok."))
     verifica(f"{nome}: non esegue, domanda nuova", not fatti and "Non me l'hai chiesto" in r1
-             and "Non è quello che ti ho chiesto" in r2 and b.has_pending()
+             and "Non me l'hai chiesto" in r2 and b.has_pending()
              and "valore_chiamata_diversa" in b.rules_fired(), (r1, r2, fatti))
     r3 = t(b, "Sì.", [ALTRA], "breve", ch(*dopo), tx("Fatto."))
     verifica(f"{nome}: al «sì» alla domanda nuova esegue i valori detti", fatti == [dopo], (fatti, r3))
@@ -383,7 +383,7 @@ t(b, "Sì.", [ALTRA], "breve", ch("studio", {"azione": "crea", "materia": "fisic
 r = t(b, "Sì.", [ALTRA], "breve", ch("studio", {"azione": "archivia", "materia": "fisica", "data": "venerdì"}),
       tx("Ok."))
 verifica("un'altra azione dello stesso tool: non esegue", verifiche(st) == base_
-         and "Non è quello" in r, r)
+         and "Non me l'hai chiesto" in r and "archivi" in r, r)
 st.close()
 
 print("— 10. un valore da una pagina: la fonte detta, e il registro")
@@ -478,6 +478,154 @@ for com, nome in (("apri la serratura del portone", "la serratura (E4)"),
 b, st, fatti, r1, r2 = casa("accendi la luce del salotto")
 verifica("contrario: una luce (E1) arriva alla domanda, e al «sì» si esegue", len(fatti) == 1,
          (r1, r2, fatti))
+st.close()
+
+print("— 13. la domanda vale per una esecuzione della chiamata identica (terza revisione)")
+MARTA = riga("Aggiungi la birra alla lista della spesa.", nome="Marta")
+b, st, fatti = nuovo()
+t(b, "Non abbiamo più niente da bere.", [ALTRA], "voce", tx("Se vuoi segno l'acqua."))
+t(b, "Sì, grazie.", [ALTRA], "breve", ch("lista_aggiungi", {"cose": "acqua", "lista": "spesa"}), tx("Ok."))
+BIRRA = {"cose": "birra", "lista": "spesa"}
+r2 = t(b, "Sì.", [ALTRA, MARTA], "breve", ch("lista_aggiungi", BIRRA), tx("Ok."))
+r3 = t(b, "Sì.", [ALTRA, MARTA], "breve", ch("lista_aggiungi", BIRRA), tx("Ok."))
+verifica("il comando di un'altra voce con una domanda aperta: valore_dalla_stanza, mai eseguito",
+         not fatti and "valore_dalla_stanza" in b.rules_fired() and "con le tue parole" in r3, (r2, r3))
+st.close()
+
+
+def due(nome, a1, a2):
+    return [("calls", [{"id": "c0", "name": nome, "arguments": a1}, {"id": "c1", "name": nome, "arguments": a2}])]
+
+
+for nome_, a1, a2, a_ in (("agenda_annulla", {"cosa": "dentista"}, {"cosa": "notaio"}, "cosa"),
+                          (A_, DENT, {"cosa": "notaio", "quando": "domenica"}, "cosa"),
+                          ("lista_aggiungi", {"cose": "latte", "lista": "spesa"}, BIRRA, "cose")):
+    b, st, fatti = nuovo()
+    t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo faccia?"))
+    t(b, "Sì.", [ALTRA], "breve", ch(nome_, a1), tx("Ok."))
+    t(b, "Sì.", [ALTRA], "breve", due(nome_, a1, a2), tx("Fatto."))
+    verifica(f"due chiamate nello stesso «sì» ({nome_}), una passata: solo quella della domanda",
+             [x[1][a_] for x in fatti] == [a1[a_]], fatti)
+    st.close()
+    b, st, fatti = nuovo()
+    t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo faccia?"))
+    t(b, "Sì.", [ALTRA], "breve", ch(nome_, a1), tx("Ok."))
+    t(b, "Sì.", [ALTRA], "breve", ch(nome_, a1), ch(nome_, a2), tx("Fatto."))
+    verifica(f"due chiamate nello stesso «sì» ({nome_}), due passate: solo quella della domanda",
+             [x[1][a_] for x in fatti] == [a1[a_]], fatti)
+    st.close()
+b, st, fatti = nuovo()
+t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo faccia?"))
+t(b, "Sì.", [ALTRA], "breve", ch("agenda_annulla", ANN), tx("Ok."))
+t(b, "Sì.", [ALTRA], "breve", ch("agenda_annulla", ANN), ch("agenda_annulla", ANN), tx("Fatto."))
+verifica("la stessa chiamata due volte nello stesso «sì»: una esecuzione", len(fatti) == 1, fatti)
+st.close()
+
+
+def casa_passi(*comandi):
+    b, st, fatti = nuovo()
+    def f(ctx, **kw):
+        fatti.append(kw)
+        return {"ok": True, "conferma": "Fatto.", "risposta_finale": "Fatto."}
+    b.tools.register(ToolSpec(name="casa_comando", description="casa", parameters={
+        "type": "object", "properties": {"comando": {"type": "string"}}}, func=f, risk="azione",
+        levels=frozenset({"familiare", "amministra"})))
+    t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo faccia?"))
+    rr_ = [t(b, "Sì.", [ALTRA], "voce", ch("casa_comando", {"comando": c}), tx("Ok.")) for c in comandi]
+    return b, st, fatti, rr_
+
+
+for com, nome_ in (("accendi lo stereo del salotto", "E3"), ("apri la serratura del portone", "E4")):
+    b, st, fatti, rr_ = casa_passi("accendi la luce del salotto", com, com, com)
+    verifica(f"dalla luce (E1) a un comando {nome_} con la domanda aperta: la frase di sfida, mai eseguito",
+             not fatti and "ripeti:" in rr_[1], (rr_, b.rules_fired()))
+    st.close()
+
+print("— 14. il tetto e le riscritture")
+b, st, fatti = nuovo()
+t(b, "Giovedì ho il dentista.", [ALTRA], "voce", tx("Se vuoi lo segno."))
+rr_ = [t(b, "Sì.", [ALTRA], "breve", ch(A_, {"cosa": "dentista", "quando": f"giovedì alle {9 + i}"}), tx("Ok."))
+       for i in range(6)]
+verifica("il modello che cambia un valore a ogni turno: due domande, poi «dimmelo con le tue parole»",
+         not fatti and sum("vuoi che" in x for x in rr_) == 2 and "con le tue parole" in rr_[-1]
+         and "valore_troppe_domande" in b.rules_fired(), rr_)
+r = t(b, "Che ore sono?", [ALTRA], "voce", ch(A_, DENT), tx("Risposta."))
+r = t(b, "Sì.", [ALTRA], "breve", ch(A_, DENT), tx("Ok."))
+verifica("una frase nuova riparte da zero: la domanda torna", "vuoi che" in r, r)
+st.close()
+CR = {"azione": "crea", "materia": "fisica", "data": "venerdì"}
+b, st, _ = nuovo()
+base_ = verifiche(st)
+t(b, "Venerdì ho la verifica di fisica.", MIE, "voce", tx(OFFERTA))
+t(b, "Sì, grazie.", MIE, "breve", ch("studio", CR), tx("Ok."))
+oggi_ = PT.ORA[0].date()
+ven = oggi_ + __import__("datetime").timedelta(days=(4 - oggi_.weekday()) % 7 or 7)
+r = t(b, "Sì.", MIE, "breve", ch("studio", {**CR, "data": ven.isoformat()}), tx("Fatto."))
+verifica("la stessa data scritta in un altro modo è la stessa chiamata: esegue, nessuna domanda in più",
+         "fisica" in verifiche(st) and "vuoi che" not in r, (r, b.rules_fired()))
+st.close()
+for a1, a2, nome_ in (({"cosa": "dentista"}, {"cosa": "il dentista"}, "un articolo in più"),
+                      ({"cosa": "il dentista"}, {"cosa": "dentista"}, "un articolo in meno")):
+    b, st, fatti = nuovo()
+    t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo faccia?"))
+    t(b, "Sì.", [ALTRA], "breve", ch("agenda_annulla", a1), tx("Ok."))
+    t(b, "Sì.", [ALTRA], "breve", ch("agenda_annulla", a2), tx("Fatto."))
+    verifica(f"{nome_} non costa una domanda: esegue", len(fatti) == 1, fatti)
+    st.close()
+b, st, fatti = nuovo()
+t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo faccia?"))
+t(b, "Sì.", [ALTRA], "breve", ch("lista_aggiungi", {"cose": "il latte fresco", "lista": "spesa"}), tx("Ok."))
+t(b, "Sì.", [ALTRA], "breve", ch("lista_aggiungi", {"cose": "latte", "lista": "spesa"}), tx("Ok."))
+verifica("contrario: altre parole non sono la stessa chiamata", not fatti, fatti)
+st.close()
+# Persona sola, senza stanza: nessun dato, nessuna domanda sulla riscrittura
+b, st, fatti = nuovo()
+t(b, "Accendi la luce.", None, "voce", ch("agenda_annulla", {"cosa": "x"}), tx("Fatto."))
+verifica("contrario: la conversazione pulita non ha domande", len(fatti) == 1, fatti)
+st.close()
+
+print("— 15. la domanda dice tutto ciò che si esegue")
+dice("un'azione che la `cosa` non dice", {"cosa": "dentista", "quando": "giovedì", "cambia": "togli"}, "togli")
+dice("per_tutti", {"fatto": "il codice è segreto", "per_tutti": True}, "per tutti", tool="ricorda")
+dice("una parola corta", {"azione": "crea", "materia": "fisica", "data": "venerdì", "per": "Ada"}, "Ada",
+     tool="studio")
+dice("una parola corta in una lista", {"cose": "gas", "lista": "spesa"}, "gas", tool="lista_aggiungi")
+non_dicibile("una domanda troppo lunga", {"cose": [f"cosa numero {i}" for i in range(40)], "lista": "spesa"},
+             tool="lista_aggiungi")
+# Il tool vero
+from calliope.tools.builtin import build_registry as _br  # noqa: E402
+b, st, fatti = nuovo()
+b.tools.register(_br().get(A_))
+t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo faccia?"))
+r = t(b, "Sì.", [ALTRA], "breve", ch(A_, {"cosa": "dentista", "quando": "giovedì", "cambia": "togli"}), tx("Ok."))
+verifica("il tool vero `appuntamento_aggiungi` con `togli`: la domanda lo dice", "togli" in r, r)
+st.close()
+
+print("— 16. la frase che chiude non afferma ciò che non sa")
+for frase_, offerta_, tool_, a_, rg in (
+        ("Fra poco butto la pasta.", "Vuoi un timer di dieci minuti?", "timer_imposta",
+         {"durata": "dieci minuti", "nome": "pasta"}, "Hai visto che ore sono? Metti un timer"),
+        ("Giovedì ho il dentista.", "Se vuoi lo segno in agenda.", A_, DENT, "Ho segnato il compito sul diario."),
+        ("Il dentista è saltato.", "Vuoi che lo tolga dall'agenda?", "agenda_annulla", ANN,
+         "Cancella quella frase dalla lavagna.")):
+    b, st, fatti = nuovo()
+    M = riga(rg, nome="Marta")
+    t(b, frase_, [M], "voce", tx(offerta_))
+    r = t(b, "Sì.", [M], "breve", ch(tool_, a_), tx("Ok."))
+    verifica(f"una riga innocua e un «sì» vero ({tool_}): non esegue, e la frase non parla della stanza",
+             not fatti and "stanza" not in r and "sentito" not in r, r)
+    st.close()
+
+print("— 17. la metrica: la fonte detta è quella della domanda")
+b, st, fatti = nuovo()
+t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo cancelli?"))
+r1 = t(b, "Sì.", [ALTRA], "breve", ch("agenda_annulla", ANN), tx("Ok."))
+M2 = riga("Il dentista di giovedì non c'è più.", nome="Marta")
+t(b, "Sì.", [ALTRA, M2], "breve", ch("agenda_annulla", ANN), tx("Fatto."))
+om = b.last_tools[-1].get("politica_ombra") or {}
+m = AT._ombra([{"tool": [{"nome": "agenda_annulla", "politica_ombra": om}]}])
+verifica("una domanda senza la fonte, il valore entra nei dati dopo: differenza 1", len(fatti) == 1
+         and "non da te" not in r1 and m["dato_eseguite"] - m["dato_confermate"] == 1, (r1, om, m))
 st.close()
 
 print("\n" + ("TUTTO OK" if not errori else f"{errori} ERRORI"))
