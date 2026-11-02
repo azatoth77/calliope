@@ -72,8 +72,10 @@ def scenario_telefono(t, st, vid):
     t.tocca('button[data-mappa="salva"]')
     lib = lambda: st.vista_mappe(LEO, vid)["libera"]  # noqa: E731
     ok = aspetta(lambda: any(n["testo"] == HTML for n in lib()["nodi"]), 6)
+    # La riga è nel db prima che la risposta arrivi alla pagina
+    visto = aspetta(lambda: HTML in testo(t), 6)
     verifica("«+ Concetto»: il concetto nella mappa libera; l'HTML resta testo",
-             bool(ok) and HTML in testo(t) and not t.v("!!document.querySelector('.studio-m-elenco li b b')"))
+             bool(ok) and bool(visto) and not t.v("!!document.querySelector('.studio-m-elenco li b b')"))
     radice = lib()["nodi"][0]["id"]
     nuovo = next(n["id"] for n in lib()["nodi"] if n["testo"] == HTML)
     t.tocca('button[data-mappa="collega"]')

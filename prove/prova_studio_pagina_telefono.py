@@ -106,6 +106,11 @@ class T:
         return self.p.valuta(js)
 
     def tocca(self, sel):
+        # Su un tasto spento (la pagina aspetta una risposta) il browser non manda né mousedown né
+        # click: il tocco andrebbe perso. Si aspetta il tasto acceso e si tocca una volta sola
+        if not aspetta(lambda: self.v(f"(() => {{ const e = document.querySelector({json.dumps(sel)}); "
+                                      f"return !e || !e.disabled; }})()"), 8):
+            raise RuntimeError(f"il tasto resta spento: {sel}")
         r = self.v(f"(() => {{ const e = document.querySelector({json.dumps(sel)}); if (!e) return null;"
                    f" e.scrollIntoView({{block: 'nearest'}}); const b = e.getBoundingClientRect();"
                    f" return [b.x + b.width / 2, b.y + b.height / 2]; }})()")
