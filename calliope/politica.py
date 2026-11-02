@@ -309,7 +309,7 @@ CLASSI: dict[str, Classe] = {
     "promemoria_imposta": _c(A, chiave=("testo",), cambio="cambia",
                              cosa=lambda a: f"sposti il promemoria «{_s(a, 'testo')}»"
                              if _cambio(a, "cambia") else f"ti ricordi «{_s(a, 'testo')}»"),
-    "agenda_annulla": _c(A, cosa=lambda a: f"annulli «{_s(a, 'cosa', 'una voce')}»"),
+    "agenda_annulla": _c(A, cosa=lambda a: f"cancelli «{_s(a, 'cosa', 'una voce')}» dall'agenda"),
     "appuntamento_aggiungi": _c(A, chiave=("cosa",),
                                 cosa=lambda a: f"segni l'appuntamento «{_s(a, 'cosa')}»"),
     "lista_aggiungi": _c(A, chiave=("cose", "lista"),

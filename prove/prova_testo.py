@@ -134,6 +134,18 @@ for testo, atteso in [("Sì?", False), ("sì ?", False), ("Calliope, sì?", Fals
                       ("Perché no?", True), ("Ma sì dai, perché no?", True),
                       ("Sì, ma non adesso.", False), ("No, grazie.", False)]:
     verifica(f"consenso «{testo}» (#376)", _consenso(testo), atteso)
+# La forma chiusa del «sì» che porta subito alla domanda del codice (02/11, #376, regola
+# `valore_si_chiuso`): la frase intera, la cortesia in fondo, mai una domanda
+from calliope.valore import si_chiuso as _si_chiuso  # noqa: E402
+for testo, atteso in [("Sì.", True), ("Sì, grazie.", True), ("Sì, certo.", True), ("Certo, grazie", True),
+                      ("Calliope, sì.", True), ("Va bene.", True), ("Vai, fallo.", True),
+                      ("Sì, grazie mille.", True), ("Sì, per favore.", True),
+                      # contrari
+                      ("Sì?", False), ("Perché no?", False), ("Grazie.", False), ("Sì, ma non adesso.", False),
+                      ("Sì, no.", False), ("Boh, sì.", False), ("Non sì.", False), ("No, grazie.", False),
+                      ("Sì, grazie, e domani che tempo fa?", False), ("Sì, cancella il dentista.", False),
+                      ("Grazie a te, sì.", False), ("", False)]:
+    verifica(f"sì chiuso «{testo}» (#376)", _si_chiuso(testo), atteso)
 # «stoppati», «stoppa ti», «smetti» (31/10, #373: «No, stoppa ti.» diventava «Non ci sono riuscita:
 # puoi ripetere?»); «no» solo con un ordine di silenzio
 for testo, atteso in [("No, stoppa ti.", "silenzio"), ("Stoppati.", "silenzio"),

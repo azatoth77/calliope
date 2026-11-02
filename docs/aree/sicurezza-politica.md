@@ -2163,20 +2163,25 @@ riguardava solo lo Studio: ogni azione di un turno «sì», in ogni casa con la 
   con la voce certa per la politica le sue righe sicure escono dai dati, così le sue parole non
   sembrano venire dalla stanza. **La fonte «stanza» resta**: basta un errore di attribuzione, o una
   frase detta a un'altra persona, e una riga non deve mai far eseguire senza una richiesta.
-- **Il percorso del «sì»**: rifiuto, secondo tentativo, poi la domanda scritta **dal codice**, «Non
-  me l'hai chiesto: vuoi che…?», con l'azione e il valore veri; il «sì» a quella esegue.
-  `rifiutata_valore` vale per risposta, quindi il rifiuto si ricorda anche per i turni dopo
-  (`Turno.giro_valore`), con tempo e turni delle proposte (`conferme.secondi_validi`, `turni_validi`,
-  come `Brain.pending`, che tiene anche la domanda). Vale per ogni tool. Costa una domanda in più con
-  la stanza accesa.
+- **Il percorso del «sì»**: una chiamata non ancorata riceve il rifiuto; se il modello insiste, o se
+  la frase è un consenso con un rifiuto recente (`Turno.giro_valore`, con tempo e turni delle
+  proposte: `conferme.secondi_validi`, `turni_validi`), arriva la domanda scritta **dal codice**,
+  «Non me l'hai chiesto: vuoi che…?», con l'azione e il valore veri (`cosa_coi_valori`); il «sì» a
+  quella esegue. **Il «sì» chiuso della persona riconosciuta** (`valore.si_chiuso`, regola
+  `valore_si_chiuso`; non in zona grigia, non «Sì?») salta il rifiuto e passa subito alla domanda
+  (decisione del 02/11: sulla DGX, un giro su tre, dopo il rifiuto il modello non richiamava il tool e
+  la persona sentiva «puoi ripetere la richiesta?»). Non esegue da solo: se il modello ha offerto di
+  controllare il dentista e chiama la cancellazione, la persona sente «cancelli». Vale per ogni tool;
+  costa una domanda in più con la stanza accesa. *[storico fino a questa decisione: sempre prima il
+  rifiuto]*
   *[storico fino alla revisione della PR #377: `valore.si_ancorato` faceva ancorare il «sì» dalla
   domanda scritta dal modello. Tolta: non si distingue «vuoi che controlli il dentista?» da «vuoi che
   lo cancelli?», e la chiamata è un'altra cosa; il revisore ha eseguito così `agenda_annulla` e
   `lista_togli`]*
 - **Il comando di un'altra voce non diventa un'azione** (`valore.dalla_stanza`, regola
   `valore_dalla_stanza`): un valore che sta solo nelle righe della stanza, o le parole del tool dette
-  lì e non dalla persona nella frase del turno o nelle sue due frasi di prima (non in tutta la
-  conversazione): dopo il primo rifiuto una frase del codice che chiude il turno, mai una domanda che
+  lì e non dalla persona nella frase del turno o nella sua frase di prima (non in tutta la
+  conversazione): una frase del codice che chiude il turno (dopo il primo rifiuto, o subito col «sì» chiuso), mai una domanda che
   porti a eseguire. Solo per la stanza: per una pagina o una ricerca resta la domanda di sempre.
 - **Accettato (decisione del 02/11):** un'offerta del modello ispirata da una riga, senza le parole
   del tool né i suoi valori («non abbiamo più niente da bere» → «vuoi che segni l'acqua?»), si esegue

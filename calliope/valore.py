@@ -920,6 +920,33 @@ def dalla_stanza(name: str, args: dict, cl, t, tipi: dict | None, fidati=()) -> 
 
 # Il rifiuto `valore_non_ancorata` vale anche per i turni dopo (02/11, #376: ogni «sì» è un turno
 # nuovo e ripartiva dal rifiuto, si girava in tondo per sempre), con la scadenza delle proposte
+# La forma chiusa del «sì» (02/11, #376, regola `valore_si_chiuso`): la frase intera, anche con la
+# cortesia in fondo («Sì, grazie.», «Certo, grazie»), mai con un punto di domanda («Sì?», «Perché
+# no?»). Solo per passare subito alla domanda del codice: non esegue niente da sola
+_CORTESIA_FINE = re.compile(r"[\s,.;:!]+(?:grazie(?:\s+mille)?|per\s+favore)[\s.!]*$", re.I)
+
+
+def si_chiuso(testo: str) -> bool:
+    t = str(testo or "")
+    return "?" not in t and pol.consenso_chiuso(_CORTESIA_FINE.sub("", t))
+
+
+def cosa_coi_valori(cosa: str, name: str, args: dict, tipi: dict | None, ctx=None) -> str:
+    """Cosa dice la domanda del codice: l'azione vera della chiamata e i suoi valori, anche quelli
+    che la sua `cosa` non nomina («segni la verifica: fisica, venerdì 6 novembre»). Non gli id: un
+    numero nella domanda non dice niente alla persona (revisione della PR #374)."""
+    ci_sono = prov.parole(cosa)
+    extra = []
+    for k, v in (args or {}).items():
+        if (tipi or {}).get(k, BERSAGLIO) in (AZIONE, IGNORA) or not isinstance(v, str) or not v.strip():
+            continue
+        if (name, k) in DATE_DETTE:
+            v = _data_mostrata(v, ctx)
+        if not prov.parole(v) <= ci_sono:
+            extra.append(" ".join(v.split())[:60])
+    return f"{cosa}: {', '.join(extra)}" if extra else cosa
+
+
 SENTITO_IN_STANZA = ("Questo l'ho sentito nella stanza, non me l'hai chiesto tu: se lo vuoi, "
                      "chiedimelo con le tue parole.")
 
@@ -1173,8 +1200,16 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
                 and not t.risposta.get("sfida_portata_usata")):
             det["sfida_portata"] = True
     if not risposta and not ancorata(cl, name, args, t):
-        giro = pol.consenso(t.testo) and consenso_della_persona(ctx) and _gia_rifiutata(name, t, ctx)
-        if not t.risposta.get("rifiutata_valore") and not giro:
+        persona = consenso_della_persona(ctx)
+        giro = pol.consenso(t.testo) and persona and _gia_rifiutata(name, t, ctx)
+        # Il «sì» chiuso della persona riconosciuta salta il rifiuto (decisione del 02/11: un giro
+        # su tre, dopo il rifiuto, il modello non richiamava il tool, «puoi ripetere la
+        # richiesta?»). Non esegue: porta alla domanda del codice, qui sotto
+        chiuso = persona and si_chiuso(t.testo)
+        if chiuso:
+            from .tools.spec import note_rule
+            note_rule(ctx, "valore_si_chiuso")
+        if not t.risposta.get("rifiutata_valore") and not giro and not chiuso:
             t.risposta["rifiutata_valore"] = True
             _segna_giro(name, t)
             return pol.Decisione("rifiuta", "valore_non_ancorata", "", fonte), det
@@ -1187,8 +1222,8 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         if dalla_stanza(name, args, cl, t, tipi, fidati):
             return pol.Decisione("rifiuta", "valore_dalla_stanza", SENTITO_IN_STANZA,
                                  "stanza"), det
-        return pol.Decisione("conferma", "valore_non_ancorata",
-                             f"Non me l'hai chiesto: vuoi che {cosa}?", fonte), det
+        return pol.Decisione("conferma", "valore_non_ancorata", "Non me l'hai chiesto: vuoi che "
+                             f"{cosa_coi_valori(cosa, name, args, tipi, ctx)}?", fonte), det
     # 2. da dove vengono gli argomenti
     f = Fonti.da(t, fidati)
     # la data detta col mese a parole e scritta dal modello in cifre (#98), solo per un valore

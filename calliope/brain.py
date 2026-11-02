@@ -424,9 +424,10 @@ OFFERTA = re.compile(r"\bse (?:vuoi|ti va|preferisci|ti interessa|desideri|vuole
                      r"preferisce|le interessa|desidera)\b|^\W*(?:fammi|mi faccia) sapere\b|"
                      r"^\W*(?:dimmi|mi dica) (?:pure )?se\b|^\W*(?:vuoi|vuole) che\b", re.I)
 # Una dichiarazione di non sapere o non trovare, per la traccia di una risposta riservata
-# Le frasi recenti della persona per valore.dalla_stanza (02/11, #376): la frase di prima e quella
-# prima ancora, non tutta la conversazione
-FRASI_PRIMA = 2
+# Le frasi recenti della persona per valore.dalla_stanza (02/11, #376): la frase di prima, non
+# tutta la conversazione. Una sola: col «sì» che porta subito alla domanda del codice, «ieri ho
+# cancellato…» di due frasi fa farebbe suo un «cancella» sentito adesso
+FRASI_PRIMA = 1
 NON_TROVO = re.compile(r"\bnon (?:so|trovo|ho trovato|riesco a trovare|risulta|c'è niente|"
                        r"c'è nulla)\b", re.I)
 

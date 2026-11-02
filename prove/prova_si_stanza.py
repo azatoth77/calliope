@@ -4,8 +4,9 @@ revisione della PR #377). I tool sono finti, contano le chiamate e hanno i nomi 
 politica di quelli veri. Nomi e frasi di fantasia.
 
 - Le 23 scene del revisore, ognuna col suo esito: un «sì» a parole del modello non ancora niente.
-- Il percorso vero: rifiuto, secondo tentativo, la domanda scritta dal codice, il «sì» a quella esegue;
-  su agenda e Studio, anche con le sole righe della persona: la fonte «stanza» resta.
+- Il percorso vero: il «sì» chiuso della persona riconosciuta porta alla domanda scritta dal codice,
+  il «sì» a quella esegue; su agenda e Studio, anche con le sole righe della persona: la fonte
+  «stanza» resta. Le altre frasi ricevono prima il rifiuto.
 - La domanda del codice e il rifiuto scadono come le proposte.
 """
 import os, sys
@@ -187,7 +188,7 @@ scena("«giovedì ho il dentista» più quattro «sì» al comando di un'altra v
     ("Sì.", [CM], "breve", ch("agenda_annulla", ANN), tx("Fatto."))])
 
 print("— 6. un solo «sì» non basta; le forme; la zona grigia")
-scena("il caso vero, un solo «Sì, grazie.»: il rifiuto, niente ancora", [
+scena("il caso vero, un solo «Sì, grazie.»: la domanda del codice, niente ancora", [
     ("Giovedì ho il dentista.", [ALTRA], "voce", tx(AGENDA)),
     ("Sì, grazie.", [ALTRA], "breve", ch("appuntamento_aggiungi", DENT), tx("Ok."))])
 for f in ("Sì?", "Sì, ma non adesso.", "No, grazie.", "Sì, no.", "Boh, sì.", "Sì sì.", "Non sì."):
@@ -200,41 +201,60 @@ scena("il «sì» in zona grigia: niente", [
 print(f"  (scene del revisore: {N[0]})")
 verifica("le scene del revisore sono 23, più quella del comando con quattro «sì»", N[0] == 24, N[0])
 
-print("— 7. il percorso vero: rifiuto, domanda del codice, «sì»")
+print("— 7. il percorso vero: il «sì» chiuso porta alla domanda del codice, il «sì» a quella esegue")
 
 
 def percorso(righe):
-    """Il giro fino all'esecuzione: (Brain, Studio, fatti, le risposte dei turni)."""
+    """Il giro fino alla domanda del codice: (Brain, Studio, fatti, le risposte dei turni)."""
     b, st, fatti = nuovo()
     r0 = t(b, "Giovedì ho il dentista.", righe, "voce", tx(AGENDA))
-    r1 = t(b, "Sì, grazie.", righe, "breve", ch("appuntamento_aggiungi", DENT),
-           tx("Vuoi proprio che lo segni?"))
-    prima = list(fatti)
-    regole1 = list(b.rules_fired())
-    r2 = t(b, "Sì.", righe, "breve", ch("appuntamento_aggiungi", DENT), tx("Ok."))
-    return b, st, fatti, (r0, r1, r2), prima, regole1
+    r1 = t(b, "Sì, grazie.", righe, "breve", ch("appuntamento_aggiungi", DENT), tx("Ok."))
+    return b, st, fatti, (r0, r1)
 
 
-b, st, fatti, rr, prima, reg1 = percorso([ALTRA])
-verifica("il primo «sì»: il rifiuto (valore_non_ancorata)", not prima
-         and "valore_non_ancorata" in reg1, reg1)
-verifica("il secondo: la domanda DEL CODICE con l'azione e il valore veri, e niente eseguito",
-         not fatti and "Non me l'hai chiesto" in rr[2] and "dentista" in rr[2] and b.has_pending(), rr)
+b, st, fatti, rr = percorso([ALTRA])
+verifica("il primo «sì», senza il rifiuto: la domanda DEL CODICE con l'azione e il valore veri, "
+         "niente eseguito", not fatti and "Non me l'hai chiesto" in rr[1] and "dentista" in rr[1]
+         and "giovedì" in rr[1] and b.has_pending() and "valore_si_chiuso" in b.rules_fired(), rr)
 r3 = t(b, "Sì.", [ALTRA], "breve", ch("appuntamento_aggiungi", DENT), tx("Fatto."))
 verifica("il «sì» a quella domanda esegue, una volta", [x[0] for x in fatti]
          == ["appuntamento_aggiungi"] and not b.has_pending(), (fatti, r3))
 st.close()
+# Il modello ha offerto di controllare e chiama la cancellazione: la persona sente «cancelli»
+b, st, fatti = nuovo()
+t(b, "Giovedì ho il dentista?", [ALTRA], "voce", tx("Vuoi che controlli il dentista in agenda?"))
+r = t(b, "Sì.", [ALTRA], "breve", ch("agenda_annulla", {"cosa": "dentista"}), tx("Ok."))
+verifica("«controllo il dentista?» e la chiamata è agenda_annulla: la domanda dice cancellare, col "
+         "valore", "cancelli" in r and "dentista" in r and not fatti, r)
+r = t(b, "No.", [ALTRA], "breve", tx("Va bene, lo lascio."))
+verifica("…e al «no» non si esegue niente", not fatti, r)
+st.close()
 # Con le sole righe della persona: la fonte «stanza» resta, e il percorso è lo stesso
 MIE = [riga("Giovedì ho il dentista."), riga("Calliope", chi="calliope")]
-b, st, fatti, rr, prima, reg1 = percorso(MIE)
-verifica("con le sole righe sue: la contaminazione resta, e il primo «sì» è il rifiuto",
-         not prima and "valore_non_ancorata" in reg1
-         and "stanza" in b._turno_politica().contaminazione, reg1)
+b, st, fatti, rr = percorso(MIE)
+verifica("con le sole righe sue: la contaminazione resta, e il primo «sì» è la domanda del codice",
+         not fatti and "Non me l'hai chiesto" in rr[1]
+         and "stanza" in b._turno_politica().contaminazione, rr)
 verifica("…le sue parole non sono nei dati della stanza",
          "dentista" not in " ".join(x for f_, x in b._turno_politica().esterni if f_ == "stanza"))
-verifica("…il secondo la domanda del codice", not fatti and "Non me l'hai chiesto" in rr[2], rr)
 t(b, "Sì.", MIE, "breve", ch("appuntamento_aggiungi", DENT), tx("Fatto."))
 verifica("…e al «sì» a quella si esegue", [x[0] for x in fatti] == ["appuntamento_aggiungi"], fatti)
+st.close()
+# Solo il «sì» chiuso salta il rifiuto: gli altri tipi di frase no
+for f_si, nome_si in (("Che ore sono?", "un'altra frase"), ("Sì, e domani che tempo fa?", "un sì non chiuso"),
+                      ("Perché no?", "un consenso con la domanda")):
+    b, st, fatti = nuovo()
+    t(b, "Giovedì ho il dentista.", [ALTRA], "voce", tx(AGENDA))
+    r = t(b, f_si, [ALTRA], "voce", ch("appuntamento_aggiungi", DENT), tx("Risposta del modello."))
+    verifica(f"contrario: {nome_si} riceve il rifiuto, non la domanda", not fatti
+             and "Non me l'hai chiesto" not in r and "valore_non_ancorata" in b.rules_fired(), r)
+    st.close()
+# Il «sì» in zona grigia resta al rifiuto
+b, st, fatti = nuovo()
+t(b, "Giovedì ho il dentista.", [ALTRA], "voce", tx(AGENDA))
+r = t(b, "Sì.", [ALTRA], "conversazione", ch("appuntamento_aggiungi", DENT), tx("Risposta del modello."))
+verifica("contrario: il «sì» in zona grigia non porta alla domanda", "Non me l'hai chiesto" not in r
+         and "valore_si_chiuso" not in b.rules_fired() and not fatti, r)
 st.close()
 # La richiesta diretta con le sue parole non ha domande
 b, st, fatti = nuovo()
@@ -254,40 +274,54 @@ def verifiche(st_):
 b, st, _ = nuovo()
 base = verifiche(st)
 t(b, "Venerdì ho la verifica di fisica.", MIE, "voce", tx(OFFERTA))
-t(b, "Sì, grazie.", MIE, "breve", ch("studio", CREA), tx("Vuoi che la crei?"))
-verifica("lo Studio: al primo «sì» non c'è ancora", verifiche(st) == base, verifiche(st))
-r = t(b, "Sì.", MIE, "breve", ch("studio", CREA), tx("Ok."))
-verifica("…al secondo la domanda del codice", "Non me l'hai chiesto" in r and verifiche(st) == base, r)
+r = t(b, "Sì, grazie.", MIE, "breve", ch("studio", CREA), tx("Ok."))
+verifica("lo Studio: «Sì, grazie.» porta alla domanda del codice, con materia e giorno",
+         "Non me l'hai chiesto" in r and "fisica" in r and "venerdì" in r and verifiche(st) == base, r)
 r = t(b, "Sì, certo.", MIE, "breve", ch("studio", CREA), tx("Fatto."))
 verifica("…e al «Sì, certo.» la verifica è creata", "fisica" in verifiche(st), (r, b.rules_fired()))
 st.close()
 
 print("— 8. la domanda scade come le proposte")
-b, st, fatti, rr, _, _ = percorso([ALTRA])
+b, st, fatti, rr = percorso([ALTRA])
 b.pending["scade"] = time.monotonic() - 1
-t(b, "Sì.", [ALTRA], "breve", ch("appuntamento_aggiungi", DENT), tx("Ok."))
-verifica("la domanda del codice scaduta per il tempo: il «sì» non esegue", not fatti, fatti)
+t(b, "Va bene, ma prima?", [ALTRA], "breve", ch("appuntamento_aggiungi", DENT), tx("Ok."))
+verifica("la domanda del codice scaduta per il tempo: il consenso non esegue", not fatti, fatti)
 st.close()
-b, st, fatti, rr, _, _ = percorso([ALTRA])
+b, st, fatti, rr = percorso([ALTRA])
+b.pending["scade"] = time.monotonic() - 1
+r = t(b, "Sì.", [ALTRA], "breve", ch("appuntamento_aggiungi", DENT), tx("Ok."))
+verifica("…e il «sì» dopo la scadenza: di nuovo la domanda, non l'esecuzione", not fatti
+         and "Non me l'hai chiesto" in r, r)
+st.close()
+b, st, fatti, rr = percorso([ALTRA])
 for _ in range(6):
     t(b, "Che ore sono?", [ALTRA], "voce", tx("Non lo so."))
-t(b, "Sì.", [ALTRA], "breve", ch("appuntamento_aggiungi", DENT), tx("Ok."))
-verifica("la domanda del codice scaduta per i turni: il «sì» non esegue", not fatti, fatti)
+r = t(b, "Sì.", [ALTRA], "breve", ch("appuntamento_aggiungi", DENT), tx("Ok."))
+verifica("scaduta per i turni: il «sì» non esegue, di nuovo la domanda", not fatti
+         and "Non me l'hai chiesto" in r, r)
 st.close()
 # «Sì?» alla domanda del codice non è un consenso
-b, st, fatti, rr, _, _ = percorso([ALTRA])
+b, st, fatti, rr = percorso([ALTRA])
 t(b, "Sì?", [ALTRA], "breve", ch("appuntamento_aggiungi", DENT), tx("Ok."))
 verifica("«Sì?» alla domanda del codice: non esegue", not fatti, fatti)
 st.close()
-# Il rifiuto ricordato: scaduto, si riparte dal rifiuto e non dalla domanda
+# Il rifiuto ricordato: un consenso non chiuso, entro la scadenza, arriva alla domanda; scaduto no
 b, st, fatti = nuovo()
 t(b, "Giovedì ho il dentista.", [ALTRA], "voce", tx(AGENDA))
-t(b, "Sì.", [ALTRA], "breve", ch("appuntamento_aggiungi", DENT), tx("Ok."))
+t(b, "Che ore sono?", [ALTRA], "voce", ch("appuntamento_aggiungi", DENT), tx("Non lo so."))
 g = b._giro_valore()
 verifica("il rifiuto è ricordato per la conversazione", "appuntamento_aggiungi" in g, g)
+r = t(b, "Sì, quello lì.", [ALTRA], "voce", ch("appuntamento_aggiungi", DENT), tx("Ok."))
+verifica("un consenso non chiuso dopo il rifiuto: la domanda del codice", "Non me l'hai chiesto" in r
+         and not fatti and "valore_si_chiuso" not in b.rules_fired(), r)
+st.close()
+b, st, fatti = nuovo()
+t(b, "Giovedì ho il dentista.", [ALTRA], "voce", tx(AGENDA))
+t(b, "Che ore sono?", [ALTRA], "voce", ch("appuntamento_aggiungi", DENT), tx("Non lo so."))
+g = b._giro_valore()
 g["appuntamento_aggiungi"] = (g["appuntamento_aggiungi"][0], time.monotonic() - 10 ** 6)
-r = t(b, "Sì.", [ALTRA], "breve", ch("appuntamento_aggiungi", DENT), tx("Ok."))
-verifica("scaduto per il tempo: niente domanda del codice, di nuovo il rifiuto",
+r = t(b, "Sì, quello lì.", [ALTRA], "voce", ch("appuntamento_aggiungi", DENT), tx("Risposta."))
+verifica("scaduto per il tempo: niente domanda per un consenso non chiuso, di nuovo il rifiuto",
          "Non me l'hai chiesto" not in r and not b.has_pending() and not fatti, r)
 st.close()
 b, st, fatti = nuovo()
