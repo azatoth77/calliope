@@ -2159,24 +2159,30 @@ non si è creata in cinque turni. Al «Sì, grazie.» (a «Se vuoi, posso crearn
 chiamata giusta di `studio` era `valore_non_ancorata (dati da stanza)`, e al «Sì.» di nuovo:
 `rifiutata_valore` vale per risposta, ogni «sì» è un turno nuovo e ripartiva dal rifiuto. Non
 riguardava solo lo Studio: ogni azione di un turno «sì», in ogni casa con la stanza accesa.
-- **Le righe della persona non sono un dato estraneo** (`stanza/contesto.esterno_altri`, `_voci`,
-  `Brain._voce_della_persona`): con la voce certa per la politica (riconosciuta o breve, senza
-  compagnia né dubbi con un minore) le sue righe sicure non contano e non contaminano. La grigia
-  («Carlo?»), un conoscente, «più voci», una riga della TV, il riassunto e ogni altra voce restano
-  un dato; con una voce incerta tutto come prima.
-- **Il «sì» che ancora** (`valore.si_ancorato`, regola `valore_si_ancorato`): la persona riconosciuta
-  risponde con una forma chiusa di consenso a una domanda o un'offerta di Calliope, e **tutti** i
-  valori distintivi li ha detti lei nelle sue ultime 3 frasi (`Brain.FRASI_PRIMA`), e la
-  domanda ne nomina uno o ha le parole del tool. Mai per E3–E4, per un tool con la sfida o senza parole dichiarate, con un
-  dato nuovo o letto ora; senza valori (un `pc_blocca({})`) niente ancora.
-- **L'anti-giro** (`Turno.giro_valore`, `GIRO_TURNI`): il rifiuto vale anche per i due turni dopo. Al
-  «sì» seguente c'è «Non me l'hai chiesto: vuoi che…?», e al «sì» a quella domanda si esegue.
-- **Un comando di un'altra voce non diventa un'azione** (`valore.dalla_stanza`, regola
+- **Le righe della persona** (`stanza/contesto.esterno_altri`, `_voci`, `Brain._voce_della_persona`):
+  con la voce certa per la politica le sue righe sicure escono dai dati, così le sue parole non
+  sembrano venire dalla stanza. **La fonte «stanza» resta**: basta un errore di attribuzione, o una
+  frase detta a un'altra persona, e una riga non deve mai far eseguire senza una richiesta.
+- **Il percorso del «sì»**: rifiuto, secondo tentativo, poi la domanda scritta **dal codice**, «Non
+  me l'hai chiesto: vuoi che…?», con l'azione e il valore veri; il «sì» a quella esegue.
+  `rifiutata_valore` vale per risposta, quindi il rifiuto si ricorda anche per i turni dopo
+  (`Turno.giro_valore`), con tempo e turni delle proposte (`conferme.secondi_validi`, `turni_validi`,
+  come `Brain.pending`, che tiene anche la domanda). Vale per ogni tool. Costa una domanda in più con
+  la stanza accesa.
+  *[storico fino alla revisione della PR #377: `valore.si_ancorato` faceva ancorare il «sì» dalla
+  domanda scritta dal modello. Tolta: non si distingue «vuoi che controlli il dentista?» da «vuoi che
+  lo cancelli?», e la chiamata è un'altra cosa; il revisore ha eseguito così `agenda_annulla` e
+  `lista_togli`]*
+- **Il comando di un'altra voce non diventa un'azione** (`valore.dalla_stanza`, regola
   `valore_dalla_stanza`): un valore che sta solo nelle righe della stanza, o le parole del tool dette
-  lì e mai dalla persona: dopo il primo rifiuto una frase del codice che chiude il turno («Questo
-  l'ho sentito nella stanza…»), mai una domanda che porti a eseguire, anche nella stessa risposta.
-  Solo per la stanza: per una pagina o una ricerca resta la domanda di sempre.
+  lì e non dalla persona nella frase del turno o nelle sue due frasi di prima (non in tutta la
+  conversazione): dopo il primo rifiuto una frase del codice che chiude il turno, mai una domanda che
+  porti a eseguire. Solo per la stanza: per una pagina o una ricerca resta la domanda di sempre.
+- **Accettato (decisione del 02/11):** un'offerta del modello ispirata da una riga, senza le parole
+  del tool né i suoi valori («non abbiamo più niente da bere» → «vuoi che segni l'acqua?»), si esegue
+  dopo la domanda del codice che nomina il valore: la persona ha sentito azione e valore.
+- **«Sì?»** non è un consenso (`politica._SI_DOMANDA`, con i casi contrari in `prova_testo`).
 
-Prove: `prova_studio_tool` attraverso Brain (Studio e agenda, coi contrari). Sulla voce (la frase di
-1,5 s a 0,375 presa per un ospite) in questa issue non cambia niente: va con la modalità studio.
-
+Prove: `prova_si_stanza` attraverso Brain, col modello finto ostile e tool finti che contano le
+chiamate. Sulla voce (la frase di 1,5 s a 0,375 presa per un ospite) in questa issue non cambia niente:
+va con la modalità studio.

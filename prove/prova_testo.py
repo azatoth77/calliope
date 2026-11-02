@@ -126,6 +126,14 @@ for testo, atteso in [("Grazie.", "grazie"), ("Ok, grazie", "grazie"), ("Grazie 
                       ("Perfetto, mettimi un timer.", None), ("No grazie.", None), ("Sei.", None),
                       ("Molto.", None), ("Grazie a tutti.", None), ("Sì.", None)]:
     verifica(f"chiusura «{testo}»", closing_kind(testo), atteso)
+# «Sì?» è chi risponde a un richiamo, non un consenso (02/11, #376, revisione della PR #377)
+from calliope.politica import consenso as _consenso  # noqa: E402
+for testo, atteso in [("Sì?", False), ("sì ?", False), ("Calliope, sì?", False),
+                      # contrari: restano consensi
+                      ("Sì.", True), ("Sì, grazie.", True), ("Sì, certo.", True),
+                      ("Perché no?", True), ("Ma sì dai, perché no?", True),
+                      ("Sì, ma non adesso.", False), ("No, grazie.", False)]:
+    verifica(f"consenso «{testo}» (#376)", _consenso(testo), atteso)
 # «stoppati», «stoppa ti», «smetti» (31/10, #373: «No, stoppa ti.» diventava «Non ci sono riuscita:
 # puoi ripetere?»); «no» solo con un ordine di silenzio
 for testo, atteso in [("No, stoppa ti.", "silenzio"), ("Stoppati.", "silenzio"),
