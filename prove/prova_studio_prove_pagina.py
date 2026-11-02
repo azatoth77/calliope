@@ -135,9 +135,10 @@ def scenario_telefono(t, st, vid):
     t.tocca('.studio-h-prove button[data-prove="rivedi"][data-dati*="giusto"]')
     ok = aspetta(lambda: len(st.dati.tutti("SELECT * FROM studio_tentativi")) == 5, 8)
     tent = st.dati.tutti("SELECT * FROM studio_tentativi")
+    # La riga è nel db prima che la risposta arrivi alla pagina: i tasti spariscono dopo
+    via = aspetta(lambda: not t.v("!!document.querySelector('.studio-h-prove button[data-prove=\"rivedi\"]')"), 8)
     verifica("«Era giusta» sulla risposta da rivedere: un tentativo della persona, i tasti spariscono",
-             bool(ok) and tent[-1]["fonte"] == "persona"
-             and not t.v("!!document.querySelector('.studio-h-prove button[data-prove=\"rivedi\"]')"))
+             bool(ok) and tent[-1]["fonte"] == "persona" and bool(via))
     t.tocca('.studio-h-prove button[data-prove="chiudi"]')
     aspetta(lambda: t.v("!!document.querySelector('.studio-h-prove button[data-prove=\"domande\"]')"), 6)
     t.tocca('.studio-h-prove button[data-prove="domande"]')

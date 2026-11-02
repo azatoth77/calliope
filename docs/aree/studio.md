@@ -253,6 +253,13 @@ il percorso guidato rifatto dentro lo Studio (la schermata Studio 4 del progetto
 guidato», «Foto di un problema»). Gli «esercizi dai materiali» della stessa schermata li fanno già
 le prove (#248) e le carte (#246).
 
+**Il doppio tocco su «Controlla»** (02/11, PR #379): con la risposta già tornata e il tasto riacceso, il
+secondo tocco mandava di nuovo la stessa risposta, e sul db erano due errori (l'indizio prima del
+dovuto); su una giusta cancellava «Giusto!». Per un secondo e mezzo un tocco con lo stesso testo, o col
+campo appena svuotato, non fa nulla (`doppioTocco`, solo nella pagina). Resta da guardare il tocco a
+vuoto su un tasto spento durante l'attesa: il campo perde il fuoco e sul telefono la tastiera si
+chiuderebbe (visto col mouse sintetico).
+
 **Il flusso.** Un problema sta dentro una verifica della persona (sua o del suo minore, in bozza o
 aperta):
 - «Foto di un problema» passa dallo stesso `POST /api/studio/pagina` con `esercizio: true` nei dati

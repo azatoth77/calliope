@@ -139,6 +139,8 @@ def scenario(t, pagina, st, vid):
     t.v(f"const s = document.getElementById('condividi-verifica'); s.value = '{vid}'; "
         "s.dispatchEvent(new Event('change')); 1")
     verifica("scelta la verifica, il tasto si accende", not t.v("document.getElementById('condividi-manda').disabled"))
+    # Si tocca a schermo fermo: la finestra è appena tornata alla sua misura
+    t.v("new Promise(ok => requestAnimationFrame(() => requestAnimationFrame(() => ok(1))))")
     t.tocca("#condividi-manda")
     ok = aspetta(lambda: (stato(t).get("fatto") or {}).get("fatti") == 2, 20)
     verifica("i due file mandati con la stessa importazione", bool(ok), json.dumps(stato(t)))
