@@ -550,10 +550,6 @@ def _stessa_data(a, b, ctx=None) -> bool:
     if _giorno_con_altro(a) or _giorno_con_altro(b):
         return _esatto(a) == _esatto(b)
     da, db = _date_possibili(a, ctx), _date_possibili(b, ctx)
-    # La lettura di «venerdì 13» non guarda il numero: i numeri detti devono esserci anche nell'altra
-    na, nb = _gettoni_numeri(a), _gettoni_numeri(b)
-    if not (nb <= na if forma_data(a) else na <= nb if forma_data(b) else na == nb):
-        return False
     if da and db and (len(da) == 1 or len(db) == 1):
         return bool(da & db)
     return _esatto(a) == _esatto(b)
