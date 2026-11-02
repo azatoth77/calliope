@@ -332,7 +332,7 @@ class ToolRegistry:
         chiamata chi parla è il proprietario, come nella zona grigia (`dispositivo.proprio`, al più
         familiare), e sui soli suoi dati (`per` di un altro no). Tutto il resto è la chiamata di
         sempre: permessi, minori, politica, prova aperta. None: non vale, resta l'ospite."""
-        from ..studio.modalita import TOOL, solo_propri
+        from ..studio.modalita import SOLO_VOCE_SICURA, TOOL, solo_propri
         sc = ctx.speaker_ctx
         nome = sc.dispositivo_studio
         if name not in TOOL or level != "ospite":
@@ -343,6 +343,14 @@ class ToolRegistry:
         speakers = getattr(ctx, "speakers", None)
         if speakers is None or speakers.get(nome) is None:
             return None
+        if (name == "studio" and str((arguments or {}).get("azione") or "").strip().lower()
+                in SOLO_VOCE_SICURA):
+            # Vale il proprietario, ma queste due non si rimettono a posto con una frase
+            note_rule(ctx, "modalita_studio_voce_no")
+            frase = ("Non ho riconosciuto la tua voce: questo fallo dallo schermo, oppure "
+                     "ripetimelo.")
+            return json.dumps({"ok": False, "errore": frase, "conferma": frase,
+                               "risposta_finale": frase}, ensure_ascii=False)
         prima = {k: getattr(sc, k, None) for k in ("current_speaker", "identified_by",
                                                    "from_session", "dispositivo_studio")}
         try:

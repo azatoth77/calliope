@@ -1402,7 +1402,8 @@ def crea_app(hub: Schermi) -> Starlette:
     def modalita_dalla_vista(schermo: dict, v: dict):
         """La sezione Studio aperta o chiusa su questo schermo personale apre o chiude la modalità
         studio (02/11, #376, studio/modalita.py), solo se il satellite legato allo schermo è dello
-        stesso proprietario: mai uno schermo legato a un satellite di stanza."""
+        stesso proprietario: mai uno schermo legato a un satellite di stanza, né fuori orario per
+        un minore."""
         serv = getattr(hub, "servizi", None)
         mod = getattr(getattr(serv, "studio", None), "modalita", None)
         sat = schermo.get("satellite")
@@ -1416,7 +1417,10 @@ def crea_app(hub: Schermi) -> Starlette:
             coll = hub.satelliti.per_id(sat) if hub.satelliti is not None else None
             di = (getattr(coll, "satellite", None) or {}).get("proprietario")
             if di and di == schermo.get("proprietario"):
-                mod.apri(sat, di, stanza)
+                from .. import minori
+                prof = profilo_di(schermo)
+                if prof is None or not minori.fuori_orario(prof):
+                    mod.apri(sat, di, stanza)
         except Exception as e:  # noqa: BLE001 — la modalità non ferma la pagina
             hub.log(f"[STUDIO] modalità studio: {type(e).__name__}")
 

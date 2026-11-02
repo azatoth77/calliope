@@ -3941,6 +3941,36 @@ class Brain:
         return sum(p.caratteri for p in getattr(self._c(), "stanza", None) or ())
 
     # ─────────── i dati che cambiano di rado nella storia (16/10, issue #95, dati_turno.py) ───────────
+    def _storia_per_modello(self, upto: int) -> list[dict]:
+        """La storia prima del turno come può arrivare al modello: tutta, ma con la voce non
+        riconosciuta della modalità studio (`dispositivo_studio`) solo dalla frase del turno che
+        l'ha aperta (`studio_dal`): col telefono sul tavolo, una voce qualunque non deve ottenere ciò
+        che il proprietario ha detto o sentito prima. Decisione di chi amministra (02/11, #376)."""
+        prima = self.history[:upto]
+        sc = getattr(self.tool_ctx, "speaker_ctx", None)
+        if not getattr(sc, "dispositivo_studio", None):
+            return prima
+        dal = getattr(sc, "studio_dal", None)
+        if dal is None:
+            return []
+        return next((prima[i:] for i, m in enumerate(prima)
+                     if m.get("role") == "user" and float(m.get("_t") or 0.0) >= dal), [])
+
+    def inizio_turno(self) -> float | None:
+        """L'ora dell'ultima frase della persona nella storia."""
+        return next((m.get("_t") for m in reversed(self.history) if m.get("role") == "user"), None)
+
+    def _apre_studio(self, nome: str, args: dict) -> bool:
+        """Questa chiamata può aprire la modalità studio? Qui, perché le righe della stanza del
+        turno a fine turno non ci sono più (`Ciclo._modalita_dopo_turno`)."""
+        from .studio import modalita
+        if nome not in modalita.TOOL:
+            return False
+        try:
+            return modalita.apre(nome, args, self._turno_politica())
+        except Exception:  # noqa: BLE001 — nel dubbio non apre
+            return False
+
     def _con_ancorati(self, msgs: list[dict], conv=None) -> list[dict]:
         """`msgs` (la storia prima del turno in corso) con le righe della stanza e i dati fissi dei
         turni prima, ognuno davanti alla frase del suo turno e nell'ordine di allora (prima le
@@ -4378,7 +4408,7 @@ class Brain:
         """Le ricerche (RICERCA_TOOLS) negli ultimi `turni_max` turni della storia fino a `upto`
         (escluso), dalla più recente, una per argomento e fonte, al più RICERCA_ELENCO_MAX:
         [{"tool", "tipo", "domanda", "turni"}] (turni: 0 = nel turno appena prima)."""
-        hist = self.history if upto is None else self.history[:upto]
+        hist = self._storia_per_modello(len(self.history) if upto is None else upto)
         turni, out, visti = 0, [], set()
         for m in reversed(hist):
             role = m.get("role")
@@ -5093,7 +5123,7 @@ class Brain:
                                     and (m.get("content") or "").strip()][-8:]
         if user_text is not None:
             # Provenienza della frase (05/10, calliope/provenienza.py): voce, breve, scritto…
-            msg_u = {"role": "user", "content": user_text,
+            msg_u = {"role": "user", "content": user_text, "_t": time.time(),
                      "_prov": provenienza.persona(getattr(self.tool_ctx, "speaker_ctx", None))}
             if str(getattr(self._c(), "chiave", "") or "").startswith("ospite:"):
                 # Chi l'ha detta, nella conversazione anonima del satellite (13/10): per i
@@ -5364,18 +5394,22 @@ class Brain:
         tail: list[dict] = []    # spinta del solo giro successivo, in fondo (vedi sotto)
 
         # Il riassunto dei turni compressi sta subito dopo il prompt di sistema (05/10)
-        summary = self._riassunto_msgs()
+        # Con la voce non riconosciuta dal telefono della modalità studio (02/11, #376): niente
+        # riassunto, e solo i turni da quando la modalità si è aperta
+        sc_storia = getattr(self.tool_ctx, "speaker_ctx", None)
+        summary = [] if getattr(sc_storia, "dispositivo_studio", None) else self._riassunto_msgs()
+        storia_prima = self._storia_per_modello(start)
 
         def with_memory(prefix):
             return self._con_allegati(self._con_immagini(
-                prefix + summary + self._con_ancorati(self.history[:start]) + stanza_ora
+                prefix + summary + self._con_ancorati(storia_prima) + stanza_ora
                 + dati_ora + memory + self.history[start:] + tail,
                 self.history[start] if user_text else None))
 
         # Per la guardia della cache (_misura_prefisso): i messaggi fissi (sistema e riassunto)
         # e dove comincia il turno precedente; prima di lì i turni sono definitivi (con le
         # righe della stanza e i dati fissi della storia al loro posto)
-        utenti_prima = [i for i, m in enumerate(self._con_ancorati(self.history[:start]))
+        utenti_prima = [i for i, m in enumerate(self._con_ancorati(storia_prima))
                         if m.get("role") == "user"]
         self._fissi_cache = len(system) + len(summary)
         self._confine_cache = self._fissi_cache + (utenti_prima[-1] if utenti_prima else 0)
@@ -7223,6 +7257,9 @@ class Brain:
                                 # La decisione della politica per valore accanto a quella vera
                                 # (08/10, fase 3, in ombra): nomi ed etichette, nessun valore
                                 **({"politica_ombra": ombra} if ombra else {}),
+                                # Può aprire la modalità studio (02/11, #376)
+                                **({"apre_studio": True}
+                                   if self._apre_studio(call["name"], args) else {}),
                                 # Il nome inventato dal modello (12/10): corretto da Brain
                                 # (`nome_inventato`, quello scritto) o senza un tool vicino
                                 # (`sconosciuto`); per la metrica della scelta dei tool

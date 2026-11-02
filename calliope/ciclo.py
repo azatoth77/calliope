@@ -2724,14 +2724,15 @@ class Ciclo:
         speaker_ctx.senza_nome = False
         speaker_ctx.conoscente = None                                     # (14/10)
         speaker_ctx.minore_ospite = None                                  # (16/10)
-        speaker_ctx.dispositivo_studio = None                             # (02/11, #376)
+        speaker_ctx.dispositivo_studio = speaker_ctx.studio_dal = None    # (02/11, #376)
         if t.scritto is not None:
             self._chi_scrive(t)
         if t.emb_job is not None:
             self._riconosci_voce(t)
-            self._modalita_voce(t)
         self._segna_minore(t.speaker_name)
         speaker_ctx.minore_ospite = self._minore_per_ospite(t)
+        if t.emb_job is not None:
+            self._modalita_voce(t)      # dopo: guarda `minore_ospite`
         self._anello_turno(t)
         self.rec.update(livello=speaker_ctx.current_level, testo=t.text,
                         stt_s=round(time.perf_counter() - t.t0, 2))
@@ -3036,7 +3037,9 @@ class Ciclo:
         frase non è riconosciuta, dal dispositivo personale col proprietario in modalità. La voce
         chiaramente di un altro vince: un altro profilo come migliore sopra
         `speaker_continuita_soglia`. Niente con la compagnia, un conoscente, un minore possibile
-        (sentito da poco qui, o secondo a un soffio dal proprietario adulto)."""
+        (sentito da poco qui, o col proprietario adulto il migliore o il secondo profilo, sopra
+        `minori_ospite_vicino_punteggio`: la bambina del 15/10 aveva 0,32–0,45 sul suo), e fuori
+        orario per un minore (`Ciclo._fuori_orario` guarda la voce riconosciuta, qui non c'è)."""
         sc = self.speaker_ctx
         m = self._modalita()
         if (m is None or t.scritto is not None or getattr(sc, "current_speaker", None) is not None
@@ -3049,7 +3052,8 @@ class Ciclo:
         nome = self._proprietario_satellite() if stato else None
         reg = self.s.registry
         prof = reg.get(nome) if nome else None
-        if prof is None or str(getattr(prof, "id", "")) != stato["persona"]:
+        if (prof is None or str(getattr(prof, "id", "")) != stato["persona"]
+                or minori.fuori_orario(prof)):
             return
         voce = (self.rec or {}).get("voce") or {}
         cfg = self.s.cfg
@@ -3057,25 +3061,25 @@ class Ciclo:
         migliore, punti = voce.get("migliore"), float(voce.get("punteggio") or 0.0)
         if migliore not in (None, nome) and punti >= soglia:
             return
-        sec = voce.get("secondo")
-        if (migliore == nome and sec and sec != nome and not minori.e_minore(prof)
-                and minori.e_minore(reg.get(sec))
-                and float(voce.get("secondo_punteggio") or 0.0) >= soglia
-                and float(voce.get("margine") or 0.0) < float(
-                    getattr(cfg, "speaker_id_margine", 0.08))):
-            return
-        sc.dispositivo_studio = nome
+        if not minori.e_minore(prof):
+            bassa = float(getattr(cfg, "minori_ospite_vicino_punteggio", 0.30))
+            for altro, p in ((migliore, punti),
+                             (voce.get("secondo"), float(voce.get("secondo_punteggio") or 0.0))):
+                if altro and altro != nome and p >= bassa and minori.e_minore(reg.get(altro)):
+                    return
+        sc.dispositivo_studio, sc.studio_dal = nome, stato.get("dal")
 
     def _modalita_dopo_turno(self, t):
         """Una chiamata di un tool dello Studio che la politica ha fatto passare: apre la modalità
         (dal dispositivo personale del proprietario, la sua voce sicura o il suo dispositivo, senza
         dubbi con un minore) o la tiene viva. Mai da uno schermo di stanza, mai per uno scritto:
-        lo schermo la apre da sé (`POST /api/vista`). Una chiamata rifiutata non apre niente."""
+        lo schermo la apre da sé (`POST /api/vista`). Una chiamata rifiutata non apre niente, come
+        un'azione inventata o una con righe di un'altra voce non ancorata alla frase
+        (`apre_studio`, deciso da Brain durante il turno con `modalita.apre`)."""
         m = self._modalita()
         if m is None or t.scritto is not None:
             return
-        from .studio.modalita import TOOL
-        if not any(x.get("nome") in TOOL
+        if not any(x.get("apre_studio")
                    and (x.get("politica_ombra") or {}).get("finale", "esegui") == "esegui"
                    for x in getattr(self.brain, "last_tools", None) or ()):
             return
@@ -3087,13 +3091,13 @@ class Ciclo:
         sc = self.speaker_ctx
         stato = mod.di(sat, stanza)
         if stato is not None and stato["persona"] == str(getattr(prof, "id", "")):
-            mod.apri(sat, prof.id, stanza)        # rinnova, anche dall'effetto 2
+            mod.apri(sat, prof.id, stanza)        # rinnova, anche dall'effetto 2: `dal` resta
             return
         if (getattr(sc, "current_speaker", None) == nome
                 and getattr(sc, "identified_by", None) in ("voce", "breve", "conversazione")
                 and not any(getattr(sc, k, None) for k in ("incerta", "minore_incerto",
                                                            "minore_vicino", "compagnia"))):
-            if mod.apri(sat, prof.id, stanza):
+            if mod.apri(sat, prof.id, stanza, dal=self.brain.inizio_turno()):
                 self.rule("modalita_studio_aperta")
 
     def _proprietario_satellite(self) -> str | None:

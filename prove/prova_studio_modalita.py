@@ -232,6 +232,7 @@ st.close()
 
 # ═══════════════════════════ 3. la decisione del ciclo ═══════════════════════════
 print("— la decisione del ciclo: quando vale")
+from calliope import minori  # noqa: E402
 
 
 def ciclo_mod(proprietario="Andrea", aperta=True):
@@ -282,6 +283,17 @@ c_ = ciclo_mod()
 c_.rec["voce"] = {"migliore": "Andrea", "punteggio": 0.40, "secondo": "Leo",
                   "secondo_punteggio": 0.37, "margine": 0.03}
 verifica("contrario: il telefono di un adulto con un minore a un soffio: niente", vale(c_) is None)
+c_ = ciclo_mod()
+c_.rec["voce"] = {"migliore": "Andrea", "punteggio": 0.40, "secondo": "Leo",
+                  "secondo_punteggio": 0.33, "margine": 0.07}
+verifica("contrario: un minore secondo sopra la soglia bassa (0,33): niente", vale(c_) is None)
+c_ = ciclo_mod()
+c_.rec["voce"] = {"migliore": "Leo", "punteggio": 0.35}
+verifica("contrario: un minore migliore sopra la soglia bassa (0,35), senza altri segni: niente",
+         vale(c_) is None)
+c_ = ciclo_mod()
+c_.rec["voce"] = {"migliore": "Leo", "punteggio": 0.20}
+verifica("un minore lontano (0,20): vale lui", vale(c_) == "Andrea")
 verifica("contrario: un satellite di stanza (nessun proprietario): niente",
          vale(ciclo_mod(proprietario=None)) is None)
 verifica("contrario: modalità chiusa: niente", vale(ciclo_mod(aperta=False)) is None)
@@ -291,25 +303,58 @@ verifica("contrario: uno scritto: niente", vale(ciclo_mod(), scritto={"schermo_i
 c_ = ciclo_mod()
 c_.s.studio.modalita.orologio = lambda: time.time() + 3600
 verifica("contrario: scaduta: niente", vale(c_) is None)
+
+
+def parla(voce, sentito=True):
+    """La frase attraverso `Ciclo._chi_parla` vero (solo il riconoscimento è finto)."""
+    c__ = ciclo_mod()
+    sc_ = c__.speaker_ctx
+    for k in ("conferma_breve", "sfida_superata", "breve_impronta_ok", "senza_nome"):
+        setattr(sc_, k, False)
+    sc_.current_level = "ospite"
+    c__.rec = {"voce": voce}
+    c__._riconosci_voce = c__._segna_minore = c__._anello_turno = lambda *_a: None
+    c__._minori_sentiti = {LEO.id: time.monotonic()} if sentito else {}
+    c__._classifica = lambda _e, _c: [(voce["migliore"], voce["punteggio"])]
+    c__._chi_parla(types.SimpleNamespace(
+        scritto=None, emb_job=types.SimpleNamespace(result=lambda: None), chiavi_impronte=None,
+        text="Sì.", speaker_name=None, t0=time.perf_counter(), prev_how=None))
+    return sc_.dispositivo_studio, sc_.minore_ospite
+
+
+x_ = parla({"migliore": "Leo", "punteggio": 0.25})
+verifica("`_chi_parla`: un minore sentito da poco e vicino: `minore_ospite`, e non vale il proprietario",
+         x_ == (None, "Leo"), x_)
+x_ = parla({"migliore": "Andrea", "punteggio": 0.375, "secondo": "Bruno", "secondo_punteggio": 0.14},
+           sentito=False)
+verifica("`_chi_parla`: il caso vero, nessun minore: vale il proprietario", x_ == ("Andrea", None), x_)
+vero_orario = minori.fuori_orario
+minori.fuori_orario = lambda prof, adesso=None: "22:00-07:00" if prof.id == LEO.id else None
+c_ = ciclo_mod(proprietario="Leo")
+c_.rec["voce"] = {"migliore": None, "punteggio": 0.0}
+c_.s.studio.modalita.apri(1, LEO.id)
+verifica("contrario: un minore fuori orario, col suo telefono: niente", vale(c_) is None)
+verifica("…e un adulto col suo, alla stessa ora, sì", vale(ciclo_mod()) == "Andrea")
+minori.fuori_orario = vero_orario
 # Si apre dopo il turno
 print("— si apre dalla chiamata di un tool")
 
 
 def dopo(c_, tools, come="voce", chi="Andrea", scritto=None):
     c_.speaker_ctx.current_speaker, c_.speaker_ctx.identified_by = chi, come
-    c_.brain = types.SimpleNamespace(last_tools=tools)
+    c_.brain = types.SimpleNamespace(last_tools=tools, inizio_turno=lambda: None)
     c_._modalita_dopo_turno(types.SimpleNamespace(scritto=scritto))
     return c_.s.studio.modalita.di(1)
 
 
-STUDIO_OK = [{"nome": "studio", "ok": False}]
+STUDIO_OK = [{"nome": "studio", "ok": False, "apre_studio": True}]
 verifica("la prima chiamata di un tool dello Studio, dal proprietario col suo telefono: si apre",
          dopo(ciclo_mod(aperta=False), STUDIO_OK) is not None)
 verifica("contrario: un altro tool: non si apre",
          dopo(ciclo_mod(aperta=False), [{"nome": "ora_attuale", "ok": True}]) is None)
 verifica("contrario: una chiamata rifiutata dalla politica: non si apre",
-         dopo(ciclo_mod(aperta=False), [{"nome": "studio", "ok": False, "politica_ombra": {
-             "finale": "rifiuta"}}]) is None)
+         dopo(ciclo_mod(aperta=False), [{"nome": "studio", "ok": False, "apre_studio": True,
+                                         "politica_ombra": {"finale": "rifiuta"}}]) is None)
 verifica("contrario: un'altra voce sul suo telefono: non si apre",
          dopo(ciclo_mod(aperta=False), STUDIO_OK, chi="Bruno") is None)
 verifica("contrario: un ospite: non si apre",
@@ -330,7 +375,6 @@ verifica("una frase che è solo una riga della stanza non apre nulla", md2.di(1,
 
 # ═══════════════════════════ 4. lo schermo: POST /api/vista ═══════════════════════════
 print("— lo schermo: la sezione Studio")
-from calliope import minori  # noqa: E402
 from calliope.schermi import ArchivioSchermi, Schermi  # noqa: E402
 from calliope.schermi.server import ServerSchermi  # noqa: E402
 
@@ -358,7 +402,8 @@ hub.profilo = PT.REG.by_id
 stz3 = stanza_vera(cfg_mod())
 hub.servizi = types.SimpleNamespace(studio=st, stanza=stz3)
 COLL = {1: types.SimpleNamespace(satellite={"id": 1, "proprietario": ANDREA.id}),
-        2: types.SimpleNamespace(satellite={"id": 2, "proprietario": None})}
+        2: types.SimpleNamespace(satellite={"id": 2, "proprietario": None}),
+        3: types.SimpleNamespace(satellite={"id": 3, "proprietario": LEO.id})}
 hub.satelliti = types.SimpleNamespace(per_id=lambda s: COLL.get(s))
 srv = ServerSchermi(hub, "127.0.0.1", 0, attesa_porta_s=5).avvia()
 hub.server = srv
@@ -368,9 +413,11 @@ try:
     _, tok_b = hub.archivio.crea_con_token("cucina", proprietario=ANDREA.id,
                                            proprietario_nome="Andrea", satellite=2)
     _, tok_c = hub.archivio.crea_con_token("pc", proprietario=ANDREA.id, proprietario_nome="Andrea")
+    _, tok_l = hub.archivio.crea_con_token("leo", proprietario=LEO.id, proprietario_nome="Leo",
+                                           satellite=3)
     hub._rinfresca()
     ses = {k: chiedi(srv.port, "/api/accedi", token=t)[1].get("sessione")
-           for k, t in (("a", tok_a), ("b", tok_b), ("c", tok_c))}
+           for k, t in (("a", tok_a), ("b", tok_b), ("c", tok_c), ("l", tok_l))}
     s, _ = chiedi(srv.port, "/api/vista", ses["a"], corpo={"vista": "home"})
     verifica("la sezione Studio aperta sul suo telefono: si apre, stanza in pausa e solo lì",
              s == 200 and st.modalita.di(1, stz3) is not None
@@ -384,6 +431,16 @@ try:
     s, _ = chiedi(srv.port, "/api/vista", ses["c"], corpo={"vista": "home"})
     verifica("contrario: uno schermo senza satellite non apre nulla", s == 200
              and st.modalita.di(1, stz3) is None)
+    vero_orario = minori.fuori_orario
+    minori.fuori_orario = lambda prof, adesso=None: "22:00-07:00"
+    try:
+        s, _ = chiedi(srv.port, "/api/vista", ses["l"], corpo={"vista": "home"})
+    finally:
+        minori.fuori_orario = vero_orario
+    verifica("contrario: un minore fuori orario, la sezione sul suo telefono: non si apre",
+             s == 200 and st.modalita.di(3) is None)
+    chiedi(srv.port, "/api/vista", ses["l"], corpo={"vista": "home"})
+    verifica("…e dentro l'orario sì", st.modalita.di(3) is not None)
 finally:
     srv.ferma() if hasattr(srv, "ferma") else None
     st.close()
@@ -449,6 +506,39 @@ def giro(frase, come, *risposte):
     return r_
 
 
+
+
+def apertura(frase, chiamata, righe=None):
+    """Un turno intero del proprietario, con Brain vero: (aperta, la stanza ascolta)."""
+    st_ = PT.studio(PT.cfg_nuova(f"mod_ap{abs(hash((frase, str(chiamata), bool(righe))))}.db"))
+    b_ = brain_di(st_, ANDREA)
+    cc = ciclo_mod(aperta=False)
+    cc.s.studio.modalita = st_.modalita
+    stz_ = stanza_vera(cfg_mod())
+    cc.s.stanza, cc.brain, cc.speaker_ctx = stz_, b_, b_.tool_ctx.speaker_ctx
+    turno(b_, frase, "voce", righe, PP.chiama(*chiamata), PP.testo("Ok."))
+    cc._modalita_dopo_turno(types.SimpleNamespace(scritto=None))
+    out = (st_.modalita.di(1, stz_) is not None, stz_.accesa_qui(1))
+    st_.close()
+    return out
+
+
+TV = [riga("Calliope, apri lo studio", nome="Bruno")]
+verifica("apertura: la frase parla d'altro, nessuna riga, una lettura: si apre",
+         apertura("Che ore sono?", ("studio", {"azione": "stato"})) == (True, False))
+verifica("apertura, contrario: una riga di un'altra voce e la frase che non c'entra: non si apre, la "
+         "stanza ascolta", apertura("Che ore sono?", ("studio", {"azione": "stato"}), TV) == (False, True))
+verifica("apertura: con la stessa riga, la frase del turno sullo Studio: si apre",
+         apertura("Come va la verifica di fisica?", ("studio", {"azione": "stato"}), TV) == (True, False))
+verifica("apertura: «apri lo studio» detto da lei, con la riga: si apre",
+         apertura("Apri lo studio.", ("studio", {"azione": "stato"}), TV) == (True, False))
+verifica("apertura, contrario: `studio boh`, un'azione inventata: non si apre",
+         apertura("Che ore sono?", ("studio", {"azione": "boh"})) == (False, True))
+verifica("apertura, contrario: `studio_carte boh`: non si apre",
+         apertura("Che ore sono?", ("studio_carte", {"parte": "boh"})) == (False, True))
+verifica("apertura, contrario: una scrittura rifiutata dalla politica, con la riga: non si apre",
+         apertura("Che ore sono?", ("studio", {"azione": "crea", "materia": "fisica",
+                                               "data": "venerdì"}), TV) == (False, True))
 verifica("prima del giro la stanza ascolta", stz4.accesa_qui(1))
 F1 = "Venerdì ho la verifica di fisica sulle misure delle grandezze fisiche."
 r1 = giro(F1, "voce", PP.chiama("studio_proponi_data", {"materia": "fisica", "verifica": 1}),
@@ -535,16 +625,29 @@ b.backend = Visto()
 b.tool_ctx.memory = Memoria()
 sc = b.tool_ctx.speaker_ctx
 DOMANDA = "Non ho ancora una verifica di fisica: vuoi che la crei per venerdì?"
-r0 = turno(b, "Venerdì ho la verifica di fisica.", "voce", None, PP.testo(DOMANDA))
-verifica("(il controllo di questa prova: alla voce riconosciuta i ricordi arrivano)",
-         "4821" in b.backend.visti[-1], b.backend.visti[-1][-300:])
+PRIMA = "Il codice della cassaforte è sotto il vaso blu."
+turno(b, PRIMA, "voce", None, PP.testo("Va bene."))
+cgiro = ciclo_mod(aperta=False)
+cgiro.s.studio.modalita, cgiro.brain, cgiro.speaker_ctx = st.modalita, b, sc
+r0 = turno(b, "Venerdì ho la verifica di fisica.", "voce", None,
+           PP.chiama("studio", {"azione": "stato", "materia": "fisica"}), PP.testo(DOMANDA))
+cgiro._modalita_dopo_turno(types.SimpleNamespace(scritto=None))
+verifica("(il controllo di questa prova: alla voce riconosciuta i ricordi e la storia arrivano)",
+         "4821" in b.backend.visti[-1] and PRIMA in b.backend.visti[-1], b.backend.visti[-1][-300:])
+verifica("il turno del tool apre la modalità", st.modalita.di(1) is not None)
 storia_prima = len(b.history)
+n_visti = len(b.backend.visti)
 sc.current_speaker, sc.dispositivo_studio, sc.current_level = None, "Andrea", "ospite"
+sc.studio_dal = st.modalita.di(1)["dal"]
 r5 = turno(b, "Sì, certo.", None, None, PP.chiama("studio", {"azione": "crea", "data": "venerdì",
                                                             "materia": "fisica"}), PP.testo("Fatto."))
-visto = b.backend.visti[1]
+visto = b.backend.visti[n_visti]
 verifica("il «Sì, certo.» a 0,375: la stessa conversazione, con la domanda in storia",
          DOMANDA in visto and len(b.history) > storia_prima, visto[-400:])
+verifica("contrario: la frase detta prima dell'apertura non arriva al modello per quel turno, né il "
+         "riassunto", PRIMA not in visto and all(PRIMA not in v for v in b.backend.visti[n_visti:]),
+         visto[-400:])
+verifica("…e resta nella conversazione del proprietario", any(PRIMA == m.get("content") for m in b.history))
 verifica("…e la verifica è creata, del proprietario, per la sola chiamata",
          materie(st) == ["fisica"] and "modalita_studio_voce" in b.rules_fired()
          and st.dati.tutti("SELECT persona FROM studio_verifiche")[0]["persona"] == ANDREA.id
@@ -554,10 +657,14 @@ verifica("…i ricordi del proprietario non arrivano al modello per quella frase
          visto[-400:])
 r6 = turno(b, "Che tempo fa?", None, None, PP.chiama("ricorda", {"fatto": "domani piove"}), PP.testo("Va bene."))
 verifica("contrario: un tool fuori dallo Studio resta da ospite", not b.last_tools[-1]["ok"], (r6, b.last_tools))
-sc.current_speaker, sc.dispositivo_studio, sc.current_level = "Andrea", None, "familiare"
+sc.studio_dal = None
+turno(b, "Che tempo fa?", None, None, PP.testo("Non lo so."))
+sc.dispositivo_studio = None
+sc.current_speaker, sc.current_level = "Andrea", "familiare"
 r7 = turno(b, "Com'è la password del garage?", "voce", None, PP.testo("Ok."))
 verifica("alla voce riconosciuta, dopo, i ricordi tornano e la conversazione è la stessa",
-         "4821" in b.backend.visti[-1] and DOMANDA in b.backend.visti[-1], b.backend.visti[-1][-200:])
+         "4821" in b.backend.visti[-1] and DOMANDA in b.backend.visti[-1]
+         and PRIMA in b.backend.visti[-1], b.backend.visti[-1][-200:])
 st.close()
 # I dati fissi già in storia (ricordi una volta sola, #95)
 st = PT.studio(PT.cfg_nuova("mod_giro6.db"))
@@ -569,9 +676,58 @@ sc = b.tool_ctx.speaker_ctx
 turno(b, "Venerdì ho la verifica di fisica.", "voce", None, PP.testo(DOMANDA))
 primo = b.backend.visti[-1]
 sc.current_speaker, sc.dispositivo_studio, sc.current_level = None, "Andrea", "ospite"
+sc.studio_dal = b.inizio_turno()
 turno(b, "Sì, certo.", None, None, PP.testo("Ok."))
 verifica("anche i ricordi già nella storia (dati fissi) escono per quella frase", "4821" in primo
          and "4821" not in b.backend.visti[-1], b.backend.visti[-1][-300:])
+st.close()
+
+# La voce non riconosciuta: ciò che non si rimette a posto no, il resto sì
+print("— con la voce non riconosciuta: togli e archivia no, le altre due sì")
+st = PT.studio(PT.cfg_nuova("mod_azioni.db"))
+reg_ = build_registry()
+for s_ in TS.studio_specs():
+    reg_.register(s_)
+va = st.crea_verifica(ANDREA, "Fisica", PT.ORA[0].date() + datetime.timedelta(days=9))
+aid = st.aggiungi_argomento(ANDREA, va, "Le misure", [], proposto=False)
+st.conferma_argomenti(ANDREA, va)
+for az, ex in (("togli", {"numero": 1}), ("archivia", {})):
+    j = json.loads(reg_.call("studio", {"azione": az, "verifica": va, **ex}, ctx_ignoto(st, ANDREA), "ospite"))
+    verifica(f"«{az}»: non si esegue, lo dice", j.get("ok") is False and "dallo schermo" in j["conferma"]
+             and materie(st) == ["fisica"], j)
+for az, ex in (("sposta", {"data": "2026-12-20"}), ("salta_oggi", {})):
+    j = json.loads(reg_.call("studio", {"azione": az, "verifica": va, **ex}, ctx_ignoto(st, ANDREA), "ospite"))
+    verifica(f"«{az}»: passa da chi la fa", "dallo schermo" not in str(j.get("conferma")), j)
+st.close()
+# La voce di quella frase non entra nei dati conservati del proprietario
+print("— la conservazione: quella frase resta da ospite")
+from calliope.conserva import Conservazione  # noqa: E402
+cfg_c = cfg_mod()
+cons = Conservazione(cfg_c, PT.REG, log=lambda m: None)
+REC = {"livello": "ospite", "testo": "Sì, certo.", "voce": {"migliore": "Andrea", "punteggio": 0.375}}
+d = cons.testo_di_serie(REC)
+verifica("le parole non restano né nell'archivio né nel registro, l'audio nemmeno", not d
+         and not cons.testo_turno(REC) and not cons.voce_turno(REC), d)
+# «Ascolta di nuovo la stanza»
+print("— «ascolta di nuovo la stanza» detto da chi può")
+from calliope.tools import stanza as TST  # noqa: E402
+st = PT.studio(PT.cfg_nuova("mod_ripresa.db"))
+stz5 = stanza_vera(cfg_mod())
+st.modalita.apri(1, ANDREA.id, stz5)
+verifica("(la stanza è in pausa)", stz5.stato_pausa(1) is not None)
+cr = PT.ctx_di(st, ANDREA)
+cr.stanza, cr.studio, cr.dispositivo = stz5, st, {"canale": "telefono", "di": ANDREA.id}
+stz5.server = types.SimpleNamespace(attivo=types.SimpleNamespace(satellite={"id": 1}))
+cr.speaker_ctx.identified_by, cr.speaker_ctx.current_level = "voce", "familiare"
+rr = TST._stanza_pausa(cr, "riprendi")
+verifica("riprende, e la modalità non rimette la pausa di nascosto", rr.get("ok") is not False
+         and stz5.accesa_qui(1) and st.modalita.di(1, stz5) is not None and stz5.stato_pausa(1) is None, rr)
+st.modalita.apri(1, ANDREA.id, stz5)
+verifica("…nemmeno col rinnovo; `dal` resta quello dell'apertura", stz5.accesa_qui(1))
+st.modalita.chiudi(1, stz5)
+st.modalita.apri(1, ANDREA.id, stz5)
+verifica("…e alla prossima apertura l'effetto 1 torna", stz5.stato_pausa(1) is not None)
+st.modalita.chiudi(1, stz5)
 st.close()
 
 print("\n" + ("TUTTO OK" if not errori else f"{errori} ERRORI"))

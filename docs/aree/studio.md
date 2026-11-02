@@ -177,7 +177,12 @@ Decisione 0035 punto 54; il perché nella issue. `studio/modalita.py`: uno stato
 satellite (`Studio.modalita`) con due effetti soltanto.
 - **Si apre**: `Ciclo._modalita_dopo_turno` (un tool dello Studio che la politica ha fatto passare,
   detto dal proprietario sul suo satellite personale; regola `modalita_studio_aperta`) e
-  `POST /api/vista` (la sezione aperta, se il satellite dello schermo è dello stesso proprietario).
+  `POST /api/vista` (la sezione aperta, se il satellite dello schermo è dello stesso proprietario, e
+  mai fuori orario per un minore). Dalla voce (`modalita.apre`, deciso da Brain durante il turno, campo
+  `apre_studio` di `last_tools`): un'azione inventata (`studio boh`) non apre, una che fallisce sì
+  (`proponi_data` su una verifica che non c'è ancora, il primo turno delle 11:46); con righe di un'altra
+  voce nel turno apre solo se la frase parla dello Studio: un comando sentito dalla TV, che il modello ha
+  seguito, non spegne l'ascolto.
 - **Si chiude**: `{vista: null}`, `studio_modalita_inattivita_min` (20 minuti: più di una pagina letta
   o di un esercizio fatto in silenzio, senza lasciare il telefono sordo alla stanza per una sera; 0 =
   spenta), mezzanotte. Una pagina chiusa senza dirlo scade da sola: la pausa ha il suo `fino`.
@@ -187,12 +192,20 @@ satellite (`Studio.modalita`) con due effetti soltanto.
   (`Brain._stanza_prepara_dentro`, `nascosti`), e la politica non vede più la stanza.
   Alla ripresa le righe di prima ci sono ancora (la pausa non cancella). Sulla tenuta non cambia
   niente: sul registro restano gli eventi di pausa e ripresa, come per le altre pause. Dopo un
-  riavvio modalità e pausa non ci sono più, e la stanza riparte.
+  riavvio modalità e pausa non ci sono più, e la stanza riparte. «Ascolta di nuovo la stanza», detto da
+  chi può, spegne l'effetto 1 fino alla chiusura della modalità (`Modalita.ascolta`): la pausa non torna
+  di nascosto. **Da sapere all'installazione**: con `stanza_contesto` acceso sulla DGX l'effetto 1 si
+  vede subito, aprendo lo Studio la stanza si ferma su quel telefono ([setup-dgx](setup-dgx.md)).
 - **L'effetto 2**: `Ciclo._modalita_voce` decide per la frase (`SpeakerContext.dispositivo_studio`),
   `ToolRegistry._come_proprietario` vale per la sola chiamata (identità come la zona grigia, regola
   `modalita_studio_voce`), `servizio.permesso` con `solo_propri` toglie i dati dei minori di cui è
   tutore. La voce di un altro è un altro profilo come migliore sopra `speaker_continuita_soglia`
-  (0,36).
+  (0,36). Col proprietario adulto basta un minore come migliore o secondo sopra
+  `minori_ospite_vicino_punteggio` (0,30: la bambina del 15/10 aveva 0,32–0,45 sul suo profilo), e
+  `_modalita_voce` guarda `minore_ospite`, per questo viene dopo `_minore_per_ospite`. Fuori orario per
+  un minore non vale (`minori.fuori_orario`). `togli` e `archivia` non si eseguono (regola
+  `modalita_studio_voce_no`): Calliope dice di non aver riconosciuto la voce, e di farlo dallo schermo
+  o di ripetere. `sposta` e `salta_oggi` restano, perché si possono rimettere a posto.
 
 - **La conversazione**: la voce non riconosciuta sta nella conversazione del proprietario, se è l'ultima
   di questo satellite (come la continuità), così il «Sì, certo.» sa a cosa risponde. Per quella frase al
@@ -201,9 +214,16 @@ satellite (`Studio.modalita`) con due effetti soltanto.
   volta al ritorno della sua voce). Nemmeno le righe della stanza (in pausa); i dati del turno dicono che
   è una voce non riconosciuta. *[storico fino al 02/11: la conversazione anonima]*
 
-**Limiti.** **La storia della conversazione del proprietario arriva al modello** anche per quella frase:
-ciò che lei ha detto o sentito nei turni prima può tornare a una voce non riconosciuta sul suo telefono. E la
-frase entra nella sua conversazione e nel suo archivio. Il telefono di un adulto in mano a un minore mai sentito lì, con una voce lontana
+**Limiti.** Della storia del proprietario, per quella frase, al modello arrivano solo i turni da quando la
+modalità si è aperta (`dal`, `Brain._storia_per_modello`, dal turno che l'ha aperta; niente riassunto): col
+telefono sul tavolo una voce qualunque può ottenere ciò che si è detto in questi turni, non quello di prima.
+*[storico fino al 02/11: arrivava tutta la storia]* Il prezzo: una frase detta prima dell'apertura non arriva
+al modello per quel turno. `togli` e `archivia` dalla voce non riconosciuta non si fanno: chi ha il telefono in
+mano ma non è riconosciuta le fa dallo schermo; le altre scritture passano (`conclusa`, `indicazioni_togli` e le
+altre non sono nella stretta). La frase entra nella conversazione in memoria del proprietario, ma **non nei suoi
+dati conservati**: il turno è da ospite (`conserva.testo_di_serie`), le parole non vanno nell'archivio su disco
+né nel registro, e l'audio non si tiene; durante la valutazione (0032) vale la regola della valutazione.
+*[storico fino al 02/11: «entra nel suo archivio»]* Il telefono di un adulto in mano a un minore mai sentito lì, con una voce lontana
 da tutti i profili, vale come l'adulto per i tool dello Studio: è un limite dell'identità, come
 nella decisione. La frase media a 0,375 (la voce della issue) non diventa riconosciuta fuori dalla
 modalità: per tutto il resto resta ospite. Le misure vere sono da fare.
