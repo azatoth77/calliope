@@ -2178,6 +2178,27 @@ riguardava solo lo Studio: ogni azione di un turno «sì», in ogni casa con la 
   domanda scritta dal modello. Tolta: non si distingue «vuoi che controlli il dentista?» da «vuoi che
   lo cancelli?», e la chiamata è un'altra cosa; il revisore ha eseguito così `agenda_annulla` e
   `lista_togli`]*
+- **Il «sì» vale per ciò che la domanda ha detto** (seconda revisione della PR #377:
+  `valore.consumo_domanda`). La domanda del codice è ora l'unica barriera:
+  - con una chiamata diversa nessuna esecuzione, una domanda nuova coi valori nuovi (regola
+    `valore_chiamata_diversa`). Confronto esatto su tutte le chiavi tranne le IGNORA, azione compresa,
+    anche una chiave in più o in meno; solo maiuscole e spazi normalizzati, numeri e liste esatti.
+    Vale anche con la conversazione tornata pulita. `_uguali` non cambia per gli altri;
+  - la domanda dice **tutto** ciò che si esegue (`cosa_coi_valori`: numeri e liste compresi). Un valore
+    che non si può dire per intero (oltre 60 caratteri, a capo, indirizzi, markdown, emoji, parole di
+    un'istruzione, un oggetto) non si conferma col «sì»: «dimmelo con le tue parole», regola
+    `valore_non_dicibile`, senza il suo testo nella frase;
+  - un valore che viene da dati letti: «Viene da una pagina, non da te: vuoi che…?»;
+  - la zona grigia al consumo non esegue: la frase di sfida (`valore_consenso_sfida`). C'era già sulla
+    base, si è chiusa qui e nessun caso provato si è rotto;
+  - un'azione E3–E4 da questo percorso va alla frase di sfida (`valore_non_ancorata_sfida`): la
+    serratura è E4, un comando di casa sconosciuto è E3, e la voce riconosciuta da sola eseguiva E3.
+- **La metrica.** «ESEGUITE con un bersaglio dal dato» conta anche un bersaglio dal dato eseguito col
+  «sì» alla domanda che ha detto la fonte: prima il consumo registrava argomenti e bersagli vuoti, e il
+  controllo era cieco proprio lì. Quindi **non è più detto che resti 0**: va letta insieme alla voce
+  «di cui confermate con la fonte detta» (`dato_confermate`, ombra `fonte_detta`). Il segnale d'allarme
+  è la differenza fra le due: un bersaglio dal dato eseguito senza che la persona abbia sentito la fonte
+  deve restare 0.
 - **Il comando di un'altra voce non diventa un'azione** (`valore.dalla_stanza`, regola
   `valore_dalla_stanza`): un valore che sta solo nelle righe della stanza, o le parole del tool dette
   lì e non dalla persona nella frase del turno o nella sua frase di prima (non in tutta la

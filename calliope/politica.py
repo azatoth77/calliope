@@ -2257,6 +2257,14 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
             d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
     else:
         d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
+        # Anche con la conversazione tornata pulita (una stanza andata in pausa): il «sì» alla
+        # domanda vale per ciò che ha detto (02/11, #376)
+        if per_valore and t is not None and cl.classe not in (SICURO, VIETATO) \
+                and d.esito not in ("blocca", "vieta"):
+            c_ = valore.consumo_domanda(name, args or {}, cl, t, ctx, spec,
+                                        list(getattr(t, "fidati", None) or ()), cosa)
+            if c_ is not None:
+                d = c_
     # Una domanda in più prima di eseguire (Classe.chiedi_se, 17/10): non al «sì» alla domanda,
     # e solo con la chiamata identica a quella chiesta (tutti gli argomenti: terza revisione
     # della PR #143, un «sì» con quale="tutti" o un altro minore eliminava altri file)
