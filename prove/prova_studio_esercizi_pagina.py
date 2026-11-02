@@ -119,10 +119,31 @@ def scenario_telefono(t, hub, st, vid, eid):
              bool(ok) and "Giusto!" in testo_di(t, ".studio-e-esito")
              and t.v("document.querySelectorAll('.studio-e-passo input[type=radio]').length") == 3,
              testo_di(t, ".studio-e")[:300])
-    for _ in range(2):
-        t.tocca('.studio-e-passo input[type=radio][value="b"]')
+    # Il doppio tocco su «Controlla», con la risposta già tornata: una risposta sola
+    t.tocca('button[data-esercizio="rispondi"]')
+    time.sleep(0.5)
+    verifica("doppio tocco sulla risposta giusta: resta «Giusto!», non chiede di scrivere",
+             "Giusto!" in testo_di(t, ".studio-e-esito"), testo_di(t, ".studio-e-esito"))
+
+    def errori():
+        return st.dati.tutti("SELECT errori FROM studio_esercizi WHERE id = ?", (eid,))[0]["errori"]
+
+    def sbaglia(valore):
+        vecchi = errori()
+        t.tocca(f'.studio-e-passo input[type=radio][value="{valore}"]')
         t.tocca('button[data-esercizio="rispondi"]')
-        aspetta(lambda: "Non ancora" in testo_di(t, ".studio-e-esito"), 5)
+        aspetta(lambda: errori() != vecchi and "Non ancora" in testo_di(t, ".studio-e-esito"), 5)
+    sbaglia("b")
+    t.tocca('button[data-esercizio="rispondi"]')
+    time.sleep(0.5)
+    verifica("doppio tocco sulla risposta sbagliata: un errore solo sul db, l'esito resta",
+             errori() == 1 and "Non ancora" in testo_di(t, ".studio-e-esito")
+             and "indizio" not in testo_di(t, ".studio-e-esito"),
+             f"errori={errori()}")
+    # La stessa risposta dopo una pausa è un tentativo vero, come una diversa subito dopo
+    time.sleep(1.2)
+    sbaglia("b")
+    verifica("la stessa risposta dopo una pausa conta", errori() == 2, f"errori={errori()}")
     verifica("due risposte sbagliate: «Non ancora» e «Vuoi un indizio?», e il tasto «Aiutami»",
              "indizio" in testo_di(t, ".studio-e-esito")
              and t.v("!!document.querySelector('button[data-esercizio=\"indizio\"]')"),

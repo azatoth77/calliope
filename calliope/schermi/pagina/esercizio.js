@@ -17,6 +17,7 @@
     pronto: "pronto", senza_guida: "senza guida: guardalo con chi ti segue",
     illeggibile: "non sono riuscita a leggerlo: rifai la foto", in_corso: "in corso",
     pausa: "in pausa", finito: "finito" };
+  const DOPPIO_TOCCO_MS = 1500;
   const ESITI = { giusto: "giusta", indizio: "manca l'unità", sbagliato: "non ancora",
     da_rivedere: "da rivedere", saltato: "saltato", vuota: "senza risposta" };
   const AVVISI = { istruzioni: "Nel testo c'è un messaggio per un assistente: non lo seguo.",
@@ -204,6 +205,16 @@
     return box;
   }
 
+  // Il secondo tocco di un doppio tocco su «Controlla», con la risposta già tornata e il tasto
+  // riacceso: la stessa risposta (o il campo appena svuotato da un «giusto») subito dopo non è un
+  // tentativo nuovo, e non deve contare un errore in più né cancellare l'esito
+  function doppioTocco() {
+    const p = es.risposto;
+    if (!p || Date.now() - p.ora >= DOPPIO_TOCCO_MS) return false;
+    const t = String(es.risposta || "").trim();
+    return !t || t === p.testo;
+  }
+
   async function chiedi(vid, dati) {
     if (!sch() || !sch().studioEsercizio) return null;
     const n = ++es.richiesta;
@@ -227,6 +238,7 @@
     let dati = {};
     try { dati = JSON.parse(b.dataset.dati || "{}"); } catch (e) { return; }
     const az = b.dataset.esercizio;
+    if (az === "rispondi" && doppioTocco()) return;
     es.esito = "";
     if (az === "chiudi") { chiudi(); ctx.vista({ vista: "home" }); ctx.ricarica(); return; }
     if (az === "elenco" || az === "scrivi") {
@@ -261,6 +273,7 @@
       const risposta = String(es.risposta || "").trim();
       if (!risposta) { es.esito = "Scrivi o scegli la tua risposta."; ctx.ridisegna(); return; }
       const r = await chiedi(vid, { azione: "rispondi", esercizio: Number(dati.esercizio), risposta });
+      es.risposto = r ? { testo: risposta, ora: Date.now() } : null;
       if (r && r.ultimo) {
         es.esito = String(r.ultimo.frase || ESITI[r.ultimo.esito] || "");
         if (["giusto", "da_rivedere"].includes(r.ultimo.esito)) es.risposta = "";
