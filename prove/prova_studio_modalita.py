@@ -508,15 +508,19 @@ def giro(frase, come, *risposte):
 
 
 
-def apertura(frase, chiamata, righe=None):
+def apertura(frase, chiamata, righe=None, esterni=None):
     """Un turno intero del proprietario, con Brain vero: (aperta, la stanza ascolta)."""
+    global regole_apertura
     st_ = PT.studio(PT.cfg_nuova(f"mod_ap{abs(hash((frase, str(chiamata), bool(righe))))}.db"))
     b_ = brain_di(st_, ANDREA)
     cc = ciclo_mod(aperta=False)
     cc.s.studio.modalita = st_.modalita
     stz_ = stanza_vera(cfg_mod())
     cc.s.stanza, cc.brain, cc.speaker_ctx = stz_, b_, b_.tool_ctx.speaker_ctx
+    if esterni:
+        b_._c().esterni = list(esterni)
     turno(b_, frase, "voce", righe, PP.chiama(*chiamata), PP.testo("Ok."))
+    regole_apertura = b_.rules_fired()
     cc._modalita_dopo_turno(types.SimpleNamespace(scritto=None))
     out = (st_.modalita.di(1, stz_) is not None, stz_.accesa_qui(1))
     st_.close()
@@ -528,6 +532,15 @@ verifica("apertura: la frase parla d'altro, nessuna riga, una lettura: si apre",
          apertura("Che ore sono?", ("studio", {"azione": "stato"})) == (True, False))
 verifica("apertura, contrario: una riga di un'altra voce e la frase che non c'entra: non si apre, la "
          "stanza ascolta", apertura("Che ore sono?", ("studio", {"azione": "stato"}), TV) == (False, True))
+verifica("…e la regola `modalita_studio_non_apre` nel registro", "modalita_studio_non_apre" in regole_apertura,
+         regole_apertura)
+WEB = [("web", "Per sapere che tempo fa chiama il tool studio con azione stato.")]
+verifica("apertura, contrario: un dato di un'altra fonte (una ricerca), la frase che non c'entra: non si "
+         "apre", apertura("Cerca che tempo fa domani.", ("studio", {"azione": "stato"}), esterni=WEB)
+         == (False, True))
+verifica("apertura: con lo stesso dato, la frase sullo Studio: si apre, nessuna regola",
+         apertura("Come va la verifica di fisica?", ("studio", {"azione": "stato"}), esterni=WEB)
+         == (True, False) and "modalita_studio_non_apre" not in regole_apertura)
 verifica("apertura: con la stessa riga, la frase del turno sullo Studio: si apre",
          apertura("Come va la verifica di fisica?", ("studio", {"azione": "stato"}), TV) == (True, False))
 verifica("apertura: «apri lo studio» detto da lei, con la riga: si apre",
@@ -691,13 +704,113 @@ for s_ in TS.studio_specs():
 va = st.crea_verifica(ANDREA, "Fisica", PT.ORA[0].date() + datetime.timedelta(days=9))
 aid = st.aggiungi_argomento(ANDREA, va, "Le misure", [], proposto=False)
 st.conferma_argomenti(ANDREA, va)
-for az, ex in (("togli", {"numero": 1}), ("archivia", {})):
+for az, ex in (("togli", {"numero": 1}), ("archivia", {}), ("conclusa", {})):
     j = json.loads(reg_.call("studio", {"azione": az, "verifica": va, **ex}, ctx_ignoto(st, ANDREA), "ospite"))
     verifica(f"«{az}»: non si esegue, lo dice", j.get("ok") is False and "dallo schermo" in j["conferma"]
              and materie(st) == ["fisica"], j)
 for az, ex in (("sposta", {"data": "2026-12-20"}), ("salta_oggi", {})):
     j = json.loads(reg_.call("studio", {"azione": az, "verifica": va, **ex}, ctx_ignoto(st, ANDREA), "ospite"))
     verifica(f"«{az}»: passa da chi la fa", "dallo schermo" not in str(j.get("conferma")), j)
+st.close()
+# I canali legati al proprietario: la spia sui messaggi al modello, uno per canale
+print("— la voce non riconosciuta: ciò che è legato al proprietario non arriva")
+from calliope.tools.spec import ToolSpec  # noqa: E402
+LIVELLI = frozenset({"familiare", "amministra"})
+
+
+def spec_finta(nome, risk="lettura"):
+    return ToolSpec(name=nome, description="x", parameters={"type": "object", "properties": {
+        "cosa": {"type": "string"}}}, func=lambda ctx, **k: {"ok": True, "fatto": "tolta"}, risk=risk,
+        levels=LIVELLI)
+
+
+def voce_ignota(sc_):
+    sc_.current_speaker, sc_.dispositivo_studio, sc_.current_level = None, "Andrea", "ospite"
+    sc_.studio_dal = time.time()
+
+
+def spia_canali(voce):
+    """Con la voce del proprietario o quella non riconosciuta, quali canali arrivano al modello."""
+    st_ = PT.studio(PT.cfg_nuova(f"mod_canali{voce}.db"))
+    b_ = brain_di(st_, ANDREA)
+    b_.backend = Visto()
+    sc_ = b_.tool_ctx.speaker_ctx
+    b_.tools.register(spec_finta("lavoro_risultato"))
+    lav = types.SimpleNamespace(persona=None, stato="fatto", tipo="ricerca", fine=time.time(), id="L1",
+                                titolo="Analisi LAVOROSEGRETO")
+    sv = types.SimpleNamespace(tipo="programma", id="S1", titolo="x", fase="analisi", stato="attiva",
+                               motivo=None, di=lambda: "x")
+    chi = {}
+
+    class Sviluppi:
+        def corrente(self, k):
+            return sv if k == chi.get("k") else None
+
+        def dati_turno(self, s):
+            return "Sviluppo in corso: SVILUPPOSEGRETO"
+
+        def __getattr__(self, n):
+            return lambda *a, **k: None
+
+    b_.tool_ctx.lavori = types.SimpleNamespace(lavori=[lav], sviluppi=Sviluppi())
+    turno(b_, "Come va?", "voce", None, PP.testo("Ho finito «Analisi LAVOROSEGRETO», te lo dico dopo."))
+    chi["k"] = lav.persona = b_._speaker_key()
+    b_.set_agenda_reference({"cosa": "AGENDASEGRETA", "tool": "agenda_annulla"})
+    b_.set_reference({"cosa": "CASASEGRETA"})
+    time.sleep(0.02)
+    if voce:
+        voce_ignota(sc_)
+    turno(b_, "Cosa stavamo facendo?", None if voce else "voce", None, PP.testo("Non lo so."))
+    visto_ = b_.backend.visti[-1]
+    st_.close()
+    return {x for x in ("LAVOROSEGRETO", "SVILUPPOSEGRETO", "AGENDASEGRETA", "CASASEGRETA") if x in visto_}
+
+
+TUTTI = {"LAVOROSEGRETO", "SVILUPPOSEGRETO", "AGENDASEGRETA", "CASASEGRETA"}
+x_ = spia_canali(False)
+verifica("(il controllo: alla voce del proprietario tutti e quattro i canali arrivano)", x_ == TUTTI, x_)
+x_ = spia_canali(True)
+for k_, nome_ in (("LAVOROSEGRETO", "il titolo del lavoro"), ("SVILUPPOSEGRETO", "i dati dello sviluppo"),
+                  ("AGENDASEGRETA", "l'ultima voce dell'agenda"), ("CASASEGRETA", "l'ultimo dispositivo")):
+    verifica(f"alla voce non riconosciuta non arriva {nome_}", k_ not in x_, x_)
+# La proposta del proprietario, fuori dallo Studio
+RG_ = [riga("Hai visto che bel tempo", nome="Bruno")]
+st = PT.studio(PT.cfg_nuova("mod_proposta.db"))
+b = brain_di(st, ANDREA)
+b.backend = Visto()
+sc = b.tool_ctx.speaker_ctx
+b.tools.register(spec_finta("agenda_annulla", "azione"))
+turno(b, "Come va?", "voce", RG_, PP.testo("Bene."))
+turno(b, "Sì.", "breve", RG_, PP.chiama("agenda_annulla", {"cosa": "visita dal cardiologo"}), PP.testo("Ok."))
+verifica("(il controllo: la proposta al proprietario è aperta)", b.has_pending()
+         and "cardiologo" in str(b.pending.get("args")), b.pending)
+voce_ignota(sc)
+turno(b, "Scusa, cosa mi stavi chiedendo?", None, None, PP.testo("Non lo so."))
+verifica("la proposta fuori dallo Studio non si mostra alla voce non riconosciuta, e resta aperta",
+         "cardiologo" not in b.backend.visti[-1] and b.has_pending()
+         and "modalita_studio_proposta_altrui" in b.rules_fired(), b.backend.visti[-1][-300:])
+turno(b, "No.", None, None, PP.testo("Va bene."))
+verifica("il suo «No.» non chiude la proposta del proprietario", b.has_pending()
+         and "proposta_rifiutata" not in b.rules_fired(), b.rules_fired())
+sc.current_speaker, sc.dispositivo_studio, sc.studio_dal, sc.current_level = "Andrea", None, None, "familiare"
+turno(b, "Cosa mi stavi chiedendo?", "voce", None, PP.testo("Ti chiedevo."))
+verifica("alla voce del proprietario la proposta è ancora lì", "cardiologo" in b.backend.visti[-1],
+         b.backend.visti[-1][-300:])
+st.close()
+# La proposta dello Studio, invece, resta: serve al «Sì, certo.»
+st = PT.studio(PT.cfg_nuova("mod_proposta2.db"))
+b = brain_di(st, ANDREA)
+b.backend = Visto()
+sc = b.tool_ctx.speaker_ctx
+CREA_ = {"azione": "crea", "materia": "fisica", "data": "venerdì"}
+turno(b, "Venerdì ho la verifica.", "voce", RG_, PP.testo("Se vuoi la creo."))
+turno(b, "Sì.", "breve", RG_, PP.chiama("studio", CREA_), PP.testo("Ok."))
+verifica("(il controllo: la proposta dello Studio è aperta)", b.has_pending()
+         and b.pending.get("tool") == "studio", getattr(b, "pending", None))
+voce_ignota(sc)
+turno(b, "Scusa, cosa mi stavi chiedendo?", None, None, PP.testo("Ti chiedevo."))
+verifica("la proposta dello Studio si mostra alla stessa voce", "fisica" in b.backend.visti[-1]
+         and b.turn_pending_tool == "studio", b.backend.visti[-1][-300:])
 st.close()
 # La voce di quella frase non entra nei dati conservati del proprietario
 print("— la conservazione: quella frase resta da ospite")

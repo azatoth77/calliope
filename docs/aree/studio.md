@@ -179,10 +179,12 @@ satellite (`Studio.modalita`) con due effetti soltanto.
   detto dal proprietario sul suo satellite personale; regola `modalita_studio_aperta`) e
   `POST /api/vista` (la sezione aperta, se il satellite dello schermo è dello stesso proprietario, e
   mai fuori orario per un minore). Dalla voce (`modalita.apre`, deciso da Brain durante il turno, campo
-  `apre_studio` di `last_tools`): un'azione inventata (`studio boh`) non apre, una che fallisce sì
-  (`proponi_data` su una verifica che non c'è ancora, il primo turno delle 11:46); con righe di un'altra
-  voce nel turno apre solo se la frase parla dello Studio: un comando sentito dalla TV, che il modello ha
-  seguito, non spegne l'ascolto.
+  `apre_studio` di `last_tools`, regola `modalita_studio_non_apre` quando dice no): un'azione inventata
+  (`studio boh`) non apre, una che fallisce sì (`proponi_data` su una verifica che non c'è ancora, il primo
+  turno delle 11:46); con un dato letto nel turno (`t.esterni`: righe di un'altra voce, una pagina, una
+  ricerca) apre solo se la frase parla dello Studio: un comando sentito dalla TV, che il modello ha
+  seguito, non spegne l'ascolto. Limite: una riga della stanza di un turno prima non è in `t.esterni`, e
+  la chiamata del turno dopo apre comunque.
 - **Si chiude**: `{vista: null}`, `studio_modalita_inattivita_min` (20 minuti: più di una pagina letta
   o di un esercizio fatto in silenzio, senza lasciare il telefono sordo alla stanza per una sera; 0 =
   spenta), mezzanotte. Una pagina chiusa senza dirlo scade da sola: la pausa ha il suo `fino`.
@@ -203,9 +205,14 @@ satellite (`Studio.modalita`) con due effetti soltanto.
   (0,36). Col proprietario adulto basta un minore come migliore o secondo sopra
   `minori_ospite_vicino_punteggio` (0,30: la bambina del 15/10 aveva 0,32–0,45 sul suo profilo), e
   `_modalita_voce` guarda `minore_ospite`, per questo viene dopo `_minore_per_ospite`. Fuori orario per
-  un minore non vale (`minori.fuori_orario`). `togli` e `archivia` non si eseguono (regola
+  un minore non vale (`minori.fuori_orario`). `togli`, `archivia` e `conclusa` non si eseguono (regola
   `modalita_studio_voce_no`): Calliope dice di non aver riconosciuto la voce, e di farlo dallo schermo
-  o di ripetere. `sposta` e `salta_oggi` restano, perché si possono rimettere a posto.
+  o di ripetere. `conclusa` perché chiude le prove aperte come «annullate» e le mappe come controllate,
+  e spostare la data riapre la verifica, non la prova. `sposta` e `salta_oggi` restano, perché si possono
+  rimettere a posto. Per quella frase si spengono anche i canali legati al proprietario
+  (`Brain._voce_modalita_studio`): riferimenti dell'agenda e della casa, lavoro, sviluppo. La proposta di
+  un tool fuori dallo Studio non si mostra né si consuma, e il «no» di quella voce non la chiude (regola
+  `modalita_studio_proposta_altrui`); quelle dello Studio restano.
 
 - **La conversazione**: la voce non riconosciuta sta nella conversazione del proprietario, se è l'ultima
   di questo satellite (come la continuità), così il «Sì, certo.» sa a cosa risponde. Per quella frase al
@@ -218,9 +225,10 @@ satellite (`Studio.modalita`) con due effetti soltanto.
 modalità si è aperta (`dal`, `Brain._storia_per_modello`, dal turno che l'ha aperta; niente riassunto): col
 telefono sul tavolo una voce qualunque può ottenere ciò che si è detto in questi turni, non quello di prima.
 *[storico fino al 02/11: arrivava tutta la storia]* Il prezzo: una frase detta prima dell'apertura non arriva
-al modello per quel turno. `togli` e `archivia` dalla voce non riconosciuta non si fanno: chi ha il telefono in
-mano ma non è riconosciuta le fa dallo schermo; le altre scritture passano (`conclusa`, `indicazioni_togli` e le
-altre non sono nella stretta). La frase entra nella conversazione in memoria del proprietario, ma **non nei suoi
+al modello per quel turno. `togli`, `archivia` e `conclusa` dalla voce non riconosciuta non si fanno: chi ha il telefono
+in mano ma non è riconosciuta le fa dallo schermo. `indicazioni_togli` è già rifiutata: è del tutore, e con la
+voce non riconosciuta valgono solo i dati propri. Le altre scritture passano (`crea`, `sposta`, `tipo`, `tieni`,
+`salta_oggi`, `fatto`, `riprova`, gli esiti di carte e interrogazioni). La frase entra nella conversazione in memoria del proprietario, ma **non nei suoi
 dati conservati**: il turno è da ospite (`conserva.testo_di_serie`), le parole non vanno nell'archivio su disco
 né nel registro, e l'audio non si tiene; durante la valutazione (0032) vale la regola della valutazione.
 *[storico fino al 02/11: «entra nel suo archivio»]* Il telefono di un adulto in mano a un minore mai sentito lì, con una voce lontana

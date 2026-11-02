@@ -9,7 +9,8 @@ personale (`Ciclo._modalita_dopo_turno`, `apre`), o aprendo la sezione Studio su
 (`POST /api/vista`, se il satellite legato allo schermo è dello stesso proprietario, e mai fuori
 orario per un minore). **Si chiude** uscendo dalla sezione (`{vista: null}`), dopo
 `studio_modalita_inattivita_min` minuti senza attività dello Studio, a mezzanotte. Una riga della
-stanza non apre niente: con righe di un'altra voce nel turno la frase deve parlare dello Studio.
+stanza non apre niente: con un dato letto nel turno (righe di un'altra voce, una pagina, una
+ricerca) la frase deve parlare dello Studio.
 
 **Effetto 1**: la stanza in pausa solo su quel satellite, motivo «studio» (`Stanza.pausa`): niente
 righe nel turno e niente ascolto da lì, «in pausa» sugli schermi. La pausa scade da sola
@@ -22,10 +23,12 @@ frase detta dal dispositivo personale vale come del proprietario, **solo per i t
 sui suoi dati** (`solo_propri`, `servizio.permesso`). Vale come la zona grigia (al più familiare,
 `dispositivo.proprio`). La voce chiaramente di un altro vince. Niente con la compagnia, un
 conoscente, un minore possibile, fuori orario per un minore; un tool fuori dallo Studio resta da
-ospite. `togli` e `archivia` non si eseguono (`SOLO_VOCE_SICURA`). La conversazione è quella del
+ospite. `togli`, `archivia` e `conclusa` non si eseguono (`SOLO_VOCE_SICURA`). La conversazione è quella del
 proprietario, se è l'ultima di quel satellite (come la continuità): senza, un «sì» non sa a cosa
 risponde. Per quella frase niente ricordi né avvisi del proprietario, e della storia solo i turni da
-quando la modalità si è aperta (`dal`, Brain._storia_per_modello).
+quando la modalità si è aperta (`dal`, Brain._storia_per_modello); niente riferimenti, lavoro e
+sviluppo del proprietario, e le sue proposte fuori dallo Studio restano a lui, intatte
+(Brain._voce_modalita_studio).
 """
 from __future__ import annotations
 
@@ -43,9 +46,11 @@ TOOL = frozenset({"studio", "studio_pagina_leggi", "studio_carte", "studio_inter
                   "studio_mappa_consigli"})
 # Con la voce non riconosciuta queste non si eseguono: non si rimettono a posto da una frase sola,
 # e chi è vicino al telefono le farebbe senza che il proprietario se ne accorga. `sposta` e
-# `salta_oggi` restano: si possono rimettere a posto
-SOLO_VOCE_SICURA = frozenset({"togli", "archivia"})
-# La frase del turno parla dello Studio: serve solo se nel turno ci sono righe di un'altra voce
+# `salta_oggi` restano: si possono rimettere a posto. `conclusa` chiude le prove aperte come
+# «annullate» e le mappe come controllate: spostare la data riapre la verifica, non la prova
+SOLO_VOCE_SICURA = frozenset({"togli", "archivia", "conclusa"})
+# La frase del turno parla dello Studio: serve solo se nel turno c'è un dato letto (le righe di
+# un'altra voce, una pagina, una ricerca)
 # (un vincolo di permesso, principio 10). Per i tool senza parole proprie in politica.VERBI
 _PAROLE_STUDIO = re.compile(r"(?<![a-zà-ù])(?:stud[iy]|verific|compit|ripass|interrog|cart[ae]|"
                             r"mapp|prov[ae]|eserciz|piano|argoment|librer|sched|pagin)", re.I)
@@ -69,13 +74,15 @@ def solo_propri():
 
 def apre(nome: str, args: dict, t) -> bool:
     """Questa chiamata può aprire (o tenere viva) la modalità? Un tool dello Studio con un'azione
-    che esiste, anche se fallisce (`proponi_data` su una verifica che non c'è ancora); con righe di
-    un'altra voce nel turno, solo se è ancorata alla frase: un comando sentito dalla TV, che il
-    modello ha seguito, non spegne l'ascolto. `t` è il `politica.Turno` della chiamata."""
+    che esiste, anche se fallisce (`proponi_data` su una verifica che non c'è ancora); con un dato
+    letto nel turno (`t.esterni`, ogni fonte), solo se è ancorata alla frase: un comando sentito
+    dalla TV o scritto in una pagina, che il modello ha seguito, non spegne l'ascolto. `t` è il
+    `politica.Turno` della chiamata. Limite: una riga della stanza di un turno prima non è in
+    `t.esterni`."""
     from ..tools.studio import chiamata_nota
     if nome not in TOOL or not chiamata_nota(nome, args):
         return False
-    if not any(fonte == "stanza" and str(x or "").strip() for fonte, x in (t.esterni or ())):
+    if not any(str(x or "").strip() for _fonte, x in (t.esterni or ())):
         return True
     from ..politica import CLASSI
     from ..valore import ancorata

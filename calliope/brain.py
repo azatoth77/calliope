@@ -3941,16 +3941,22 @@ class Brain:
         return sum(p.caratteri for p in getattr(self._c(), "stanza", None) or ())
 
     # ─────────── i dati che cambiano di rado nella storia (16/10, issue #95, dati_turno.py) ───────────
+    def _voce_modalita_studio(self) -> bool:
+        """La frase è della voce non riconosciuta, dal telefono con la modalità studio aperta
+        (02/11, #376). `_speaker_key` dà il proprietario, perché sta nella sua conversazione: tutto
+        ciò che è legato a quella chiave qui si spegne (storia, riassunto, riferimenti, lavoro,
+        sviluppo, proposte fuori dallo Studio)."""
+        return bool(getattr(getattr(self.tool_ctx, "speaker_ctx", None), "dispositivo_studio", None))
+
     def _storia_per_modello(self, upto: int) -> list[dict]:
         """La storia prima del turno come può arrivare al modello: tutta, ma con la voce non
         riconosciuta della modalità studio (`dispositivo_studio`) solo dalla frase del turno che
         l'ha aperta (`studio_dal`): col telefono sul tavolo, una voce qualunque non deve ottenere ciò
         che il proprietario ha detto o sentito prima. Decisione di chi amministra (02/11, #376)."""
         prima = self.history[:upto]
-        sc = getattr(self.tool_ctx, "speaker_ctx", None)
-        if not getattr(sc, "dispositivo_studio", None):
+        if not self._voce_modalita_studio():
             return prima
-        dal = getattr(sc, "studio_dal", None)
+        dal = getattr(getattr(self.tool_ctx, "speaker_ctx", None), "studio_dal", None)
         if dal is None:
             return []
         return next((prima[i:] for i, m in enumerate(prima)
@@ -3967,9 +3973,12 @@ class Brain:
         if nome not in modalita.TOOL:
             return False
         try:
-            return modalita.apre(nome, args, self._turno_politica())
+            si = modalita.apre(nome, args, self._turno_politica())
         except Exception:  # noqa: BLE001 — nel dubbio non apre
-            return False
+            si = False
+        if not si:
+            self._rule("modalita_studio_non_apre")
+        return si
 
     def _con_ancorati(self, msgs: list[dict], conv=None) -> list[dict]:
         """`msgs` (la storia prima del turno in corso) con le righe della stanza e i dati fissi dei
@@ -4267,6 +4276,14 @@ class Brain:
                 pass
         if not p:
             return None
+        if self._voce_modalita_studio():
+            # La proposta di un tool fuori dallo Studio resta al proprietario: non si mostra e il
+            # «no» di quella voce non la chiude (senza il tool del turno, nemmeno il blocco dello
+            # stato). Quelle dello Studio servono al suo «Sì, certo.»
+            from .studio.modalita import TOOL
+            if p.get("tool") not in TOOL:
+                self._rule("modalita_studio_proposta_altrui")
+                return None
         # Valida per più turni della stessa persona (04/10, calliope/conferme.py): un turno
         # in mezzo («Scusa, io sono chi amministra») non la consuma più. Si toglie quando il
         # tool proposto riesce, quando ne arriva un'altra, scade o cambia la conversazione
@@ -4370,7 +4387,7 @@ class Brain:
     def _take_agenda_reference(self) -> str | None:
         """Come _take_reference, per l'agenda: non nella stessa risposta, finché non scade."""
         r = getattr(self, "agenda_reference", None)
-        if not r or not self._net("riferimento_agenda"):
+        if not r or not self._net("riferimento_agenda") or self._voce_modalita_studio():
             return None
         if time.monotonic() > r["scade"]:
             self.agenda_reference = None
@@ -4499,7 +4516,7 @@ class Brain:
     def _lavoro_turno(self) -> tuple[str, dict] | None:
         """(LAVORO_MSG, {"lavoro", "titolo", "avvisato", "parole"}) per il lavoro finito di chi
         parla di cui si è appena parlato, o None."""
-        if not self._net("riferimento_lavoro"):
+        if not self._net("riferimento_lavoro") or self._voce_modalita_studio():
             return None
         svc = getattr(self.tool_ctx, "lavori", None)
         if svc is None or self.tools.get("lavoro_risultato") is None:
@@ -4595,7 +4612,7 @@ class Brain:
 
     def _sviluppo_turno(self, testo: str) -> str | None:
         """I dati del turno della modalità sviluppo per chi parla, o None."""
-        if not self._net("modalita_sviluppo"):
+        if not self._net("modalita_sviluppo") or self._voce_modalita_studio():
             return None
         svs = self._sviluppi()
         chi = self._speaker_key()
@@ -4753,7 +4770,7 @@ class Brain:
         """Il riferimento dei turni prima, se è ancora valido (non si consuma: vale finché
         non ne arriva un altro o scade)."""
         r = getattr(self, "reference", None)
-        if not self._net("riferimento_casa"):
+        if not self._net("riferimento_casa") or self._voce_modalita_studio():
             return None
         if not r or time.monotonic() > r["scade"]:
             self.reference = None
@@ -5396,8 +5413,7 @@ class Brain:
         # Il riassunto dei turni compressi sta subito dopo il prompt di sistema (05/10)
         # Con la voce non riconosciuta dal telefono della modalità studio (02/11, #376): niente
         # riassunto, e solo i turni da quando la modalità si è aperta
-        sc_storia = getattr(self.tool_ctx, "speaker_ctx", None)
-        summary = [] if getattr(sc_storia, "dispositivo_studio", None) else self._riassunto_msgs()
+        summary = [] if self._voce_modalita_studio() else self._riassunto_msgs()
         storia_prima = self._storia_per_modello(start)
 
         def with_memory(prefix):
