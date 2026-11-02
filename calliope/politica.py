@@ -309,7 +309,7 @@ CLASSI: dict[str, Classe] = {
     "promemoria_imposta": _c(A, chiave=("testo",), cambio="cambia",
                              cosa=lambda a: f"sposti il promemoria «{_s(a, 'testo')}»"
                              if _cambio(a, "cambia") else f"ti ricordi «{_s(a, 'testo')}»"),
-    "agenda_annulla": _c(A, cosa=lambda a: f"annulli «{_s(a, 'cosa', 'una voce')}»"),
+    "agenda_annulla": _c(A, cosa=lambda a: f"cancelli «{_s(a, 'cosa', 'una voce')}» dall'agenda"),
     "appuntamento_aggiungi": _c(A, chiave=("cosa",),
                                 cosa=lambda a: f"segni l'appuntamento «{_s(a, 'cosa')}»"),
     "lista_aggiungi": _c(A, chiave=("cose", "lista"),
@@ -815,10 +815,9 @@ class Turno:
     # La frase della persona del turno di prima, se Calliope ha chiuso la risposta con una
     # domanda (terza revisione della PR #319): «al 20 dicembre» → «Vuoi che la sposti?» → «sì»
     frase_prima_domanda: str = ""
-    # L'ultima risposta di Calliope se finisce con una domanda o un'offerta, e le ultime frasi
-    # della persona (02/11, #376, valore.si_ancorato); i rifiuti `valore_non_ancorata` della
-    # conversazione {tool: turno}, che valgono anche nel turno dopo (la lista viva), e il turno
-    domanda_prima: str = ""
+    # Le ultime frasi della persona prima di questa (02/11, #376, valore.dalla_stanza); i rifiuti
+    # `valore_non_ancorata` della conversazione {tool: (turno, quando)}, che valgono anche nei
+    # turni dopo (la lista viva), e il turno
     frasi_prima: tuple = ()
     giro_valore: dict | None = None
     numero_turno: int = 0
@@ -955,11 +954,18 @@ def consenso_avversativo(testo: str) -> bool:
     return False
 
 
+# «Sì?» è chi risponde a un richiamo, non un consenso (02/11, #376, revisione della PR #377): la
+# frase intera, col nome o no. «Perché no?» e «Ma sì dai, perché no?» restano forme di consenso
+_SI_DOMANDA = re.compile(r"\W*(?:calliope\W+)?s[iì]\s*\?+\W*", re.I)
+
+
 def consenso(testo: str) -> bool:
     """La frase acconsente a una proposta: una parola di consenso in testa a un suo pezzo,
     nessuna negazione, e non seguita da «però», «ascolta»… (`consenso_avversativo`); oppure
-    tutta fatta di forme chiuse di consenso (FORME_SI, anche «perché no»)."""
+    tutta fatta di forme chiuse di consenso (FORME_SI, anche «perché no»). Mai il solo «Sì?»."""
     t = testo or ""
+    if _SI_DOMANDA.fullmatch(t):
+        return False
     return consenso_chiuso(t) or (_si_in_testa(t) and not _NO.search(t)
                                   and not consenso_avversativo(t))
 

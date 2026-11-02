@@ -422,21 +422,43 @@ def turno(b_, frase, come, righe, *risposte):
 
 st = PT.studio(PT.cfg_nuova("mod_giro.db"))
 b = brain_di(st, ANDREA)
+stz4 = stanza_vera(cfg_mod())
+c4 = ciclo_mod(aperta=False)
+c4.s.studio.modalita = st.modalita
+c4.s.stanza = stz4
+c4.brain = b
+c4.speaker_ctx = b.tool_ctx.speaker_ctx
 RIGHE = [riga("Calliope."), riga("Hai visto che ore sono?", nome="Bruno")]
+
+
+def giro(frase, come, *risposte):
+    """Un turno del giro vero: le righe della stanza solo se la stanza ascolta su quel satellite,
+    e dopo il turno il ciclo che apre la modalità."""
+    r_ = turno(b, frase, come, RIGHE if stz4.accesa_qui(1) else None, *risposte)
+    c4._modalita_dopo_turno(types.SimpleNamespace(scritto=None))
+    return r_
+
+
+verifica("prima del giro la stanza ascolta", stz4.accesa_qui(1))
 F1 = "Venerdì ho la verifica di fisica sulle misure delle grandezze fisiche."
-r1 = turno(b, F1, "voce", RIGHE,
-           PP.chiama("studio_proponi_data", {"materia": "fisica", "verifica": 1}),
-           PP.testo("Non ho ancora la verifica di fisica."))
+r1 = giro(F1, "voce", PP.chiama("studio_proponi_data", {"materia": "fisica", "verifica": 1}),
+          PP.testo("Non ho ancora la verifica di fisica."))
 verifica("turno 1 (`studio_proponi_data`, verifica inventata): il turno non si chiude su «non la "
-         "trovo»", "non la trovo" not in r1.lower() and materie(st) == [], r1)
-r2 = turno(b, "Venerdì ho la verifica di fisica.", "voce", RIGHE,
-           PP.chiama("studio", {"azione": "stato", "materia": "fisica"}),
-           PP.testo("Non ho ancora alcuna verifica di fisica. Se vuoi, posso crearne una per venerdì."))
-verifica("turno 2: l'offerta", materie(st) == [], r2)
+         "trovo», e la modalità si apre: stanza in pausa",
+         "non la trovo" not in r1.lower() and materie(st) == [] and st.modalita.di(1, stz4) is not None
+         and not stz4.accesa_qui(1), r1)
+r2 = giro("Venerdì ho la verifica di fisica.", "voce",
+          PP.chiama("studio", {"azione": "stato", "materia": "fisica"}),
+          PP.testo("Non ho ancora alcuna verifica di fisica. Se vuoi, posso crearne una per venerdì."))
+verifica("turno 2: l'offerta, niente righe nel turno", materie(st) == []
+         and "stanza" not in b._turno_politica().contaminazione, r2)
 CREA = {"azione": "crea", "data": "venerdì", "materia": "fisica",
         "titolo": "Verifica sulle misure delle grandezze fisiche"}
-r3 = turno(b, "Sì, grazie.", "breve", RIGHE, PP.chiama("studio", CREA), PP.testo("Fatto."))
-verifica("turno 3, «Sì, grazie.»: la verifica è creata", materie(st) == ["fisica"], (r3, b.rules_fired()))
+r3 = giro("Sì, grazie.", "breve", PP.chiama("studio", CREA), PP.testo("Fatto."))
+verifica("turno 3, «Sì, grazie.»: con la stanza in pausa la verifica è creata",
+         materie(st) == ["fisica"], (r3, b.rules_fired()))
+st.modalita.chiudi(1, stz4)
+verifica("uscita dalla sezione: la stanza riprende", stz4.accesa_qui(1))
 st.close()
 # Il turno 5 da solo: la voce non riconosciuta, con la modalità aperta
 st = PT.studio(PT.cfg_nuova("mod_giro5.db"))

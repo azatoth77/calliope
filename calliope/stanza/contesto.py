@@ -296,12 +296,13 @@ def _voci(scelte: list[dict]) -> tuple:
     return tuple(out)
 
 
-def esterno_altri(x, nome: str | None) -> str | None:
+def esterno_altri(x, nome: str | None) -> str:
     """Le parole di un blocco o di un pezzo della stanza che per la politica sono un dato estraneo
     a `nome`, la persona riconosciuta che parla: le righe delle altre voci e il riassunto (02/11,
-    #376: con `stanza_contesto` acceso le righe contengono anche le sue frasi, e ogni azione di un
-    turno «sì» era `valore_non_ancorata`). None se non ce n'è nessuna. Con una voce incerta
-    (`nome` None) tutto, come prima."""
+    #376: con `stanza_contesto` acceso le righe contengono anche le sue frasi, e le sue parole
+    sembravano un dato). Le sue righe escono dai dati, **ma la fonte «stanza» resta** (revisione
+    della PR #377): basta un errore di attribuzione, o una frase detta a un'altra persona, e una
+    riga non deve mai far eseguire senza una richiesta. Con una voce incerta (`nome` None) tutto."""
     voci = getattr(x, "voci", None)
     esterno = str(getattr(x, "esterno", "") or "")
     if voci is None or not nome:
@@ -310,7 +311,7 @@ def esterno_altri(x, nome: str | None) -> str | None:
     riass = str(getattr(x, "riassunto", "") or "")
     if riass:
         altri.append(riass)
-    return "\n".join(altri) if altri else None
+    return "\n".join(altri)
 
 
 def scegli(righe: list[dict], ora: float, caldo_s: float, sempre_s: float,
