@@ -29,8 +29,9 @@ ospite. `togli`, `archivia` e `conclusa` non si eseguono (`SOLO_VOCE_SICURA`).
 (`corsie`, «modalita»), `_speaker_key` è None, e ciò che è legato al proprietario non c'è per
 costruzione, anche un canale nuovo. Le eccezioni sono questo elenco chiuso, in `presta` e `riporta`:
 - i turni da quando la modalità si è aperta (`dal`), copiati senza foto, allegati, righe della stanza e
-  dati fissi: senza, un «sì» non sa a cosa risponde. Il turno di quella voce torna poi nella conversazione
-  del proprietario, che lo ritrova;
+  dati fissi, se la sua conversazione è l'ultima di questo satellite: senza, un «sì» non sa a cosa
+  risponde. Il turno di quella voce torna poi nella conversazione del proprietario, che lo ritrova. Se non
+  lo è, quella voce tiene i suoi turni, che tornano a lui quando parla qui;
 - le proposte dei tool dello Studio (`TOOL`), con i «no» dati a quelle;
 - i tool dello Studio come proprietario (`ToolRegistry._come_proprietario`);
 - la riga dei dati del turno che dice chi parla (Brain, «voce non riconosciuta, dal telefono di…»);
@@ -63,6 +64,8 @@ _PAROLE_STUDIO = re.compile(r"(?<![a-zà-ù])(?:stud[iy]|verific|compit|ripass|i
 # Dei turni prestati alla voce non riconosciuta restano fuori: foto, allegati, righe della stanza, dati
 # fissi e schede del proprietario
 _DEL_PROPRIETARIO = frozenset({"_img", "_all", "_all_info", "_stanza", "_dati", "_schede", "_turno"})
+# Quanti «no» d'altro tiene la conversazione di quella voce
+_RIFIUTI_VOCE = 8
 # Durante l'effetto 2 i permessi dello Studio valgono solo per i dati del proprietario (da tutore
 # non si vedono quelli del suo minore): servizio.permesso
 _SOLO_PROPRI = contextvars.ContextVar("studio_solo_propri", default=False)
@@ -81,59 +84,69 @@ def solo_propri():
         _SOLO_PROPRI.reset(tok)
 
 
+def consegna(voce, proprietario, chi, prestata: bool = False):
+    """I turni di quella voce (non le copie), con la proposta dello Studio e i «no» a quelle, passano
+    alla conversazione del `proprietario`, senza i segni che valgono solo per la sua (foto, allegati,
+    righe). Quella d'altro del proprietario resta intatta. `prestata`: la proposta che ha adesso era sua."""
+    nuovi = [{k: v for k, v in m.items() if k == "_turno" or k not in _DEL_PROPRIETARIO}
+             for m in voce.history if not m.get("_prestato")]
+    voce.history.clear()
+    voce.archiviati = 0
+    proprietario.riporta_turno(nuovi)
+    if voce.last_turn_at is not None:
+        proprietario.last_turn_at = voce.last_turn_at
+    proprietario.rifiutate.extend(r for r in voce.rifiutate if r.get("tool") in TOOL
+                                  and r not in proprietario.rifiutate)
+    voce.rifiutate = [r for r in voce.rifiutate if r.get("tool") not in TOOL][-_RIFIUTI_VOCE:]
+    p, q = voce.pending, proprietario.pending
+    if not isinstance(q, dict) or q.get("tool") in TOOL:
+        if isinstance(p, dict) and p.get("tool") in TOOL:
+            proprietario.pending = {**p, "chi": chi}
+            voce.pending = None
+        elif prestata:
+            proprietario.pending = None     # consumata o rifiutata da quella voce
+
+
 def presta(voce, proprietario, dal: float, chi):
-    """Prima della frase della voce non riconosciuta: nella sua conversazione da ospite `voce`
-    entrano solo le eccezioni (qui sopra) dalla conversazione del `proprietario`, di persona `chi`.
-    Si rifà a ogni frase, dalle copie: quella di prima è già tornata con `riporta`."""
-    prima = []
-    if proprietario is not None:
-        da = next((i for i, m in enumerate(proprietario.history)
-                   if m.get("role") == "user" and float(m.get("_t") or 0.0) >= dal), None)
-        prima = [] if da is None else [
-            {**{k: v for k, v in m.items() if k not in _DEL_PROPRIETARIO}, "_prestato": True}
-            for m in proprietario.history[da:]]
-    voce.history[:] = prima
-    voce.archiviati = len(prima)
+    """Prima della frase della voce non riconosciuta. Con la conversazione del `proprietario` (di
+    persona `chi`), se è l'ultima di questo satellite: entrano solo le eccezioni qui sopra, in copia,
+    e i turni che quella voce aveva tenuti tornano a lui. Senza (`proprietario` None: modalità aperta
+    dalla pagina, conversazione chiusa a tempo o usata da un altro satellite) la conversazione della
+    voce tiene i suoi turni e scade a tempo come ogni altra."""
     voce.owner = None
-    voce.prestito = {"proprietario": proprietario, "chi": chi}
     if proprietario is None:
+        voce.prestito = None
         return
-    voce.last_turn_at = proprietario.last_turn_at
+    consegna(voce, proprietario, chi)
+    da = next((i for i, m in enumerate(proprietario.history)
+               if m.get("role") == "user" and float(m.get("_t") or 0.0) >= dal), None)
+    voce.history[:] = [] if da is None else [
+        {**{k: v for k, v in m.items() if k not in _DEL_PROPRIETARIO}, "_prestato": True}
+        for m in proprietario.history[da:]]
+    voce.archiviati = len(voce.history)
+    voce.prestito = {"proprietario": proprietario, "chi": chi}
+    # Le copie non scadono qui: se la conversazione del proprietario è ferma da troppo la chiude il
+    # registro, prima di questo prestito
+    voce.last_turn_at = None
     voce.turn_number = proprietario.turn_number
     voce.esterni = list(proprietario.esterni)
     voce.rifiutate = list(voce.rifiutate) + [
         r for r in proprietario.rifiutate if r.get("tool") in TOOL and r not in voce.rifiutate]
-    p = proprietario.pending
-    if isinstance(p, dict) and p.get("tool") in TOOL:
-        voce.pending = {**p, "chi": None}
+    q = proprietario.pending
+    if isinstance(q, dict) and q.get("tool") in TOOL:
+        voce.pending = {**q, "chi": None}
         voce.prestito["proposta"] = True
 
 
 def riporta(voce):
-    """Dopo quella frase: il suo turno torna nella conversazione del proprietario e la proposta dello
-    Studio con lui, se la sua non è d'altro. Quella d'altro resta intatta. Restituisce la
+    """Dopo quella frase: il suo turno torna nella conversazione del proprietario. Restituisce la
     conversazione del proprietario, o None se `voce` non ha un prestito."""
     st = getattr(voce, "prestito", None)
     if not st:
         return None
     voce.prestito = None
-    proprietario = st["proprietario"]
-    nuovi = [m for m in voce.history if not m.get("_prestato")]
-    voce.history.clear()
-    voce.archiviati = 0
-    p = voce.pending
-    if proprietario is None:
-        return None
-    proprietario.riporta_turno(nuovi)
-    proprietario.last_turn_at = voce.last_turn_at
-    q = proprietario.pending
-    if not isinstance(q, dict) or q.get("tool") in TOOL:
-        if isinstance(p, dict) and p.get("tool") in TOOL:
-            proprietario.pending = {**p, "chi": st["chi"]}
-            voce.pending = None
-        elif st.get("proposta"):
-            proprietario.pending = None     # consumata o rifiutata da quella voce
-    return proprietario
+    consegna(voce, st["proprietario"], st["chi"], prestata=bool(st.get("proposta")))
+    return st["proprietario"]
 
 
 def apre(nome: str, args: dict, t, dati_turno=()) -> bool:

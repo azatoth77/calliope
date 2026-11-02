@@ -23,6 +23,7 @@ import re  # noqa: E402
 import tempfile  # noqa: E402
 import time  # noqa: E402
 import types  # noqa: E402
+import uuid  # noqa: E402
 import urllib.error  # noqa: E402
 import urllib.request  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -617,6 +618,17 @@ st.close()
 print("— la voce non riconosciuta sta nella conversazione del proprietario")
 
 
+class Visto(PP.Copione):
+    """Il modello finto che tiene ciò che gli arriva."""
+    def __init__(self):
+        super().__init__()
+        self.visti = []
+
+    def stream(self, messages, tools):
+        self.visti.append(" ".join(str(m.get("content") or "") for m in messages))
+        yield from super().stream(messages, tools)
+
+
 from calliope import corsie as CO  # noqa: E402
 from calliope.conversazione import Conversazione  # noqa: E402
 from calliope.studio import modalita as MOD  # noqa: E402
@@ -643,7 +655,8 @@ def scelta(c_, nome=None):
     c_.rec = {}
     c_.corsia.fine_turno()
     c_._conversazione_del_turno(types.SimpleNamespace(
-        speaker_name=nome, continuita=False, proprietario=False, in_session=True, text="Una frase.",
+        speaker_name=nome, continuita=False, proprietario=False, in_session=True,
+        text=uuid.uuid4().hex,      # la stessa frase su due corsie sarebbe un doppione
         scritto=None, emb_job=None, audio=None))
     return c_.brain.conv
 
@@ -690,17 +703,154 @@ verifica("contrario: fuori dall'effetto 2 un ospite vero: l'anonima, senza nient
          altra.chiave == "ospite:sat:1" and altra.history == [], altra.chiave)
 st.modalita.chiudi(1)
 st.close()
+print("— il percorso vero: quando il prestito non c'è")
 
 
-class Visto(PP.Copione):
-    """Il modello finto che tiene ciò che gli arriva."""
-    def __init__(self):
-        super().__init__()
-        self.visti = []
+def voce_del_ciclo(c_, st_):
+    """La voce non riconosciuta passa dal ciclo vero: l'effetto 2, poi la sua conversazione."""
+    sc_ = c_.speaker_ctx
+    sc_.current_speaker, sc_.identified_by, sc_.current_level = None, None, "ospite"
+    c_.rec = {"voce": {"migliore": "Andrea", "punteggio": 0.375}}
+    c_._modalita_voce(types.SimpleNamespace(scritto=None))
+    verifica_ok = sc_.dispositivo_studio == "Andrea"
+    return scelta(c_), verifica_ok
 
-    def stream(self, messages, tools):
-        self.visti.append(" ".join(str(m.get("content") or "") for m in messages))
-        yield from super().stream(messages, tools)
+
+def proprietario_del_ciclo(c_):
+    sc_ = c_.speaker_ctx
+    sc_.current_speaker, sc_.identified_by, sc_.current_level = "Andrea", "voce", "familiare"
+    sc_.dispositivo_studio = sc_.studio_dal = None
+    return scelta(c_, "Andrea")
+
+
+def fine_giro(c_, conserva=False):
+    """In cima al giro dopo, come il ciclo vero."""
+    c_._meta_turno = {"conserva": False} if conserva else None
+    c_._archivia_turno()
+    c_._modalita_riporta()
+
+
+OFFERTA = "Non ho ancora una verifica di fisica: vuoi che la crei per venerdì?"
+CREA_V = {"azione": "crea", "data": "venerdì", "materia": "fisica"}
+
+# La modalità aperta dalla pagina, nessuna conversazione del proprietario su questa corsia
+st = PT.studio(PT.cfg_nuova("mod_pagina.db"))
+c_, b = ciclo_vero(st)
+b.backend = Visto()
+st.modalita.apri(1, ANDREA.id)
+voce_c, ok_ = voce_del_ciclo(c_, st)
+verifica("(aperta dalla pagina: vale il proprietario, conversazione da ospite)", ok_ and voce_c.chiave.endswith(":studio"))
+turno(b, "Venerdì ho la verifica di fisica.", None, None, PP.testo(OFFERTA))
+fine_giro(c_, True)
+verifica("senza prestito la voce tiene i suoi turni", any(OFFERTA == m.get("content") for m in voce_c.history))
+voce_c, _ok = voce_del_ciclo(c_, st)
+r_ = turno(b, "Sì, certo.", None, None, PP.chiama("studio", CREA_V), PP.testo("Fatto."))
+fine_giro(c_, True)
+verifica("aperta dalla pagina: il «Sì, certo.» vede la sua frase e l'offerta, la verifica è creata",
+         OFFERTA in b.backend.visti[-1] and "Venerdì ho la verifica di fisica." in b.backend.visti[-1]
+         and materie(st) == ["fisica"], (r_, b.backend.visti[-1][-300:]))
+prop_c = proprietario_del_ciclo(c_)
+turno(b, "Cosa abbiamo fatto?", "voce", None, PP.testo("Abbiamo creato la verifica."))
+verifica("quei turni tornano al proprietario quando parla qui, una volta sola, col segno «non conservare»",
+         OFFERTA in b.backend.visti[-1] and voce_c.history == []
+         and sum(OFFERTA == m.get("content") for m in prop_c.history) == 1
+         and all((m.get("_turno") or {}).get("conserva") is False for m in prop_c.history
+                 if m.get("content") == "Sì, certo."), b.backend.visti[-1][-300:])
+st.modalita.chiudi(1)
+st.close()
+
+# Una pausa oltre `storia_inattiva_s`: il registro chiude la conversazione del proprietario
+st = PT.studio(PT.cfg_nuova("mod_pausa.db"))
+c_, b = ciclo_vero(st)
+b.backend = Visto()
+b.tool_ctx.speaker_ctx.identified_by = "voce"
+prop_c = proprietario_del_ciclo(c_)
+turno(b, "Venerdì ho la verifica di storia.", "voce", None, PP.chiama("studio", {"azione": "stato"}), PP.testo("Non c'è."))
+st.modalita.apri(1, ANDREA.id, dal=b.inizio_turno())
+c_.corsia.fine_turno()
+prop_c.last_turn_at = time.monotonic() - 400
+c_.corsia.registro._pulita = 0.0
+voce_c, ok_ = voce_del_ciclo(c_, st)
+verifica("(la pausa: la modalità è viva, vale il proprietario)", ok_)
+turno(b, "Venerdì ho la verifica di fisica.", None, None, PP.testo(OFFERTA))
+fine_giro(c_, True)
+voce_c, _ok = voce_del_ciclo(c_, st)
+turno(b, "Sì, certo.", None, None, PP.chiama("studio", CREA_V), PP.testo("Fatto."))
+verifica("dopo la pausa il «Sì, certo.» vede la sua frase e l'offerta, la verifica è creata",
+         OFFERTA in b.backend.visti[-1] and materie(st) == ["fisica"], b.backend.visti[-1][-300:])
+fine_giro(c_, True)
+# La conversazione della voce scade a tempo come le altre
+voce_c = c_.corsia.registro.della_voce(c_.corsia)
+if not voce_c.history:      # il prestito l'ha già riportata: la scadenza si guarda col proprietario assente
+    voce_c.history.append({"role": "user", "content": "VECCHIASEGRETA", "_t": time.time()})
+voce_c.last_turn_at = time.monotonic() - 400
+c_.corsia.registro._pulita = 0.0
+c_.corsia.registro._conv.pop(f"persona:{ANDREA.id}", None)
+voce_c, _ok = voce_del_ciclo(c_, st)
+turno(b, "Che ore sono?", None, None, PP.testo("Non lo so."))
+verifica("contrario: ferma oltre `storia_inattiva_s` e senza proprietario, la voce non vede i suoi vecchi turni",
+         "VECCHIASEGRETA" not in b.backend.visti[-1], b.backend.visti[-1][-300:])
+st.modalita.chiudi(1)
+st.close()
+
+# Una frase detta dal proprietario da un altro satellite
+print("— il proprietario parla in cucina, la voce al telefono")
+st = PT.studio(PT.cfg_nuova("mod_cucina.db"))
+c_, b = ciclo_vero(st)
+b.backend = Visto()
+tel = c_.corsia
+cucina = CO.Corsia("sat:2", 2, "cucina", tel.registro)
+prop_c = proprietario_del_ciclo(c_)
+turno(b, "Com'è la lezione?", "voce", None, PP.testo("Bene."))
+st.modalita.apri(1, ANDREA.id, dal=b.inizio_turno())
+c_.corsia = cucina
+prop_cucina = proprietario_del_ciclo(c_)
+verifica("(in cucina la sua conversazione, la stessa)", prop_cucina is prop_c)
+turno(b, "Il codice del cancello è CUCINASEGRETA.", "voce", None, PP.testo("Va bene."))
+cucina.fine_turno()
+c_.corsia = tel
+verifica("(il telefono tiene ancora il puntatore)", tel.conv is prop_c)
+pid_ = ANDREA.id
+verifica("«continuita» dal telefono: quella conversazione l'ha usata la cucina, l'anonima",
+         tel.registro.scegli(tel, pid_, "continuita", True)[1] == "anonima")
+voce_c, _ok = voce_del_ciclo(c_, st)
+turno(b, "Che ore sono?", None, None, PP.testo("Non lo so."))
+fine_giro(c_)
+verifica("la frase detta in cucina non arriva alla voce al telefono", "CUCINASEGRETA" not in b.backend.visti[-1]
+         and "lezione" not in b.backend.visti[-1], b.backend.visti[-1][-300:])
+verifica("…e il suo turno resta alla voce, non in mezzo a quella conversazione",
+         not any(m.get("content") == "Che ore sono?" for m in prop_c.history))
+st.modalita.chiudi(1)
+st.close()
+
+# Il ritorno: occupa e libera, i segni che non valgono più, i «no»
+print("— il ritorno al proprietario")
+st = PT.studio(PT.cfg_nuova("mod_ritorno.db"))
+c_, b = ciclo_vero(st)
+b.backend = Visto()
+prop_c = proprietario_del_ciclo(c_)
+turno(b, "Com'è la lezione?", "voce", None, PP.testo("Bene."))
+st.modalita.apri(1, ANDREA.id, dal=b.inizio_turno())
+c_.corsia.fine_turno()
+voce_c, _ok = voce_del_ciclo(c_, st)
+turno(b, "Guarda questa foto.", None, None, PP.testo("La vedo."))
+for m_ in voce_c.history:
+    if m_.get("content") == "Guarda questa foto.":
+        m_["_img"], m_["_stanza"], m_["_turno"] = [1], 3, {"conserva": False}
+NO_STUDIO = {"tool": "studio", "chiave": "x", "cosa": "crea"}
+NO_ALTRO = {"tool": "agenda_annulla", "chiave": "y", "cosa": "altro"}
+voce_c.rifiutate.extend([NO_STUDIO, *[{**NO_ALTRO, "chiave": str(i_)} for i_ in range(30)]])
+c_._modalita_riporta()
+tornato = next(m for m in prop_c.history if m.get("content") == "Guarda questa foto.")
+verifica("il turno riportato: via foto e righe della sua conversazione, resta il segno della conservazione",
+         "_img" not in tornato and "_stanza" not in tornato and tornato["_turno"]["conserva"] is False, tornato)
+verifica("il «no» a una proposta dello Studio torna al proprietario, quelli d'altro no, e la lista non cresce",
+         NO_STUDIO in prop_c.rifiutate and NO_ALTRO not in prop_c.rifiutate and len(voce_c.rifiutate) <= 8,
+         (prop_c.rifiutate, len(voce_c.rifiutate)))
+verifica("la conversazione del proprietario è libera dopo il ritorno, e l'ultima di questo satellite",
+         id(prop_c) not in c_.corsia.registro._uso and prop_c.ultima_corsia == c_.corsia.chiave)
+st.modalita.chiudi(1)
+st.close()
 
 
 VOCI = {}
@@ -898,7 +1048,8 @@ st.close()
 # La prova strutturale: ciò che riceve il modello è quello di un ospite, a parte le eccezioni
 def normale(testo):
     testo = re.sub(r"persona: .*?\.", "persona:", testo)
-    return re.sub(r"\d{1,2}[:.]\d{2}(:\d{2})?", "ORA", testo)
+    testo = re.sub(r"\d{1,2}[:.]\d{2}(:\d{2})?", "ORA", testo)
+    return re.sub(r"\s+", " ", testo)      # i messaggi vuoti (un tool senza testo) lasciano uno spazio
 
 
 st, b = ambiente_canali("mod_strutt.db")
@@ -919,6 +1070,77 @@ verifica("i messaggi al modello sono uguali a quelli di un ospite, a parte chi p
                                               for i, (x, y) in enumerate(zip(*[come_voce[0], come_ospite[0]])) if x != y),
                                               f"lunghezze {len(come_voce[0])} e {len(come_ospite[0])}"))
 verifica("…e i tool che vede sono gli stessi", come_voce[1] == come_ospite[1])
+
+
+def canali_veri(b_, c_):
+    """I canali del proprietario sulla sua conversazione, come in `ambiente_canali`."""
+    b_.set_agenda_reference({"cosa": "AGENDASEGRETA", "tool": "agenda_annulla"})
+    b_.set_reference({"cosa": "CASASEGRETA"})
+    b_.conv.rifiutate = [{"tool": "agenda_annulla", "chiave": "x", "cosa": "RIFIUTOSEGRETO"}]
+    b_.conv.riassunto = {"testo": "Prima si è parlato di RIASSUNTOSEGRETO.", "dati": {}, "tipo": "x", "quando": 0}
+
+
+# Col percorso vero, `Ciclo` compreso e il prestito non vuoto
+PRIMA_V = "Il codice della cassaforte è sotto il vaso blu."
+DOPO_V = "Venerdì ho la verifica di fisica."
+st = PT.studio(PT.cfg_nuova("mod_strutt3.db"))
+c_, b = ciclo_vero(st)
+b.backend = VistoTool()
+b.tool_ctx.memory = Memoria()
+prop_c = proprietario_del_ciclo(c_)
+turno(b, PRIMA_V, "voce", None, PP.testo("Va bene."))
+time.sleep(0.02)
+c_.corsia.fine_turno()
+prop_c = proprietario_del_ciclo(c_)
+turno(b, DOPO_V, "voce", None, PP.chiama("studio", {"azione": "stato", "materia": "fisica"}), PP.testo(OFFERTA))
+canali_veri(b, c_)
+c_.brain.rules_fired()
+st.modalita.apri(1, ANDREA.id, dal=b.inizio_turno())
+c_.corsia.fine_turno()
+time.sleep(0.02)
+voce_c, _ok = voce_del_ciclo(c_, st)
+verifica("il percorso vero: la voce ha il prestito non vuoto, dal turno che ha aperto",
+         voce_c.prestito and any(m.get("content") == OFFERTA for m in voce_c.history)
+         and not any(m.get("content") == PRIMA_V for m in voce_c.history), voce_c.history)
+copie = [str(m.get("content") or "") for m in voce_c.history]
+turno(b, "Cosa stavamo facendo?", None, None, PP.testo("Non lo so."))
+come_voce_v = b.backend.visti[-1]
+nomi_voce_v = b.backend.nomi[-1]
+fine_giro(c_)
+for k_, nome_ in CANALI.items():
+    if k_ not in ("LAVOROSEGRETO", "SVILUPPOSEGRETO"):
+        verifica(f"il percorso vero: non arriva {nome_}", k_ not in come_voce_v, come_voce_v[-300:])
+verifica("il percorso vero: la frase di prima dell'apertura non arriva", PRIMA_V not in come_voce_v)
+st.modalita.chiudi(1)
+st.close()
+# Lo stesso, da ospite vero
+st = PT.studio(PT.cfg_nuova("mod_strutt4.db"))
+c_, b = ciclo_vero(st)
+b.backend = VistoTool()
+b.tool_ctx.memory = Memoria()
+prop_c = proprietario_del_ciclo(c_)
+turno(b, PRIMA_V, "voce", None, PP.testo("Va bene."))
+c_.corsia.fine_turno()
+prop_c = proprietario_del_ciclo(c_)
+turno(b, DOPO_V, "voce", None, PP.chiama("studio", {"azione": "stato", "materia": "fisica"}), PP.testo(OFFERTA))
+canali_veri(b, c_)
+c_.corsia.fine_turno()
+sc = c_.speaker_ctx
+sc.current_speaker, sc.identified_by, sc.current_level = None, None, "ospite"
+altra = scelta(c_)
+turno(b, "Cosa stavamo facendo?", None, None, PP.testo("Non lo so."))
+come_ospite_v = b.backend.visti[-1]
+nomi_ospite_v = b.backend.nomi[-1]
+st.close()
+senza = come_voce_v
+for x_ in copie:
+    if x_:
+        senza = senza.replace(x_ + " ", "", 1)
+a_, b_ = normale(senza), normale(come_ospite_v)
+verifica("il percorso vero: uguale a un ospite, tolte le copie dall'apertura e la riga su chi parla", a_ == b_,
+         next((a_[max(0, i - 80):i + 150] + " ≠ " + b_[max(0, i - 80):i + 150]
+               for i, (x, y) in enumerate(zip(a_, b_)) if x != y), f"lunghezze {len(a_)} e {len(b_)}"))
+verifica("il percorso vero: gli stessi tool", nomi_voce_v == nomi_ospite_v)
 # La proposta del proprietario, fuori dallo Studio
 RG_ = [riga("Hai visto che bel tempo", nome="Bruno")]
 st = PT.studio(PT.cfg_nuova("mod_proposta.db"))

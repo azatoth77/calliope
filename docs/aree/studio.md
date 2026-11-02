@@ -220,7 +220,13 @@ satellite (`Studio.modalita`) con due effetti soltanto.
   `riporta`): i turni dall'apertura, in copia; le proposte dei tool dello Studio, con i «no» a quelle; i tool
   dello Studio come proprietario; la riga dei dati del turno su chi parla; i testi dei dati non fidati per
   la provenienza, che non vanno al modello. A turno finito il turno di quella voce torna nella conversazione del
-  proprietario, con la proposta dello Studio, e il satellite riparte da lì. Una proposta d'altro del
+  proprietario, con la proposta dello Studio e i «no» a quelle, e il satellite riparte da lì. Il prestito vale
+  solo se la conversazione del proprietario è l'ultima di questo satellite (`Conversazione.ultima_corsia`, la
+  segna `RegistroConversazioni.occupa`): una frase detta dal proprietario in cucina non arriva a quella voce al
+  telefono. Senza prestito (modalità aperta dalla pagina, conversazione chiusa dopo `storia_inattiva_s`, o usata
+  altrove) la conversazione della voce tiene i suoi turni e scade a tempo; tornano al proprietario quando parla
+  da questo satellite, o al primo prestito. Se parla solo da altri satelliti non gli arrivano (limite). Una
+  proposta d'altro del
   proprietario non si vede, non si consuma e non invecchia a turni (il suo limite di tempo resta), e il
   «no» o il «lascia stare» di quella voce non toccano niente di suo. `prova_studio_modalita` confronta ciò che
   riceve il modello con ciò che riceve un ospite. *[storico fino al 02/11: stava nella conversazione del

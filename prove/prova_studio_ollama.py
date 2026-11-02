@@ -49,6 +49,10 @@ MAT = json.loads((QUI / "manuali" / "studio" / "storia.json").read_text("utf-8")
 TMP = Path(tempfile.mkdtemp(prefix="calliope-studio-ollama-"))
 
 
+from calliope.conversazione import Conversazione  # noqa: E402
+from calliope.studio import modalita as MOD  # noqa: E402
+
+
 def ollama_pronto(cfg) -> bool:
     try:
         import httpx
@@ -394,6 +398,35 @@ def stanza_si_dopo_offerta(g):
     return "fisica" in _materie(st)
 
 
+def voce_modalita(g):
+    """Il percorso della modalità studio (02/11, #376): il «Sì, certo.» della voce non riconosciuta,
+    con la conversazione da ospite costruita da `modalita.presta` e la riga su chi parla. Il
+    proprietario è adulto, l'offerta è già detta nel turno che ha aperto la modalità."""
+    b, st, _ = nuovo(f"vm{g}", con_verifica=False)
+    b.tool_ctx.schermi = types.SimpleNamespace(
+        mittente=lambda ctx: types.SimpleNamespace(persona=ANDREA.id, certo=True))
+    b.dispositivo_turno = {"canale": "telefono", "di": ANDREA.id}     # come il ciclo, per la frase
+    sc = b.tool_ctx.speaker_ctx
+    sc.dispositivo_studio, sc.studio_dal = None, None
+    sc.current_speaker, sc.current_level, sc.profile_level = "Andrea", "familiare", "familiare"
+    dal = time.time()
+    b.history.append({"role": "user", "content": "Venerdì ho la verifica di fisica.", "_t": dal})
+    b.history.append({"role": "assistant", "content": "Non ho ancora alcuna verifica di fisica "
+                      "registrata nello Studio. Se vuoi, posso crearne una per venerdì."})
+    voce = Conversazione("ospite:sat:1:studio")
+    MOD.presta(voce, b.conv, dal, ANDREA.id)
+    b.conv = voce
+    sc.current_speaker, sc.identified_by, sc.current_level, sc.profile_level = None, None, "ospite", "ospite"
+    sc.dispositivo_studio, sc.studio_dal = "Andrea", dal
+    testo = re.sub(r"\s+", " ", "".join(b.stream_reply("Sì, certo.", "ospite"))).strip()
+    tools = [(t.get("nome"), t.get("argomenti"), t.get("ok")) for t in (b.last_tools or [])]
+    ULTIMO[:] = ["Sì, certo.", testo, tools]
+    print(f"    giro {g + 1}: «{testo[:170]}» tool {tools} regole "
+          f"{[r for r in b.rules_fired() if 'valore' in r or 'modalita' in r]}")
+    righe = st.dati.tutti("SELECT materia, persona FROM studio_verifiche")
+    return [(r["materia"].lower(), r["persona"]) for r in righe] == [("fisica", ANDREA.id)]
+
+
 def stanza_si_con_altra_voce(g):
     st = _stanza_giro(g, ["Venerdì ho la verifica di fisica.", "Sì, grazie.", "Sì."],
                       altre=("Che ore sono?", "Ma hai visto la partita ieri sera?"))
@@ -428,6 +461,8 @@ def main():
              caso("con la stanza: frase e «sì» → la verifica creata", stanza_si),
              caso("con la stanza e l'offerta già detta: «Sì, grazie.» → la verifica creata",
                   stanza_si_dopo_offerta),
+             caso("modalità studio, voce non riconosciuta: «Sì, certo.» → la verifica creata, del proprietario",
+                  voce_modalita),
              caso("con la stanza e un'altra voce: frase e «sì» → la verifica creata",
                   stanza_si_con_altra_voce),
              caso("un comando di un'altra voce nella stanza più i «sì» → niente", stanza_comando_tv)]

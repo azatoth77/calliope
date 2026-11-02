@@ -3076,11 +3076,28 @@ class Ciclo:
         lì (la sua prossima frase breve la continua)."""
         from .studio.modalita import riporta
         conv = getattr(self.brain, "conv", None)
-        if conv is None or not getattr(conv, "prestito", None):
+        st = getattr(conv, "prestito", None)
+        if not st:
             return
+        reg = getattr(self.corsia, "registro", None)
+        if reg is not None:
+            # Non in mezzo a un turno suo su un altro satellite: si aspetta poco, poi si va avanti
+            st["proprietario"] = reg.occupa(st["proprietario"], self.corsia, attesa_max=15.0)
         proprietario = riporta(conv)
-        if proprietario is not None:
-            self.corsia.conv = self.brain.conv = proprietario
+        if reg is not None:
+            reg.libera(proprietario, self.corsia)
+        self.corsia.conv = self.brain.conv = proprietario
+
+    def _modalita_consegna(self, t):
+        """Il proprietario riconosciuto parla dal suo satellite: i turni che la voce non riconosciuta
+        ha tenuti, quando la sua conversazione non c'era, tornano a lui prima della sua frase."""
+        reg = getattr(self.corsia, "registro", None)
+        voce = reg.della_voce(self.corsia) if reg is not None else None
+        if (voce is None or not voce.history or getattr(voce, "prestito", None)
+                or t.speaker_name != self._proprietario_satellite()):
+            return
+        from .studio.modalita import consegna
+        consegna(voce, self.brain.conv, self._persona_id(t.speaker_name))
 
     def _modalita_dopo_turno(self, t):
         """Una chiamata di un tool dello Studio che la politica ha fatto passare: apre la modalità
@@ -3571,7 +3588,7 @@ class Ciclo:
                 self.speaker_ctx.dispositivo_studio = None
             else:
                 c = reg.di_persona(pid)
-                prestito = (c if c is not None and self.corsia.conv is c else None, pid)
+                prestito = (c if c is not None and reg.ultima_qui(c, self.corsia) else None, pid)
                 how = "modalita"
         if not self.corsia.turno(self.brain, t.speaker_name, how,
                                  t.in_session, t.text, self.rec, t.scritto,
@@ -3583,6 +3600,8 @@ class Ciclo:
             from .studio.modalita import presta
             presta(self.brain.conv, prestito[0], self.speaker_ctx.studio_dal, prestito[1])
             self.brain.sospeso_altrui = None
+        elif t.speaker_name:
+            self._modalita_consegna(t)
         # Chi ha chiesto: i suoi documenti e lavori si annunceranno da dove ha chiesto
         s.instradamento.persona(self._persona_id(t.speaker_name))
         self._frasi_turno(t)           # tono e persona delle frasi pronte (12/10)
