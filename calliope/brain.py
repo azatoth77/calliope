@@ -424,6 +424,10 @@ OFFERTA = re.compile(r"\bse (?:vuoi|ti va|preferisci|ti interessa|desideri|vuole
                      r"preferisce|le interessa|desidera)\b|^\W*(?:fammi|mi faccia) sapere\b|"
                      r"^\W*(?:dimmi|mi dica) (?:pure )?se\b|^\W*(?:vuoi|vuole) che\b", re.I)
 # Una dichiarazione di non sapere o non trovare, per la traccia di una risposta riservata
+# Le frasi recenti della persona per valore.dalla_stanza (02/11, #376): la frase di prima, non
+# tutta la conversazione. Una sola: col «sì» che porta subito alla domanda del codice, «ieri ho
+# cancellato…» di due frasi fa farebbe suo un «cancella» sentito adesso
+FRASI_PRIMA = 1
 NON_TROVO = re.compile(r"\bnon (?:so|trovo|ho trovato|riesco a trovare|risulta|c'è niente|"
                        r"c'è nulla)\b", re.I)
 
@@ -3083,6 +3087,9 @@ class Brain:
         # Un «no» alla proposta la chiude, e la politica non la lascia riproporre (09/10)
         pending = self._rifiuto_proposta(user_text, pending)
         self._chiudi_intenzioni(user_text)
+        # Una frase che non è un consenso è una richiesta nuova: il tetto delle domande riparte
+        if not politica.consenso(user_text or ""):
+            valore.azzera_domande(self._giro_valore())
         # Numero della risposta: un'installazione proposta in questa risposta si può avviare
         # solo nella prossima (calliope/installa/servizio.py)
         self.turn_number = getattr(self, "turn_number", 0) + 1
@@ -4296,6 +4303,8 @@ class Brain:
             "scade": time.monotonic() + secondi_validi(self.cfg),
             # La domanda è della politica (09/10): la chiamata vale solo con un consenso
             "politica": offer.get("politica"),
+            # Ha detto da dove viene il valore (02/11, #376): per la metrica, al consumo
+            "fonte_detta": bool(offer.get("fonte_detta")),
             # Si risponde con un dato, anche «no» (10/10: la domanda dell'agente): un «no» non
             # la rifiuta (_rifiuto_proposta)
             "risposta": bool(offer.get("risposta")),
@@ -7073,6 +7082,12 @@ class Brain:
         # Gli argomenti che nominano qualcosa (08/10): le probabilità di Whisper partono adesso,
         # in parallelo al tool
         misure = self._argomenti_inizio(call["name"], spec, args, level)
+        # La domanda della politica vale per la chiamata identica, una volta, della persona che l'ha
+        # sentita (02/11, #376). Ogni altra chiamata fa il percorso normale, come se non ci fosse
+        senza_domanda = self._domanda_non_vale(call["name"], args, spec)
+        if senza_domanda:
+            self.turn_pending_tool = None
+            self._set_ctx("tool_in_sospeso", None)
         self._set_ctx("politica", self._turno_politica())
         self._set_ctx("strumenti", self.tools)
         self._set_ctx("politica_esito", None)
@@ -7082,6 +7097,9 @@ class Brain:
             result = self.tools.call(call["name"], args, self.tool_ctx, level)
         finally:
             self._set_ctx("politica", None)
+            if senza_domanda:
+                self.turn_pending_tool = call["name"]
+                self._set_ctx("tool_in_sospeso", call["name"])
         # La guardia degli esercizi guidati scattata nel registro dei tool (#278, seconda revisione
         # della PR #367): anche nelle regole di Brain, come quando scatta sulla voce
         if "studio_esercizio_svelato" in (getattr(self.tool_ctx, "regole", None) or ())                 and "studio_esercizio_svelato" not in (getattr(self, "last_rules", None) or ()):
@@ -7171,6 +7189,11 @@ class Brain:
         if ok and p and call["name"] == p.get("tool") and call["name"] == getattr(
                 self, "turn_pending_tool", None) and not self._offer:
             self.pending = None
+            # Consumata: una seconda chiamata nello stesso «sì» non ha più una domanda, e il tetto
+            # delle domande riparte (02/11, #376)
+            self.turn_pending_tool = None
+            self._set_ctx("tool_in_sospeso", None)
+            valore.azzera_domande(self._giro_valore())
         # Le intenzioni (calliope/valore.py, fase 2): riuscita si chiude, fallita resta aperta
         # (gli errori sono errori: la chiamata corretta non chiede di nuovo)
         try:
@@ -7423,6 +7446,31 @@ class Brain:
         except Exception:  # noqa: BLE001 — nel dubbio niente frase di prima
             return ""
 
+    def _frasi_prima(self, hist) -> tuple:
+        """Le ultime `FRASI_PRIMA` frasi della persona prima di questa (02/11, #376: le parole di
+        un tool sentite in una riga della stanza non sono sue se non le ha dette lei adesso,
+        valore.dalla_stanza). Ogni conversazione è di una persona sola."""
+        try:
+            utenti = [i for i, m in enumerate(hist or ()) if m.get("role") == "user"
+                      and isinstance(m.get("content"), str)]
+            ora = str(getattr(self, "_turn_text", "") or "").strip()
+            if utenti and ora and str(hist[utenti[-1]]["content"]).strip().endswith(ora):
+                utenti = utenti[:-1]
+            return tuple(provenienza.testo_persona([hist[i]]) for i in utenti[-FRASI_PRIMA:])
+        except Exception:  # noqa: BLE001 — nel dubbio niente
+            return ()
+
+    def _voce_della_persona(self) -> str | None:
+        """Il nome di chi parla se la sua voce è certa per la politica (riconosciuta in questa
+        frase o, per una frase breve, dalla conversazione) e non c'è un dubbio con un minore;
+        None altrimenti: allora tutte le righe della stanza restano un dato (02/11, #376)."""
+        sc = getattr(getattr(self, "tool_ctx", None), "speaker_ctx", None)
+        if (sc is None or getattr(sc, "identified_by", None) not in ("voce", "breve")
+                or any(getattr(sc, k, None) for k in ("incerta", "minore_incerto",
+                                                      "minore_vicino", "compagnia"))):
+            return None
+        return getattr(sc, "current_speaker", None)
+
     def _domanda_fidata(self) -> str:
         d = getattr(self._c(), "domanda_fidata", None)
         if isinstance(d, dict) and d.get("turno") == getattr(self, "turn_number", 0) - 1:
@@ -7544,6 +7592,19 @@ class Brain:
         conv.esterni.append((fonte, testo[:20000]))
         del conv.esterni[:-30]
 
+    def _domanda_non_vale(self, nome: str, args: dict, spec=None) -> bool:
+        """C'è una domanda della politica in sospeso per questo tool, ma non vale per questa
+        chiamata: è un'altra chiamata. Non per la frase di sfida superata, che ha la sua."""
+        p = getattr(self, "pending", None) or {}
+        if (getattr(self, "turn_pending_tool", None) != nome or p.get("tool") != nome
+                or not p.get("politica") or getattr(self, "_sfida_args", None) is not None):
+            return False
+        if not valore.stessa_chiamata(nome, args, p.get("args"), spec, self.tool_ctx):
+            self._rule("valore_chiamata_diversa")
+            return True
+        p["args"] = dict(args)           # la stessa, scritta magari in un altro modo (una data)
+        return False
+
     def _turno_politica(self) -> "politica.Turno":
         """Quello che la politica dei tool deve sapere del turno (ToolContext.politica)."""
         hist = self.history
@@ -7564,16 +7625,21 @@ class Brain:
         # sera le righe nella storia (tutte quelle davanti al modello in questa risposta)
         stanza_b = getattr(self, "_stanza_turno", None)
         visibili = getattr(self, "_stanza_visibili", None) or []
+        # Le righe della persona che parla, riconosciuta, non sono un dato estraneo, ma la fonte
+        # «stanza» resta (02/11, #376, stanza/contesto.esterno_altri)
+        from .stanza.contesto import esterno_altri
+        chi_stanza = self._voce_della_persona()
         if visibili:
             fonti.add("stanza")
-            esterni = esterni + [("stanza", "\n".join(p.esterno for p in visibili))]
+            esterni = esterni + [("stanza", "\n".join(esterno_altri(q, chi_stanza)
+                                                      for q in visibili))]
             # Il riassunto della stanza nella nota del turno (passo 3, 14/10): anche lui un dato
             riass = str(getattr(stanza_b, "riassunto", "") or "") if stanza_b is not None else ""
             if riass:
                 esterni = esterni + [("stanza", riass)]
         elif stanza_b is not None and getattr(stanza_b, "testo", None):
             fonti.add("stanza")
-            esterni = esterni + [("stanza", str(getattr(stanza_b, "esterno", "") or ""))]
+            esterni = esterni + [("stanza", esterno_altri(stanza_b, chi_stanza))]
         # Il riassunto della stanza nei dati fissi della storia (16/10, issue #95): un dato
         # (anche quello entrato in questo turno, con o senza righe della stanza visibili)
         for fx in getattr(self, "_dati_visibili", None) or ():
@@ -7615,6 +7681,11 @@ class Brain:
             # La domanda di Calliope con nomi fidati a cui questa frase risponde (09/10)
             domanda_fidata=self._domanda_fidata(),
             frase_prima_domanda=self._frase_prima_domanda(hist),
+            fonte_detta_sospeso=bool(p.get("fonte_detta")) and p.get("tool") == tool,
+            # Le sue frasi recenti e il giro dei rifiuti (02/11, #376)
+            frasi_prima=self._frasi_prima(hist),
+            giro_valore=self._giro_valore(),
+            numero_turno=int(getattr(self, "turn_number", 0) or 0),
             # La domanda della proposta (10/10, politica.consenso_irriconoscibile)
             domanda_sospeso=str(p.get("domanda") or "") if p.get("tool") == tool else "",
             cosa_sospeso=str(p.get("cosa") or "") if p.get("tool") == tool else "",
@@ -7626,6 +7697,14 @@ class Brain:
             and p.get("sfida_di") is not None and p.get("sfida_di") == self._speaker_key()
             and getattr(self, "turn_number", 0) - p.get("turno", 0) <= 1,
             chiede_sospeso=tuple(p.get("chiede") or ()) if p.get("tool") == tool else ())
+
+    def _giro_valore(self) -> dict:
+        """{tool: (turno, quando)} dei rifiuti `valore_non_ancorata` di questa conversazione, la lista viva
+        (02/11, #376: `rifiutata_valore` vale per risposta, e ogni «sì» ripartiva dal rifiuto)."""
+        conv = self._c()
+        if not isinstance(getattr(conv, "giro_valore", None), dict):
+            conv.giro_valore = {}
+        return conv.giro_valore
 
     def _intenzioni(self) -> list:
         conv = self._c()
