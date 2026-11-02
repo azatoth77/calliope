@@ -61,7 +61,9 @@ DOMANDE = frozenset({
     # rifiutano o sfidano (valore_esegue, valore_voce e valore_lettura eseguono)
     "valore_non_ancorata", "valore_bersaglio_dato", "valore_contenuto_dato",
     "valore_contenuto_non_detto", "valore_dati_personali", "valore_e3_chiede",
-    "valore_e4_sfida", "valore_consenso_sfida", "valore_sfida_classe"})
+    "valore_e4_sfida", "valore_consenso_sfida", "valore_sfida_classe",
+    "valore_troppe_domande", "valore_non_dicibile", "valore_dalla_stanza",
+    "valore_non_ancorata_sfida"})
 RIFERIRE = frozenset({"uscita_istruzione", "uscita_contatto", "uscita_segreti", "uscita_soldi",
                       "uscita_numero_pagamento"})
 # «Te l'ho già detto», «quante volte», «ti ho detto di sì», «me lo chiedi ancora?»
@@ -164,7 +166,7 @@ def _ombra(turni: list[dict]) -> dict:
     Con `attiva` (dal 09/10) la «vera» è la politica di prima e la «nuova» quella che ha
     deciso: i conti restano gli stessi, divisi per sapere quale attrito simulare."""
     out = {"chiamate": 0, "attive": 0, "diverse": 0, "evitate": 0, "in_piu": 0,
-           "dato_eseguite": 0, "evitate_ombra": 0, "in_piu_ombra": 0, "evitate_attiva": 0,
+           "dato_eseguite": 0, "dato_confermate": 0, "evitate_ombra": 0, "in_piu_ombra": 0, "evitate_attiva": 0,
            "in_piu_attiva": 0}
     for t in turni:
         evitata = in_piu = attiva = False
@@ -186,8 +188,13 @@ def _ombra(turni: list[dict]) -> dict:
             if vera == "esegui" and nuova in CHIEDE:
                 in_piu = True
             # Esecuzione in più con un bersaglio preso dal dato: il criterio per non attivarla
-            if nuova == "esegui" and vera != "esegui" and "dato" in (o.get("bersagli") or ()):
+            # Dal 02/11 (#376) anche quelle eseguite col «sì» a una domanda (`consumo`): nel totale, e
+            # a parte (`dato_confermate`) solo se la domanda ha detto la fonte quando è stata fatta
+            if nuova == "esegui" and "dato" in (o.get("bersagli") or ()) and (
+                    vera != "esegui" or o.get("consumo")):
                 out["dato_eseguite"] += 1
+                if o.get("fonte_detta"):
+                    out["dato_confermate"] += 1
         out["evitate"] += evitata
         out["in_piu"] += in_piu
         modo = "attiva" if attiva else "ombra"
@@ -254,7 +261,8 @@ def testo(giorni: dict[str, dict], soglia: float = 3.0) -> str:
             righe.append(f"    politica per valore attiva: {o['chiamate']} chiamate con un dato "
                          f"di mezzo, {o['diverse']} diverse dalla politica di prima, domande "
                          f"evitate {o['evitate']}, in più {o['in_piu']}, ESEGUITE con un "
-                         f"bersaglio dal dato {o['dato_eseguite']}, attrito con la politica di "
+                         f"bersaglio dal dato {o['dato_eseguite']} (di cui confermate con la fonte "
+                         f"detta {o['dato_confermate']}), attrito con la politica di "
                          f"prima {_n(o['attrito_prima'])}")
         elif o["chiamate"]:
             righe.append(f"    in ombra (politica per valore): {o['chiamate']} chiamate, "

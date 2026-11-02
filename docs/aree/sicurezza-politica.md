@@ -2151,3 +2151,81 @@ frase parla della verifica o della data; mai dalle frasi più vecchie (terza rev
 calcetto» detto prima e una pagina «spostata a venerdì» spostavano la verifica). **Limite
 accettato**: con una pagina letta, un «sì» da solo alla proposta di Calliope (la data non detta
 dalla persona) resta senza esecuzione; la proposta vera è nella issue #320.
+
+## Il «sì» che girava in tondo con la stanza accesa (02/11, issue #376, ramo `issue-376-si-con-la-stanza`)
+
+Prova vera del 02/11 alle 11:46 sulla DGX, da un telefono, con `stanza_contesto` acceso: la verifica
+non si è creata in cinque turni. Al «Sì, grazie.» (a «Se vuoi, posso crearne una per venerdì.») la
+chiamata giusta di `studio` era `valore_non_ancorata (dati da stanza)`, e al «Sì.» di nuovo:
+`rifiutata_valore` vale per risposta, ogni «sì» è un turno nuovo e ripartiva dal rifiuto. Non
+riguardava solo lo Studio: ogni azione di un turno «sì», in ogni casa con la stanza accesa.
+- **Le righe della persona** (`stanza/contesto.esterno_altri`, `_voci`, `Brain._voce_della_persona`):
+  con la voce certa per la politica le sue righe sicure escono dai dati, così le sue parole non
+  sembrano venire dalla stanza. **La fonte «stanza» resta**: basta un errore di attribuzione, o una
+  frase detta a un'altra persona, e una riga non deve mai far eseguire senza una richiesta.
+- **Il percorso del «sì»**: una chiamata non ancorata riceve il rifiuto; se il modello insiste, o se
+  la frase è un consenso con un rifiuto recente (`Turno.giro_valore`, con tempo e turni delle
+  proposte: `conferme.secondi_validi`, `turni_validi`), arriva la domanda scritta **dal codice**,
+  «Non me l'hai chiesto: vuoi che…?», con l'azione e il valore veri (`cosa_coi_valori`); il «sì» a
+  quella esegue. **Il «sì» chiuso della persona riconosciuta** (`valore.si_chiuso`, regola
+  `valore_si_chiuso`; non in zona grigia, non «Sì?») salta il rifiuto e passa subito alla domanda
+  (decisione del 02/11: sulla DGX, un giro su tre, dopo il rifiuto il modello non richiamava il tool e
+  la persona sentiva «puoi ripetere la richiesta?»). Non esegue da solo: se il modello ha offerto di
+  controllare il dentista e chiama la cancellazione, la persona sente «cancelli». Vale per ogni tool;
+  costa una domanda in più con la stanza accesa. *[storico fino a questa decisione: sempre prima il
+  rifiuto]*
+  *[storico fino alla revisione della PR #377: `valore.si_ancorato` faceva ancorare il «sì» dalla
+  domanda scritta dal modello. Tolta: non si distingue «vuoi che controlli il dentista?» da «vuoi che
+  lo cancelli?», e la chiamata è un'altra cosa; il revisore ha eseguito così `agenda_annulla` e
+  `lista_togli`]*
+- **La domanda aperta vale per UNA esecuzione, della chiamata identica, della persona che l'ha sentita**
+  (terza revisione della PR #377: `Brain._domanda_non_vale`, `valore.stessa_chiamata`). Ogni altra
+  chiamata, anche nella stessa passata o dopo il consumo, è nuova e fa il percorso normale, come se la
+  domanda non esistesse: `dalla_stanza`, ancoraggio, E3–E4 alla sfida. *[storico fino alla terza
+  revisione: `consumo_domanda` apriva una domanda sua, e i suoi rami saltavano quei controlli]*
+  - **Identica:** tutte le chiavi tranne le IGNORA, azione compresa, anche una in più o in meno. Testi a
+    meno di maiuscole, spazi e dell'articolo in testa («la birra» e «birra»), date risolte, numeri e
+    liste esatti. `_uguali` non cambia per gli altri.
+  - **La domanda dice tutto ciò che si esegue** (`cosa_coi_valori`): ogni argomento tranne gli IGNORA
+    (`cambia: togli`, `per tutti: sì`, «Ada»), tolto ciò che la `cosa` dice già. Regola generale: un
+    argomento nuovo non resta muto per dimenticanza. Ciò che non si sa dire per intero (un valore oltre
+    60 caratteri, a capo, indirizzi, markdown, emoji, parole di un'istruzione, un oggetto; la domanda
+    oltre 160) porta a «dimmelo con le tue parole», regola `valore_non_dicibile`.
+  - **Al più 2 domande della politica per richiesta** (`valore.tetto_domande`, regola
+    `valore_troppe_domande`), con la stanza o senza; poi «dimmelo con le tue parole». Il tetto riparte
+    quando la domanda è consumata e a ogni frase che non è un consenso.
+  - **Da dove viene:** «Viene da una pagina, non da te: vuoi che…?».
+  - **La zona grigia al consumo** va alla frase di sfida (`valore_consenso_sfida`). C'era già sulla
+    base, dove in certi casi eseguiva. È l'unico ramo in più rispetto alla regola: un caso provato
+    (`prova_politica`, «il sì dalla zona grigia non esegue (sfida)») lo chiede.
+  - **E3–E4 da questo percorso** vanno alla frase di sfida (`valore_non_ancorata_sfida`).
+- **La metrica.** «ESEGUITE con un bersaglio dal dato» conta anche un bersaglio dal dato eseguito col
+  «sì» a una domanda (`consumo`). La voce «di cui confermate con la fonte detta» (`dato_confermate`)
+  conta solo se la domanda l'ha detta **quando è stata fatta**: lo scrive la proposta (`fonte_detta`).
+  Quindi **il totale non è più detto che resti 0**: è la differenza fra le due che deve restare 0.
+- **Il comando di un'altra voce non diventa un'azione** (`valore.dalla_stanza`, regola
+  `valore_dalla_stanza`): un valore che sta solo nelle righe della stanza, o le parole del tool dette
+  lì e non dalla persona nella frase del turno o nella sua frase di prima (non in tutta la
+  conversazione): «dimmelo con le tue parole», che chiude il turno senza affermare niente (dopo il primo rifiuto, o subito col «sì» chiuso), mai una domanda che
+  porti a eseguire. Solo per la stanza: per una pagina o una ricerca resta la domanda di sempre.
+- **Accettato (decisione del 02/11):** un'offerta del modello ispirata da una riga, senza le parole
+  del tool né i suoi valori («non abbiamo più niente da bere» → «vuoi che segni l'acqua?»), si esegue
+  dopo la domanda del codice che nomina il valore: la persona ha sentito azione e valore.
+- **«Sì?»** non è un consenso (`politica._SI_DOMANDA`, con i casi contrari in `prova_testo`).
+
+Prove: `prova_si_stanza` attraverso Brain, col modello finto ostile e tool finti che contano le
+chiamate. Sulla voce (la frase di 1,5 s a 0,375 presa per un ospite) in questa issue non cambia niente:
+va con la modalità studio.
+
+**Limite di `dalla_stanza`:** basta una parola del verbo del tool in una riga altrui, quindi scatta anche
+su frasi innocue («Ho segnato il compito sul diario.» con un «sì» a un appuntamento). Non esegue niente e
+la frase non afferma niente, ma la persona deve ripeterlo con parole sue.
+
+**Limiti noti (quarta revisione della PR #377).**
+- Conversazione pulita con una chiamata diversa: fa il percorso normale, come sulla base, quindi senza
+  dati di mezzo un'altra chiamata esegue. Da guardare se la stanza sparisce davvero dal contesto.
+- La metrica è cieca dopo la frase di sfida: un bersaglio dal dato eseguito con la sfida superata non ha
+  `consumo` e non si conta. È la conferma più forte, ma non si vede.
+- La riscrittura senza stanza è da misurare sulla DGX: non si sa quanto spesso gemma4 riscrive una
+  chiamata. «accendi luce salotto» per «accendi la luce del salotto» è un'altra chiamata (l'articolo
+  conta solo in testa): costa una domanda, al più due.

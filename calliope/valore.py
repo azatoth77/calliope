@@ -42,6 +42,7 @@ from __future__ import annotations
 import json
 import re
 import time
+import unicodedata
 from dataclasses import dataclass, field, replace
 
 from . import politica as pol
@@ -531,9 +532,23 @@ def _data_risolta(valore, ctx=None):
     return next(iter(dd)) if len(dd) == 1 else None
 
 
+_GIORNO = re.compile(r"(?<![a-zà-ù])(luned|marted|mercoled|gioved|venerd|sabato|domenica)", re.I)
+_SOLO_GIORNO = re.compile(r"\W*(?:il\s+|la\s+|questo\s+|questa\s+|prossim[oa]\s+)*"
+                          r"[a-zà-ù]+(?:\s+prossim[oa])?\W*", re.I)
+
+
+def _giorno_con_altro(v) -> bool:
+    """Il nome di un giorno con altre parole («venerdì di dicembre», «il primo venerdì»): la lettura
+    della data guarda solo il giorno, quindi non è il «venerdì» di questa settimana."""
+    return bool(_GIORNO.search(str(v))) and not _SOLO_GIORNO.fullmatch(str(v))
+
+
 def _stessa_data(a, b, ctx=None) -> bool:
     """Due valori sono la stessa data, confrontata risolta («20 novembre» e «2026-11-20»: una
-    delle date possibili, se l'altro valore ne ha una sola); altrimenti il confronto esatto."""
+    delle date possibili, se l'altro valore ne ha una sola); altrimenti il confronto esatto. Un
+    giorno con altre parole si confronta esatto."""
+    if _giorno_con_altro(a) or _giorno_con_altro(b):
+        return _esatto(a) == _esatto(b)
     da, db = _date_possibili(a, ctx), _date_possibili(b, ctx)
     if da and db and (len(da) == 1 or len(db) == 1):
         return bool(da & db)
@@ -893,6 +908,238 @@ def consenso_della_persona(ctx) -> bool:
             and getattr(sc, "identified_by", None) in ("voce", "breve"))
 
 
+def dalla_stanza(name: str, args: dict, cl, t, tipi: dict | None, fidati=()) -> bool:
+    """L'azione viene dalle righe della stanza di un'altra voce (02/11, #376): un valore che sta
+    solo lì, o le parole del tool dette lì e non dalla persona nella frase del turno o nelle sue
+    frasi recenti (`Turno.frasi_prima`, non tutta la conversazione: «ieri ho cancellato…» detto
+    prima non fa suo un «cancella» sentito adesso). Un comando sentito dalla TV non diventa
+    un'azione nemmeno con un «sì»: la persona lo chiede con le sue parole. Solo per la stanza: per
+    una pagina o una ricerca resta la domanda di sempre."""
+    if "stanza" not in (t.contaminazione or ()):
+        return False
+    stanza = " ".join(x for fonte, x in (t.esterni or ()) if fonte == "stanza")
+    if not stanza.strip():
+        return False
+    f = Fonti.da(t, fidati)
+    parole_stanza = prov.parole(stanza)
+    for k, v in (args or {}).items():
+        tipo = (tipi or {}).get(k, BERSAGLIO)
+        if tipo in (BERSAGLIO, CONTENUTO, LIBERO) and v not in (None, "") \
+                and etichetta(v, tipo, f) == DATO \
+                and prov.parole(_testo(v) or "") & parole_stanza:
+            return True
+    recenti = " ".join((t.testo or "", *(getattr(t, "frasi_prima", ()) or ())))
+    return (pol.chiesto_con_verbi(cl, stanza, args)
+            and not pol.chiesto_con_verbi(cl, recenti, args))
+
+
+# Il rifiuto `valore_non_ancorata` vale anche per i turni dopo (02/11, #376: ogni «sì» è un turno
+# nuovo e ripartiva dal rifiuto, si girava in tondo per sempre), con la scadenza delle proposte
+# La forma chiusa del «sì» (02/11, #376, regola `valore_si_chiuso`): la frase intera, anche con la
+# cortesia in fondo («Sì, grazie.», «Certo, grazie»), mai con un punto di domanda («Sì?», «Perché
+# no?»). Solo per passare subito alla domanda del codice: non esegue niente da sola
+_CORTESIA_FINE = re.compile(r"[\s,.;:!]+(?:grazie(?:\s+mille)?|per\s+favore)[\s.!]*$", re.I)
+
+
+def si_chiuso(testo: str) -> bool:
+    t = str(testo or "")
+    return "?" not in t and pol.consenso_chiuso(_CORTESIA_FINE.sub("", t))
+
+
+# Un valore che non si può dire a voce per intero non si conferma con un «sì»: il «sì» vale per ciò che
+# la domanda ha detto (02/11, #376). Forma, non significato (principio 10): troppo lungo, a capo,
+# indirizzi, markdown, emoji, le parole di un'istruzione in un testo che viene dal modello o dai dati
+VALORE_MAX, DOMANDA_MAX = 60, 160
+_MARKUP = re.compile(r"[\n\r\t*_`#\[\]<>|{}\\]")
+_ISTRUZIONE = re.compile(
+    r"(?<![a-zà-ù])(ignora|ignore|istruzion\w*|regole|rispondi|system|assistente|prompt|"
+    r"di' solo|dì solo|per continuare|esegui)(?![a-zà-ù])", re.I)
+# La frase che chiude: non afferma niente, chiede di ripeterlo (valore_dalla_stanza,
+# valore_non_dicibile, valore_troppe_domande)
+CON_LE_TUE_PAROLE = "Per farlo ho bisogno che me lo chieda tu: dimmelo con le tue parole."
+# Al più tante domande della politica per richiesta: una frase che non è un consenso, o la domanda
+# consumata, ripartono da zero (Brain)
+DOMANDE_MAX, _DOMANDE = 2, "__domande__"
+
+
+def _dicibile(testo: str) -> bool:
+    from .studio.argomenti import _INDIRIZZO
+    if (len(testo) > VALORE_MAX or _MARKUP.search(testo) or _INDIRIZZO.search(testo)
+            or _ISTRUZIONE.search(testo)):
+        return False
+    return not any(unicodedata.category(c) in ("So", "Sk", "Cc", "Cf", "Cs", "Co") for c in testo)
+
+
+def _detto(k: str, v) -> str | None:
+    """Come si dice a voce il valore `v` dell'argomento `k`, per intero; None se non si può."""
+    if isinstance(v, bool):
+        return f"{k.replace('_', ' ')}: {'sì' if v else 'no'}"
+    if isinstance(v, (int, float)):
+        return f"{k.replace('_', ' ')} {v}"
+    if isinstance(v, str):
+        return " ".join(v.split()) if _dicibile(v) else None
+    if isinstance(v, (list, tuple)):
+        pezzi = [str(x) if isinstance(x, (int, float)) and not isinstance(x, bool) else _detto(k, x)
+                 for x in v]
+        return ", ".join(pezzi) if pezzi and all(pezzi) else None
+    return None
+
+
+def _gettoni(testo) -> set:
+    return set(re.findall(r"[^\W_]+", str(testo).casefold()))
+
+
+def cosa_coi_valori(cosa: str, name: str, args: dict, tipi: dict | None, ctx=None,
+                    spec=None) -> str | None:
+    """Cosa dice la domanda del codice: l'azione e **tutti** i valori della chiamata, tolti gli
+    IGNORA e quelli che la `cosa` dice già, o da cui dipende (`azione` di studio). None se uno non
+    si può dire per intero, o la domanda è troppo lunga: un «sì» varrebbe per una parte."""
+    cosa = re.sub(r"\s*«\s*»", "", str(cosa or "lo faccia"))
+    ci_sono = _gettoni(cosa)
+    cl = pol.classe_di(name, spec)
+    extra = []
+    for k, v in (args or {}).items():
+        tipo = (tipi or {}).get(k, BERSAGLIO)
+        if tipo == IGNORA or v is None or v == "":
+            continue
+        if tipo == AZIONE and pol._cosa(cl, {x: y for x, y in args.items() if x != k}) != pol._cosa(cl, args):
+            continue
+        detto = _detto(k, v)
+        if detto is None:
+            return None
+        if (name, k) in DATE_DETTE and isinstance(v, str):
+            detto = _data_mostrata(v, ctx)
+        if not _gettoni(v if isinstance(v, str) else detto) <= ci_sono:
+            extra.append(detto)
+    testo = f"{cosa}: {', '.join(extra)}" if extra else cosa
+    return testo if len(testo) <= DOMANDA_MAX else None
+
+
+_ARTICOLO = re.compile(r"^(?:il|lo|la|i|gli|le)\s+|^l['’]\s*", re.I)
+
+
+def stessa_chiamata(name: str, args: dict, sosp: dict, spec=None, ctx=None) -> bool:
+    """La chiamata è quella che la domanda ha detto: tutte le chiavi tranne le IGNORA, azione
+    compresa, anche una in più o in meno. Testi a meno di maiuscole, spazi e dell'articolo in testa
+    («la birra» e «birra»), date risolte (`_stessa_data`), numeri e liste esatti."""
+    tipi = argomenti_di(name, spec)
+
+    def veri(a):
+        return {k: v for k, v in (a or {}).items()
+                if (tipi or {}).get(k, BERSAGLIO) != IGNORA and v not in (None, "")}
+
+    a, b = veri(args), veri(sosp)
+    if set(a) != set(b):
+        return False
+
+    def uguale(k):
+        if (name, k) in DATE_DETTE:
+            return _stessa_data(a[k], b[k], ctx)
+        x, y = a[k], b[k]
+        if isinstance(x, str) and isinstance(y, str):
+            x, y = _ARTICOLO.sub("", " ".join(x.split())), _ARTICOLO.sub("", " ".join(y.split()))
+        return _esatto(x) == _esatto(y)
+
+    return all(uguale(k) for k in a)
+
+
+def _fonte_del_dato(args: dict, t, tipi: dict | None, fidati=()) -> str:
+    """La fonte del primo valore della chiamata che viene da un dato non fidato; "" se nessuno."""
+    f = Fonti.da(t, fidati)
+    for k, v in (args or {}).items():
+        tipo = (tipi or {}).get(k, BERSAGLIO)
+        if tipo in (AZIONE, SCELTA, IGNORA) or v in (None, ""):
+            continue
+        if etichetta(v, tipo, f) == DATO:
+            return fonte_del_valore(v, t, solo_dal_dato(v, f)) or pol.fonte_principale(t)
+    return ""
+
+
+def domanda_del_codice(cosa: str, name: str, args: dict, t, tipi, ctx, fidati, E: int, fonte: str,
+                       spec=None):
+    """La decisione con la domanda del codice: l'azione e i valori veri, e da dove viene il valore se
+    è in un dato. E3–E4: la frase di sfida. Se un valore non si può dire, nessuna domanda: «dimmelo
+    con le tue parole»."""
+    testo = cosa_coi_valori(cosa, name, args, tipi, ctx, spec)
+    if testo is None:
+        return pol.Decisione("rifiuta", "valore_non_dicibile", CON_LE_TUE_PAROLE, fonte)
+    da = _fonte_del_dato(args, t, tipi, fidati)
+    prima = f"Viene {_da_studio(da)}, non da te" if da else "Non me l'hai chiesto"
+    if E >= E3:
+        return pol.Decisione("sfida", "valore_non_ancorata_sfida", f"{prima}: vuoi che {testo}?",
+                             da or fonte, fonte_detta=bool(da))
+    return pol.Decisione("conferma", "valore_non_ancorata", f"{prima}: vuoi che {testo}?", da or fonte,
+                         fonte_detta=bool(da))
+
+
+def azzera_domande(giro):
+    """Una richiesta nuova, o la domanda consumata: il tetto riparte (Brain)."""
+    if isinstance(giro, dict):
+        giro.pop(_DOMANDE, None)
+
+
+def tetto_domande(d, t):
+    """Al più `DOMANDE_MAX` domande della politica per richiesta, con la stanza o senza: un modello
+    che riscrive la chiamata a ogni «sì» non gira in tondo (02/11, #376)."""
+    giro = getattr(t, "giro_valore", None)
+    if not isinstance(giro, dict) or (
+            d.esito != "conferma" and d.regola != "valore_non_ancorata_sfida"):
+        return d
+    giro[_DOMANDE] = giro.get(_DOMANDE, 0) + 1
+    if giro[_DOMANDE] > DOMANDE_MAX:
+        return pol.Decisione("rifiuta", "valore_troppe_domande", CON_LE_TUE_PAROLE, d.fonte)
+    return d
+
+
+def consumo_zona_grigia(name: str, args: dict, cl, t, ctx, cosa=None):
+    """Il «sì» alla domanda della politica vale per la persona che l'ha sentita: in zona grigia la
+    voce non basta, la frase di sfida (c'era già sulla base, si eseguiva). None altrimenti."""
+    sc = getattr(ctx, "speaker_ctx", None)
+    if (t is None or not getattr(t, "sospeso_politica", False) or t.sfida
+            or getattr(sc, "identified_by", None) != "conversazione"
+            or not pol.consenso_turno(name, args, cl, t)[0]):
+        return None
+    return pol.Decisione("sfida", "valore_consenso_sfida",
+                         f"{pol.VOCE_INCERTA}: vuoi che {cosa or pol._cosa(cl, args)}?",
+                         pol.fonte_principale(t))
+
+
+def _registra_consumo(name: str, args: dict, t, tipi, fidati, det: dict):
+    """Il «sì» alla domanda della politica: nel registro argomenti e bersagli, così la metrica vede
+    un bersaglio dal dato eseguito; `fonte_detta` solo se la domanda l'ha detta quando è stata fatta
+    (Turno.fonte_detta_sospeso, dalla proposta)."""
+    f = Fonti.da(t, fidati)
+    etichette = {}
+    for k, v in args.items():
+        tipo = (tipi or {}).get(k, BERSAGLIO)
+        if tipo != IGNORA:
+            etichette[k] = f"{tipo.partition(':')[0]}/{etichetta(v, tipo, f)}"
+    det["argomenti"] = etichette
+    det["bersagli"] = sorted({etichette[k].split("/")[1] for k in etichette
+                              if etichette[k].startswith((BERSAGLIO + "/", INDICE + "/"))})
+    det["consumo"] = True
+    if getattr(t, "fonte_detta_sospeso", False):
+        det["fonte_detta"] = True
+
+
+def _segna_giro(name: str, t):
+    if isinstance(getattr(t, "giro_valore", None), dict):
+        t.giro_valore[name] = (int(getattr(t, "numero_turno", 0) or 0), time.monotonic())
+
+
+def _gia_rifiutata(name: str, t, ctx) -> bool:
+    """Questo tool è stato rifiutato da poco in questa conversazione: entro tempo e turni delle
+    proposte (`conferme.secondi_validi`, `turni_validi`, come `Brain.pending`)."""
+    from .conferme import secondi_validi, turni_validi
+    giro = getattr(t, "giro_valore", None)
+    if not isinstance(giro, dict) or name not in giro:
+        return False
+    cfg = getattr(ctx, "cfg", None)
+    turno, quando = giro[name]
+    return (0 <= int(getattr(t, "numero_turno", 0) or 0) - int(turno) <= turni_validi(cfg)
+            and time.monotonic() - quando <= secondi_validi(cfg))
+
+
 def ancorata(cl, name: str, args: dict, t) -> bool:
     """La frase di questo turno chiede proprio questo tool: le sue parole (Classe.verbi, per
     azione Classe.verbi_azione) non negate; un fatto della persona detto in questa frase
@@ -1033,6 +1280,12 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
     E = effetto(name, args, spec)
     tipi = argomenti_di(name, spec)
     det = {"effetto": NOMI_EFFETTO.get(E, "E3"), "argomenti": {}, "bersagli": []}
+    if (t is not None and getattr(t, "sospeso_politica", False) and cl.classe != pol.SICURO
+            and pol.consenso_turno(name, args, cl, t)[0]):
+        d = None if base.esito in ("blocca", "vieta") else consumo_zona_grigia(name, args, cl, t, ctx, cosa)
+        if d is not None:
+            return d, det
+        _registra_consumo(name, args, t, tipi, fidati, det)
     if (t is None or not t.contaminazione or cl.classe in (pol.SICURO, pol.VIETATO)
             or base.esito in ("blocca", "vieta") or base.regola in (
                 "politica_delega", "intento_confermato", "consenso_richiesta",
@@ -1082,7 +1335,7 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
                 return pol.Decisione(
                     "conferma", "valore_proposta_data_dato",
                     f"«{_data_mostrata(v, ctx)}» viene {_da_studio(da)}, non da te: vuoi davvero "
-                    f"che {cosa}?", da), det
+                    f"che {cosa}?", da, fonte_detta=True), det
             return pol.Decisione(
                 "conferma", "valore_proposta_data_non_detta",
                 f"Questa data, «{_data_mostrata(v, ctx)}», non l'hai detta tu, e c'è di mezzo "
@@ -1124,11 +1377,25 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
                 and not t.risposta.get("sfida_portata_usata")):
             det["sfida_portata"] = True
     if not risposta and not ancorata(cl, name, args, t):
-        if not t.risposta.get("rifiutata_valore"):
+        persona = consenso_della_persona(ctx)
+        giro = pol.consenso(t.testo) and persona and _gia_rifiutata(name, t, ctx)
+        # Il «sì» chiuso della persona riconosciuta salta il rifiuto (decisione del 02/11). Non
+        # esegue: porta alla domanda del codice
+        chiuso = persona and si_chiuso(t.testo)
+        if chiuso:
+            from .tools.spec import note_rule
+            note_rule(ctx, "valore_si_chiuso")
+        if not t.risposta.get("rifiutata_valore") and not giro and not chiuso:
             t.risposta["rifiutata_valore"] = True
+            _segna_giro(name, t)
             return pol.Decisione("rifiuta", "valore_non_ancorata", "", fonte), det
-        return pol.Decisione("conferma", "valore_non_ancorata",
-                             f"Non me l'hai chiesto: vuoi che {cosa}?", fonte), det
+        _segna_giro(name, t)
+        # Da una riga di un'altra voce: mai una domanda che porti ad eseguire. Un'offerta del modello
+        # ispirata da una riga, senza le sue parole né i suoi valori, passa da qui: la persona sente
+        # azione e valore (decisione del 02/11, sicurezza-politica)
+        if dalla_stanza(name, args, cl, t, tipi, fidati):
+            return pol.Decisione("rifiuta", "valore_dalla_stanza", CON_LE_TUE_PAROLE, "stanza"), det
+        return domanda_del_codice(cosa, name, args, t, tipi, ctx, fidati, E, fonte, spec), det
     # 2. da dove vengono gli argomenti
     f = Fonti.da(t, fidati)
     # la data detta col mese a parole e scritta dal modello in cifre (#98), solo per un valore
@@ -1208,14 +1475,14 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         cit, dove = _citato(k, da)
         domanda = f"«{cit}» viene {dove}, non da te: vuoi davvero che {cosa}?"
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_bersaglio_dato",
-                             domanda, da), det
+                             domanda, da, fonte_detta=True), det
     if cont_dato and E >= E2:
         k = cont_dato[0]
         da = _da(k)
         cit, dove = _citato(k, da)
         domanda = f"«{cit}» viene {dove}, non da te: vuoi davvero che {cosa}?"
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_contenuto_dato",
-                             domanda, da), det
+                             domanda, da, fonte_detta=True), det
     if cont_modello and E >= E2:
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_contenuto_non_detto",
                              f"C'è di mezzo {prov.detta(fonte)}, quindi chiedo a te: vuoi che "
@@ -1249,6 +1516,9 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
 def ombra(base, nuova, det: dict) -> dict:
     """Il campo `politica_ombra` della chiamata nel registro dei turni: solo nomi di regole,
     classi ed etichette, nessun valore."""
+    if det.get("consumo"):
+        return {**ombra(base, nuova, {k: v for k, v in det.items() if k != "consumo"}), "consumo": True,
+                **({"fonte_detta": True} if det.get("fonte_detta") else {})}
     return {"vera": base.esito, "vera_regola": base.regola or "", "nuova": nuova.esito,
             "nuova_regola": nuova.regola or "", "effetto": det.get("effetto"),
             "argomenti": dict(det.get("argomenti") or {}),

@@ -1153,7 +1153,26 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
             return _premi(ctx, svc, chi, per)
         v = _verifica(svc, ctx, chi, verifica, materia,
                       anche_passate=azione in ("resoconto", "riepilogo"))
+        # Un id inventato dal modello con la materia giusta (02/11, #376: `proponi_data` con
+        # verifica 1 e materia fisica, «Questa verifica non la trovo.» e il turno chiuso): vale la
+        # materia. Con un id di un'altra materia, spostare sarebbe un esito ingannevole: non c'è
+        if not _bersaglio(ctx) and verifica and materia:
+            m = str(materia).strip().lower()
+            if v is None:
+                v = _verifica(svc, ctx, chi, None, materia)
+            elif (azione in ("sposta", "proponi_data") and str(v["materia"]).lower() != m
+                  and m not in str(v.get("argomento") or "").lower()):
+                v = None
         if v is None:
+            if azione in ("sposta", "proponi_data"):
+                # Mai un vicolo cieco (02/11, #376): niente frase pronta, il modello rimedia nello
+                # stesso turno
+                di = f" di {materia}" if materia else ""
+                return {"ok": False, "errore": f"nessuna verifica{di} da spostare nello Studio",
+                        "cosa_fare": "Non dire che l'hai spostata né che non la trovi. Se chi parla "
+                                     "ha detto una verifica con una materia e una data, è una "
+                                     "verifica nuova: chiama studio con azione «crea», con la "
+                                     "materia e la data dette da lei; altrimenti chiedile quale."}
             if materia and not verifica:
                 # Una materia senza verifica (#318, sulla DGX: «giovedì ho anche la verifica di
                 # matematica» → stato con materia, «non la trovo» detto e il turno chiuso): niente
@@ -1938,9 +1957,10 @@ DESCRIZIONE = (
     "cosa parla e a che punto è; «piano»; «oggi» («cosa devo studiare oggi?»); «fatto» il giorno "
     "di oggi fatto; «salta_oggi» per lo studio di oggi («oggi non ce la faccio», «salta lo studio "
     "di oggi»: le pagine passano ai giorni che restano); «sposta» la data della verifica («la verifica è stata spostata a "
-    "venerdì», con data); se non è chiaro quale dei due, chiedilo; «proponi_data» quando sei tu a "
-    "proporre la data nuova che la persona non ha detto (letta in una pagina, calcolata: data e "
-    "verifica), al posto di chiederlo con parole tue: la domanda la fa il codice, e al «sì» chiami "
+    "venerdì», con data); se non è chiaro quale dei due, chiedilo; «proponi_data» solo per una "
+    "verifica che c'è già, quando sei tu a proporre la data nuova che la persona non ha detta "
+    "(letta in una pagina, calcolata: data e verifica), mai per una verifica nuova, al posto di "
+    "chiederlo con parole tue: la domanda la fa il codice, e al «sì» chiami "
     "«sposta» con la stessa verifica e la stessa data; «archivia»; «tieni» o «togli» un "
     "argomento (numero = la posizione nell'elenco, o titolo); «riprova» una pagina messa da parte; «sessione» con le risposte "
     "a «quanto conosci l'argomento?» (conoscenza 1–5) e «come ti senti oggi?» (umore); "

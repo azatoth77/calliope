@@ -836,6 +836,37 @@ verifica("il permesso è quello di studio: l'ospite con «studio_verifica_crea»
          and len(materie_di(s9)) == n, str(o)[:200])
 s9.close()
 
+# ═══════════════ #376: il vicolo cieco (il «sì» con la stanza: prova_si_stanza.py) ═══════════════
+print("— il vicolo cieco (#376)")
+# Il vicolo cieco
+s_h = studio(cfg_nuova("b376h.db"))
+c_h = ctx_di(s_h, ANDREA)
+for az in ("proponi_data", "sposta"):
+    o = json.loads(TOOLS.call("studio", {"azione": az, "materia": "fisica", "verifica": 1,
+                                         "data": "venerdì"}, c_h, "familiare"))
+    verifica(f"il vicolo cieco: «{az}» con una verifica che non c'è: niente risposta finale, porta a "
+             "«crea»", o["ok"] is False and "risposta_finale" not in o and "conferma" not in o
+             and "crea" in o["cosa_fare"], str(o))
+o = json.loads(TOOLS.call("studio", {"azione": "proponi_data", "data": "venerdì"}, c_h, "familiare"))
+verifica("…anche senza materia", "risposta_finale" not in o and "crea" in o.get("cosa_fare", ""),
+         str(o))
+vs = s_h.crea_verifica(ANDREA, "Storia", ORA[0].date() + datetime.timedelta(days=9))
+o = json.loads(TOOLS.call("studio", {"azione": "proponi_data", "materia": "fisica", "verifica": vs,
+                                     "data": "venerdì"}, c_h, "familiare"))
+verifica("l'id di un'altra materia: non si propone di spostare la storia",
+         "risposta_finale" not in o and "crea" in o.get("cosa_fare", ""), str(o))
+o = json.loads(TOOLS.call("studio", {"azione": "proponi_data", "materia": "storia",
+                                     "verifica": vs + 7, "data": "venerdì"}, c_h, "familiare"))
+verifica("un id inventato con la materia giusta: vale la materia (la domanda del codice)",
+         "storia" in str(o.get("conferma")) and "Vuoi che sposti" in str(o.get("conferma")), str(o))
+o = json.loads(TOOLS.call("studio", {"azione": "piano", "verifica": vs + 7}, c_h, "familiare"))
+verifica("contrario: le altre azioni con un id che non c'è, «non la trovo» come prima",
+         o.get("conferma") == TS.NON_CE, str(o))
+verifica("la descrizione: proponi_data solo per una verifica che c'è già",
+         "solo per una verifica che c'è già" in TS.DESCRIZIONE
+         and "mai per una verifica nuova" in TS.DESCRIZIONE)
+s_h.close()
+
 # ═══════════════════════════ registro: il conto dei tool ═══════════════════════════
 src_main = (QUI.parent / "calliope" / "main.py").read_text("utf-8")
 verifica("main.py: i tool dello Studio solo con lo Studio per il modello",
