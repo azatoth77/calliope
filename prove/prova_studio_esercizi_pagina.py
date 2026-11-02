@@ -151,12 +151,7 @@ def scenario_telefono(t, hub, st, vid, eid):
     scrivi(t, 'textarea[data-esercizio-campo="testo"]', "Un quadrato ha il lato di 3 cm. Calcola l'area.")
     t.tocca('button[data-esercizio="salva"]')
     due = lambda: len(st.dati.tutti("SELECT id FROM studio_esercizi WHERE verifica = ?", (vid,))) == 2  # noqa: E731
-    ok = aspetta(due, 3)
-    if not ok:
-        # Sotto carico il tocco può cadere mentre la home si ridisegna (un evento del server): il
-        # tasto si preme di nuovo dal DOM, una volta
-        t.v("(document.querySelector('button[data-esercizio=\"salva\"]') || {click() {}}).click(); 1")
-        ok = aspetta(due, 6)
+    ok = aspetta(due, 9)
     # La riga c'è prima che la risposta arrivi alla pagina: si aspetta anche l'esito
     detto = aspetta(lambda: "preparo i passi" in testo_di(t, ".studio-e-esito"), 6)
     verifica("«Scrivi un problema» e «Salva»: l'esercizio nuovo, «preparo i passi»",

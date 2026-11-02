@@ -106,26 +106,19 @@ class T:
         return self.p.valuta(js)
 
     def tocca(self, sel):
+        # Su un tasto spento (la pagina aspetta una risposta) il browser non manda né mousedown né
+        # click: il tocco andrebbe perso. Si aspetta il tasto acceso e si tocca una volta sola
+        if not aspetta(lambda: self.v(f"(() => {{ const e = document.querySelector({json.dumps(sel)}); "
+                                      f"return !e || !e.disabled; }})()"), 8):
+            raise RuntimeError(f"il tasto resta spento: {sel}")
         r = self.v(f"(() => {{ const e = document.querySelector({json.dumps(sel)}); if (!e) return null;"
                    f" e.scrollIntoView({{block: 'nearest'}}); const b = e.getBoundingClientRect();"
                    f" return [b.x + b.width / 2, b.y + b.height / 2]; }})()")
         if not r:
             return False
-        # Subito dopo un campo appena scritto o un file mandato, Chromium a volte perde il mouse
-        # sintetico: niente mousedown nella pagina, con il tasto giusto sotto le coordinate giuste
-        # (registrato il 02/11: 1 giro su 6 di prova_studio_esercizi_pagina). Si riprova solo se la
-        # pagina non l'ha visto, quindi mai due tocchi
-        self.v("""(() => { window.__mouse = 0; if (!window.__mouseIn) { window.__mouseIn = 1;
-            document.addEventListener('mousedown', () => { window.__mouse++; }, true); } return 1; })()""")
-        for _ in range(3):
-            for t in ("mousePressed", "mouseReleased"):
-                self.p._chiama("Input.dispatchMouseEvent", {"type": t, "x": r[0], "y": r[1],
-                                                             "button": "left", "clickCount": 1})
-            fine = time.time() + 0.5
-            while time.time() < fine:
-                if self.v("window.__mouse === 0") is not True:     # visto, o pagina cambiata
-                    return True
-                time.sleep(0.05)
+        for t in ("mousePressed", "mouseReleased"):
+            self.p._chiama("Input.dispatchMouseEvent", {"type": t, "x": r[0], "y": r[1],
+                                                         "button": "left", "clickCount": 1})
         return True
 
     def file(self, percorsi):
