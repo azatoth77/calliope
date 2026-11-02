@@ -111,7 +111,7 @@ class Conversazione:
         # La modalità studio (02/11, #376, studio/modalita.py): la conversazione della voce non
         # riconosciuta ha in prestito le eccezioni da quella del proprietario. Solo in memoria
         self.prestito = None
-        # La chiave dell'ultima corsia che l'ha occupata (02/11, #376, RegistroConversazioni.occupa):
+        # La chiave della corsia dell'ultimo turno (02/11, #376, Corsia.turno):
         # «l'ultima di questo satellite» è questa, non il puntatore che la corsia tiene
         self.ultima_corsia = None
         # Le righe della conversazione di stanza mandate al modello (14/10 sera,

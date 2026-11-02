@@ -221,8 +221,8 @@ satellite (`Studio.modalita`) con due effetti soltanto.
   dello Studio come proprietario; la riga dei dati del turno su chi parla; i testi dei dati non fidati per
   la provenienza, che non vanno al modello. A turno finito il turno di quella voce torna nella conversazione del
   proprietario, con la proposta dello Studio e i «no» a quelle, e il satellite riparte da lì. Il prestito vale
-  solo se la conversazione del proprietario è l'ultima di questo satellite (`Conversazione.ultima_corsia`, la
-  segna `RegistroConversazioni.occupa`): una frase detta dal proprietario in cucina non arriva a quella voce al
+  solo se l'ultimo turno nella conversazione del proprietario è di questo satellite (`Conversazione.ultima_corsia`,
+  la segna `Corsia.turno`, non un annuncio né un ritorno): una frase detta dal proprietario in cucina non arriva a quella voce al
   telefono. Senza prestito (modalità aperta dalla pagina, conversazione chiusa dopo `storia_inattiva_s`, o usata
   altrove) la conversazione della voce tiene i suoi turni e scade a tempo; tornano al proprietario quando parla
   da questo satellite, o al primo prestito. Se parla solo da altri satelliti non gli arrivano (limite). Una
@@ -236,7 +236,15 @@ satellite (`Studio.modalita`) con due effetti soltanto.
 modalità si è aperta (`dal`, dal turno che l'ha aperta; niente riassunto): col
 telefono sul tavolo una voce qualunque può ottenere ciò che si è detto in questi turni, non quello di prima.
 *[storico fino al 02/11: arrivava tutta la storia]* Il prezzo: una frase detta prima dell'apertura non arriva
-al modello per quel turno. Con `eventi: attivo` (non sulla DGX) la storia del proprietario viene dalla proiezione,
+al modello per quel turno. Il ritorno aspetta al più 15 s la conversazione del proprietario: se lui è in un turno su
+un altro satellite più lungo di così (il turno dura finché Calliope ha finito di parlare) il telefono resta fermo per
+quei 15 s, poi i messaggi di quella voce finiscono in mezzo al suo turno, e il segno di quel turno può non scriversi; il
+danno è l'ordine dei messaggi in memoria, le parole di quella voce restano con `conserva: False`. Solo letto nel
+codice, con due turni veri in parallelo non è provato. In `last_tools` e nel registro gli argomenti della chiamata
+di quella voce sono `{}`, come per ogni ospite (`shown = {}`, analisi S9: `_come_proprietario` passa a «familiare»
+dopo): la chiamata vera è intatta, e il banco `voce_modalita` di `prova_studio_ollama` li legge dalla storia; il
+confronto in ombra `dialogo_ombra` su un suo «sì» diretto a una proposta dello Studio ricalcola l'effetto su argomenti
+vuoti, senza cambiare nessuna decisione. Con `eventi: attivo` (non sulla DGX) la storia del proprietario viene dalla proiezione,
 e il turno di quella voce riportato lì non c'è: da rivedere se si accende. `togli`, `archivia` e `conclusa` dalla voce non riconosciuta non si fanno: chi ha il telefono
 in mano ma non è riconosciuta le fa dallo schermo. `indicazioni_togli` è già rifiutata: è del tutore, e con la
 voce non riconosciuta valgono solo i dati propri. Le altre scritture passano (`crea`, `sposta`, `tipo`, `tieni`,

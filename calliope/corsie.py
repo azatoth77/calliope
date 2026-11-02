@@ -165,6 +165,7 @@ class Corsia:
         conv = reg.occupa(conv, self)
         self._in_uso = conv
         self.conv = conv
+        conv.ultima_corsia = self.chiave     # l'ultimo turno, non un annuncio né un ritorno
         try:
             brain.conv = conv
         except AttributeError:
@@ -316,8 +317,8 @@ class RegistroConversazioni:
             return self._di(self.chiave_ospite(corsia.chiave)), "anonima"
 
     def ultima_qui(self, conv, corsia) -> bool:
-        """Nessun altro satellite ha occupato `conv` dopo questa corsia, che tiene il puntatore anche
-        dopo (None: non l'ha ancora occupata nessuno)."""
+        """L'ultimo turno in `conv` non è di un altro satellite: la corsia tiene il puntatore anche
+        dopo (None: nessun turno ancora)."""
         ultima = getattr(conv, "ultima_corsia", None)
         return ultima is None or ultima == getattr(corsia, "chiave", None)
 
@@ -358,7 +359,6 @@ class RegistroConversazioni:
             if corrente_ is not None and corrente_ is not conv:
                 conv = corrente_
             self._uso[id(conv)] = (corsia, time.monotonic())
-            conv.ultima_corsia = getattr(corsia, "chiave", None)
             return conv
 
     def libera(self, conv: Conversazione, corsia):

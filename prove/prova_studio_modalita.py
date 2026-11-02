@@ -823,6 +823,74 @@ verifica("…e il suo turno resta alla voce, non in mezzo a quella conversazione
 st.modalita.chiudi(1)
 st.close()
 
+# Le vie strette: l'annuncio al telefono e la frase in cucina durante il turno della voce
+st = PT.studio(PT.cfg_nuova("mod_annuncio.db"))
+c_, b = ciclo_vero(st)
+b.backend = Visto()
+tel = c_.corsia
+cucina = CO.Corsia("sat:2", 2, "cucina", tel.registro)
+prop_c = proprietario_del_ciclo(c_)
+turno(b, "Com'è la lezione?", "voce", None, PP.testo("Bene."))
+st.modalita.apri(1, ANDREA.id, dal=b.inizio_turno())
+c_.corsia = cucina
+proprietario_del_ciclo(c_)
+turno(b, "Il codice del cancello è CUCINASEGRETA.", "voce", None, PP.testo("Va bene."))
+cucina.fine_turno()
+c_.corsia = tel
+tel.annuncio_per(b, ANDREA.id)
+verifica("un annuncio al telefono non cambia il satellite dell'ultimo turno", prop_c.ultima_corsia == "sat:2",
+         prop_c.ultima_corsia)
+voce_c, _ok = voce_del_ciclo(c_, st)
+turno(b, "Che ore sono?", None, None, PP.testo("Non lo so."))
+fine_giro(c_)
+verifica("…e la frase detta in cucina non arriva a quella voce", "CUCINASEGRETA" not in b.backend.visti[-1],
+         b.backend.visti[-1][-300:])
+st.modalita.chiudi(1)
+st.close()
+st = PT.studio(PT.cfg_nuova("mod_sovrapposti.db"))
+c_, b = ciclo_vero(st)
+b.backend = Visto()
+tel = c_.corsia
+cucina = CO.Corsia("sat:2", 2, "cucina", tel.registro)
+prop_c = proprietario_del_ciclo(c_)
+turno(b, "Com'è la lezione?", "voce", None, PP.testo("Bene."))
+st.modalita.apri(1, ANDREA.id, dal=b.inizio_turno())
+c_.corsia.fine_turno()
+voce_c, _ok = voce_del_ciclo(c_, st)
+turno(b, "Che ore sono?", None, None, PP.testo("Non lo so."))
+# Durante il turno della voce il proprietario parla in cucina: un turno vero della corsia
+cucina.turno(types.SimpleNamespace(), "Andrea", "voce", True, uuid.uuid4().hex, {}, None, persona_id=ANDREA.id)
+prop_c.history.append({"role": "user", "content": "Il codice è CUCINASEGRETA.", "_t": time.time()})
+cucina.fine_turno()
+fine_giro(c_)
+verifica("il ritorno al telefono non cambia il satellite dell'ultimo turno: resta la cucina",
+         prop_c.ultima_corsia == "sat:2", prop_c.ultima_corsia)
+voce_c, _ok = voce_del_ciclo(c_, st)
+turno(b, "E adesso?", None, None, PP.testo("Non lo so."))
+fine_giro(c_)
+verifica("…e la frase detta in cucina non arriva a quella voce", "CUCINASEGRETA" not in b.backend.visti[-1],
+         b.backend.visti[-1][-300:])
+st.modalita.chiudi(1)
+st.close()
+# La consegna guarda dove consegna
+st = PT.studio(PT.cfg_nuova("mod_consegna.db"))
+c_, b = ciclo_vero(st)
+b.backend = Visto()
+st.modalita.apri(1, ANDREA.id)
+voce_c, _ok = voce_del_ciclo(c_, st)
+turno(b, "Una frase di quella voce.", None, None, PP.testo("Va bene."))
+fine_giro(c_)
+sc = c_.speaker_ctx
+sc.current_speaker, sc.identified_by, sc.current_level = "Andrea", "breve", "familiare"
+sc.dispositivo_studio = sc.studio_dal = None
+anon = scelta(c_, "Andrea")
+verifica("il proprietario in «breve» finisce nell'anonima: i turni di quella voce non vanno lì",
+         anon.chiave == "ospite:sat:1" and anon.history == []
+         and any(m.get("content") == "Una frase di quella voce." for m in voce_c.history),
+         (anon.chiave, anon.history))
+st.modalita.chiudi(1)
+st.close()
+
 # Il ritorno: occupa e libera, i segni che non valgono più, i «no»
 print("— il ritorno al proprietario")
 st = PT.studio(PT.cfg_nuova("mod_ritorno.db"))

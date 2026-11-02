@@ -419,7 +419,9 @@ def voce_modalita(g):
     sc.current_speaker, sc.identified_by, sc.current_level, sc.profile_level = None, None, "ospite", "ospite"
     sc.dispositivo_studio, sc.studio_dal = "Andrea", dal
     testo = re.sub(r"\s+", " ", "".join(b.stream_reply("Sì, certo.", "ospite"))).strip()
-    tools = [(t.get("nome"), t.get("argomenti"), t.get("ok")) for t in (b.last_tools or [])]
+    # Dalla storia: in `last_tools` gli argomenti di un livello ospite sono vuoti (shown = {})
+    tools = [(c.get("name"), c.get("arguments"), t.get("ok")) for m in b.history
+             for c in (m.get("tool_calls") or []) for t in (b.last_tools or [])[:1]]
     ULTIMO[:] = ["Sì, certo.", testo, tools]
     print(f"    giro {g + 1}: «{testo[:170]}» tool {tools} regole "
           f"{[r for r in b.rules_fired() if 'valore' in r or 'modalita' in r]}")

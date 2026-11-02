@@ -3096,8 +3096,12 @@ class Ciclo:
         if (voce is None or not voce.history or getattr(voce, "prestito", None)
                 or t.speaker_name != self._proprietario_satellite()):
             return
+        pid = self._persona_id(t.speaker_name)
+        # Solo nella sua: in «breve» o «conversazione» può essere finito nell'anonima del satellite
+        if self.brain.conv is not reg.di_persona(pid):
+            return
         from .studio.modalita import consegna
-        consegna(voce, self.brain.conv, self._persona_id(t.speaker_name))
+        consegna(voce, self.brain.conv, pid)
 
     def _modalita_dopo_turno(self, t):
         """Una chiamata di un tool dello Studio che la politica ha fatto passare: apre la modalità
