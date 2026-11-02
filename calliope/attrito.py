@@ -62,7 +62,7 @@ DOMANDE = frozenset({
     "valore_non_ancorata", "valore_bersaglio_dato", "valore_contenuto_dato",
     "valore_contenuto_non_detto", "valore_dati_personali", "valore_e3_chiede",
     "valore_e4_sfida", "valore_consenso_sfida", "valore_sfida_classe",
-    "valore_chiamata_diversa", "valore_non_dicibile", "valore_dalla_stanza",
+    "valore_troppe_domande", "valore_non_dicibile", "valore_dalla_stanza",
     "valore_non_ancorata_sfida"})
 RIFERIRE = frozenset({"uscita_istruzione", "uscita_contatto", "uscita_segreti", "uscita_soldi",
                       "uscita_numero_pagamento"})
@@ -188,10 +188,10 @@ def _ombra(turni: list[dict]) -> dict:
             if vera == "esegui" and nuova in CHIEDE:
                 in_piu = True
             # Esecuzione in più con un bersaglio preso dal dato: il criterio per non attivarla
-            # Dal 02/11 (#376) anche quelle eseguite col «sì» alla domanda del codice che ha detto la
-            # fonte: stanno nel totale, e a parte in `dato_confermate`
+            # Dal 02/11 (#376) anche quelle eseguite col «sì» a una domanda (`consumo`): nel totale, e
+            # a parte (`dato_confermate`) solo se la domanda ha detto la fonte quando è stata fatta
             if nuova == "esegui" and "dato" in (o.get("bersagli") or ()) and (
-                    vera != "esegui" or o.get("fonte_detta")):
+                    vera != "esegui" or o.get("consumo")):
                 out["dato_eseguite"] += 1
                 if o.get("fonte_detta"):
                     out["dato_confermate"] += 1
