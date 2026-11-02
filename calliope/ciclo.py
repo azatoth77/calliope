@@ -1318,6 +1318,7 @@ class Ciclo:
             self.ombra.chiudi_turno(None, self._turno)
         if attivo:
             self._rifletti()
+        self._modalita_riporta()
         # Il turno di prima è finito: voce di nuovo accesa, il satellite in prestito resta
         # attivo fino alla fine della finestra di follow-up (calliope/rispondi.py)
         self.awake_until = s.instradamento.dopo_turno(self.awake_until)
@@ -3069,19 +3070,33 @@ class Ciclo:
                     return
         sc.dispositivo_studio, sc.studio_dal = nome, stato.get("dal")
 
+    def _modalita_riporta(self):
+        """In cima al giro dopo, col segno della conservazione già messo sul turno: la frase della
+        voce non riconosciuta torna nella conversazione del proprietario, e il satellite riparte da
+        lì (la sua prossima frase breve la continua)."""
+        from .studio.modalita import riporta
+        conv = getattr(self.brain, "conv", None)
+        if conv is None or not getattr(conv, "prestito", None):
+            return
+        proprietario = riporta(conv)
+        if proprietario is not None:
+            self.corsia.conv = self.brain.conv = proprietario
+
     def _modalita_dopo_turno(self, t):
         """Una chiamata di un tool dello Studio che la politica ha fatto passare: apre la modalità
         (dal dispositivo personale del proprietario, la sua voce sicura o il suo dispositivo, senza
         dubbi con un minore) o la tiene viva. Mai da uno schermo di stanza, mai per uno scritto:
         lo schermo la apre da sé (`POST /api/vista`). Una chiamata rifiutata non apre niente, come
-        un'azione inventata o una con righe di un'altra voce non ancorata alla frase
-        (`apre_studio`, deciso da Brain durante il turno con `modalita.apre`)."""
+        un'azione inventata. Per aprire serve anche `apre_studio` (deciso da Brain durante il turno
+        con `modalita.apre`, regola `modalita_studio_non_apre` qui se manca); a modalità già aperta
+        basta `studio_nota`: le frasi brevi del ripasso la tengono viva."""
         m = self._modalita()
         if m is None or t.scritto is not None:
             return
-        if not any(x.get("apre_studio")
-                   and (x.get("politica_ombra") or {}).get("finale", "esegui") == "esegui"
-                   for x in getattr(self.brain, "last_tools", None) or ()):
+        chiamate = [x for x in getattr(self.brain, "last_tools", None) or ()
+                    if x.get("studio_nota")
+                    and (x.get("politica_ombra") or {}).get("finale", "esegui") == "esegui"]
+        if not chiamate:
             return
         mod, sat, stanza = m
         nome = self._proprietario_satellite()
@@ -3097,7 +3112,9 @@ class Ciclo:
                 and getattr(sc, "identified_by", None) in ("voce", "breve", "conversazione")
                 and not any(getattr(sc, k, None) for k in ("incerta", "minore_incerto",
                                                            "minore_vicino", "compagnia"))):
-            if mod.apri(sat, prof.id, stanza, dal=self.brain.inizio_turno()):
+            if not any(x.get("apre_studio") for x in chiamate):
+                self.rule("modalita_studio_non_apre")
+            elif mod.apri(sat, prof.id, stanza, dal=self.brain.inizio_turno()):
                 self.rule("modalita_studio_aperta")
 
     def _proprietario_satellite(self) -> str | None:
@@ -3543,17 +3560,29 @@ class Ciclo:
             # permessi restano da ospite
             persona_id, how = k["id"], k.get("modo") or "voce"
         proprietario = getattr(self.speaker_ctx, "dispositivo_studio", None)
+        prestito = None
         if proprietario and not t.speaker_name:
-            # La modalità studio (02/11, #376): la voce non riconosciuta dal suo telefono sta nella
-            # conversazione del proprietario, se è l'ultima di questo satellite, come la continuità
-            # (altrimenti l'anonima); i permessi restano da ospite, tranne i tool dello Studio
-            persona_id, how = self._persona_id(proprietario), "continuita"
+            # La modalità studio (02/11, #376): per quella frase come un ospite, con le sole
+            # eccezioni di studio/modalita.py. Dalla conversazione del proprietario solo se è
+            # l'ultima di questo satellite, come la continuità
+            pid = self._persona_id(proprietario)
+            reg = getattr(self.corsia, "registro", None)
+            if reg is None:
+                self.speaker_ctx.dispositivo_studio = None
+            else:
+                c = reg.di_persona(pid)
+                prestito = (c if c is not None and self.corsia.conv is c else None, pid)
+                how = "modalita"
         if not self.corsia.turno(self.brain, t.speaker_name, how,
                                  t.in_session, t.text, self.rec, t.scritto,
                                  persona_id=persona_id,
                                  impronta=t.emb_job.result() if t.emb_job is not None
                                  else None):
             return _FINE
+        if prestito is not None:
+            from .studio.modalita import presta
+            presta(self.brain.conv, prestito[0], self.speaker_ctx.studio_dal, prestito[1])
+            self.brain.sospeso_altrui = None
         # Chi ha chiesto: i suoi documenti e lavori si annunceranno da dove ha chiesto
         s.instradamento.persona(self._persona_id(t.speaker_name))
         self._frasi_turno(t)           # tono e persona delle frasi pronte (12/10)

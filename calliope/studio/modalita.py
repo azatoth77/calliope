@@ -23,12 +23,18 @@ frase detta dal dispositivo personale vale come del proprietario, **solo per i t
 sui suoi dati** (`solo_propri`, `servizio.permesso`). Vale come la zona grigia (al più familiare,
 `dispositivo.proprio`). La voce chiaramente di un altro vince. Niente con la compagnia, un
 conoscente, un minore possibile, fuori orario per un minore; un tool fuori dallo Studio resta da
-ospite. `togli`, `archivia` e `conclusa` non si eseguono (`SOLO_VOCE_SICURA`). La conversazione è quella del
-proprietario, se è l'ultima di quel satellite (come la continuità): senza, un «sì» non sa a cosa
-risponde. Per quella frase niente ricordi né avvisi del proprietario, e della storia solo i turni da
-quando la modalità si è aperta (`dal`, Brain._storia_per_modello); niente riferimenti, lavoro e
-sviluppo del proprietario, e le sue proposte fuori dallo Studio restano a lui, intatte
-(Brain._voce_modalita_studio).
+ospite. `togli`, `archivia` e `conclusa` non si eseguono (`SOLO_VOCE_SICURA`).
+
+**Per quella frase Brain lavora come per un ospite qualunque**: la sua conversazione è una da ospite
+(`corsie`, «modalita»), `_speaker_key` è None, e ciò che è legato al proprietario non c'è per
+costruzione, anche un canale nuovo. Le eccezioni sono questo elenco chiuso, in `presta` e `riporta`:
+- i turni da quando la modalità si è aperta (`dal`), copiati senza foto, allegati, righe della stanza e
+  dati fissi: senza, un «sì» non sa a cosa risponde. Il turno di quella voce torna poi nella conversazione
+  del proprietario, che lo ritrova;
+- le proposte dei tool dello Studio (`TOOL`), con i «no» dati a quelle;
+- i tool dello Studio come proprietario (`ToolRegistry._come_proprietario`);
+- la riga dei dati del turno che dice chi parla (Brain, «voce non riconosciuta, dal telefono di…»);
+- i testi dei dati non fidati (`esterni`): solo per la provenienza degli argomenti, non vanno al modello.
 """
 from __future__ import annotations
 
@@ -54,6 +60,9 @@ SOLO_VOCE_SICURA = frozenset({"togli", "archivia", "conclusa"})
 # (un vincolo di permesso, principio 10). Per i tool senza parole proprie in politica.VERBI
 _PAROLE_STUDIO = re.compile(r"(?<![a-zà-ù])(?:stud[iy]|verific|compit|ripass|interrog|cart[ae]|"
                             r"mapp|prov[ae]|eserciz|piano|argoment|librer|sched|pagin)", re.I)
+# Dei turni prestati alla voce non riconosciuta restano fuori: foto, allegati, righe della stanza, dati
+# fissi e schede del proprietario
+_DEL_PROPRIETARIO = frozenset({"_img", "_all", "_all_info", "_stanza", "_dati", "_schede", "_turno"})
 # Durante l'effetto 2 i permessi dello Studio valgono solo per i dati del proprietario (da tutore
 # non si vedono quelli del suo minore): servizio.permesso
 _SOLO_PROPRI = contextvars.ContextVar("studio_solo_propri", default=False)
@@ -72,17 +81,73 @@ def solo_propri():
         _SOLO_PROPRI.reset(tok)
 
 
-def apre(nome: str, args: dict, t) -> bool:
-    """Questa chiamata può aprire (o tenere viva) la modalità? Un tool dello Studio con un'azione
-    che esiste, anche se fallisce (`proponi_data` su una verifica che non c'è ancora); con un dato
-    letto nel turno (`t.esterni`, ogni fonte), solo se è ancorata alla frase: un comando sentito
-    dalla TV o scritto in una pagina, che il modello ha seguito, non spegne l'ascolto. `t` è il
-    `politica.Turno` della chiamata. Limite: una riga della stanza di un turno prima non è in
-    `t.esterni`."""
+def presta(voce, proprietario, dal: float, chi):
+    """Prima della frase della voce non riconosciuta: nella sua conversazione da ospite `voce`
+    entrano solo le eccezioni (qui sopra) dalla conversazione del `proprietario`, di persona `chi`.
+    Si rifà a ogni frase, dalle copie: quella di prima è già tornata con `riporta`."""
+    prima = []
+    if proprietario is not None:
+        da = next((i for i, m in enumerate(proprietario.history)
+                   if m.get("role") == "user" and float(m.get("_t") or 0.0) >= dal), None)
+        prima = [] if da is None else [
+            {**{k: v for k, v in m.items() if k not in _DEL_PROPRIETARIO}, "_prestato": True}
+            for m in proprietario.history[da:]]
+    voce.history[:] = prima
+    voce.archiviati = len(prima)
+    voce.owner = None
+    voce.prestito = {"proprietario": proprietario, "chi": chi}
+    if proprietario is None:
+        return
+    voce.last_turn_at = proprietario.last_turn_at
+    voce.turn_number = proprietario.turn_number
+    voce.esterni = list(proprietario.esterni)
+    voce.rifiutate = list(voce.rifiutate) + [
+        r for r in proprietario.rifiutate if r.get("tool") in TOOL and r not in voce.rifiutate]
+    p = proprietario.pending
+    if isinstance(p, dict) and p.get("tool") in TOOL:
+        voce.pending = {**p, "chi": None}
+        voce.prestito["proposta"] = True
+
+
+def riporta(voce):
+    """Dopo quella frase: il suo turno torna nella conversazione del proprietario e la proposta dello
+    Studio con lui, se la sua non è d'altro. Quella d'altro resta intatta. Restituisce la
+    conversazione del proprietario, o None se `voce` non ha un prestito."""
+    st = getattr(voce, "prestito", None)
+    if not st:
+        return None
+    voce.prestito = None
+    proprietario = st["proprietario"]
+    nuovi = [m for m in voce.history if not m.get("_prestato")]
+    voce.history.clear()
+    voce.archiviati = 0
+    p = voce.pending
+    if proprietario is None:
+        return None
+    proprietario.riporta_turno(nuovi)
+    proprietario.last_turn_at = voce.last_turn_at
+    q = proprietario.pending
+    if not isinstance(q, dict) or q.get("tool") in TOOL:
+        if isinstance(p, dict) and p.get("tool") in TOOL:
+            proprietario.pending = {**p, "chi": st["chi"]}
+            voce.pending = None
+        elif st.get("proposta"):
+            proprietario.pending = None     # consumata o rifiutata da quella voce
+    return proprietario
+
+
+def apre(nome: str, args: dict, t, dati_turno=()) -> bool:
+    """Questa chiamata può aprire la modalità? Un tool dello Studio con un'azione che esiste, anche
+    se fallisce (`proponi_data` su una verifica che non c'è ancora); con un dato letto in questo
+    turno (`dati_turno`, senza quelli dei tool dello Studio), solo se è ancorata alla frase: un comando
+    sentito dalla TV o scritto in una pagina, che il modello ha seguito, non spegne l'ascolto. `t` è
+    il `politica.Turno` della chiamata. Per tenerla viva basta `chiamata_nota`: «Non lo so.» è il
+    ripasso che continua. Limite: una riga della stanza di un turno prima è ancora in `t.esterni`
+    solo finché è davanti al modello."""
     from ..tools.studio import chiamata_nota
     if nome not in TOOL or not chiamata_nota(nome, args):
         return False
-    if not any(str(x or "").strip() for _fonte, x in (t.esterni or ())):
+    if not any(str(x or "").strip() for x in dati_turno):
         return True
     from ..politica import CLASSI
     from ..valore import ancorata

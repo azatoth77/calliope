@@ -181,10 +181,11 @@ satellite (`Studio.modalita`) con due effetti soltanto.
   mai fuori orario per un minore). Dalla voce (`modalita.apre`, deciso da Brain durante il turno, campo
   `apre_studio` di `last_tools`, regola `modalita_studio_non_apre` quando dice no): un'azione inventata
   (`studio boh`) non apre, una che fallisce sì (`proponi_data` su una verifica che non c'è ancora, il primo
-  turno delle 11:46); con un dato letto nel turno (`t.esterni`: righe di un'altra voce, una pagina, una
-  ricerca) apre solo se la frase parla dello Studio: un comando sentito dalla TV, che il modello ha
-  seguito, non spegne l'ascolto. Limite: una riga della stanza di un turno prima non è in `t.esterni`, e
-  la chiamata del turno dopo apre comunque.
+  turno delle 11:46); con un dato letto in questo turno (righe di un'altra voce, una pagina, una ricerca,
+  mai i dati dei tool dello Studio) apre solo se la frase parla dello Studio: un comando sentito dalla TV,
+  che il modello ha seguito, non spegne l'ascolto. A modalità già aperta per quel proprietario basta
+  un'azione che esiste (`studio_nota`): «Non lo so.» è il ripasso che continua. Limite: una riga della
+  stanza di un turno prima può non contare, e la chiamata del turno dopo apre comunque.
 - **Si chiude**: `{vista: null}`, `studio_modalita_inattivita_min` (20 minuti: più di una pagina letta
   o di un esercizio fatto in silenzio, senza lasciare il telefono sordo alla stanza per una sera; 0 =
   spenta), mezzanotte. Una pagina chiusa senza dirlo scade da sola: la pausa ha il suo `fino`.
@@ -209,23 +210,28 @@ satellite (`Studio.modalita`) con due effetti soltanto.
   `modalita_studio_voce_no`): Calliope dice di non aver riconosciuto la voce, e di farlo dallo schermo
   o di ripetere. `conclusa` perché chiude le prove aperte come «annullate» e le mappe come controllate,
   e spostare la data riapre la verifica, non la prova. `sposta` e `salta_oggi` restano, perché si possono
-  rimettere a posto. Per quella frase si spengono anche i canali legati al proprietario
-  (`Brain._voce_modalita_studio`): riferimenti dell'agenda e della casa, lavoro, sviluppo. La proposta di
-  un tool fuori dallo Studio non si mostra né si consuma, e il «no» di quella voce non la chiude (regola
-  `modalita_studio_proposta_altrui`); quelle dello Studio restano.
+  rimettere a posto.
 
-- **La conversazione**: la voce non riconosciuta sta nella conversazione del proprietario, se è l'ultima
-  di questo satellite (come la continuità), così il «Sì, certo.» sa a cosa risponde. Per quella frase al
-  modello non arrivano i ricordi del proprietario: chi parla è nessuno, quindi i ricordi non si leggono, e
-  quelli già nella storia si rifanno (`dati_turno`, la cache del prefisso si perde una volta, e una
-  volta al ritorno della sua voce). Nemmeno le righe della stanza (in pausa); i dati del turno dicono che
-  è una voce non riconosciuta. *[storico fino al 02/11: la conversazione anonima]*
+- **La conversazione** (rovesciata il 02/11 dopo la terza revisione: spegnere i canali uno a uno ne
+  lasciava sempre altri). Per quella frase Brain lavora **come per un ospite qualunque**: una conversazione
+  da ospite sua, per satellite (`corsie`, «modalita»), `_speaker_key` None. Ciò che è legato al proprietario
+  (riassunto, ricordi, avvisi, riferimenti, lavoro, sviluppo, «no», intenzioni, eventi, foto, allegati) non c'è
+  per costruzione, e un canale nuovo nasce spento. Le eccezioni sono un elenco chiuso (`modalita.presta` e
+  `riporta`): i turni dall'apertura, in copia; le proposte dei tool dello Studio, con i «no» a quelle; i tool
+  dello Studio come proprietario; la riga dei dati del turno su chi parla; i testi dei dati non fidati per
+  la provenienza, che non vanno al modello. A turno finito il turno di quella voce torna nella conversazione del
+  proprietario, con la proposta dello Studio, e il satellite riparte da lì. Una proposta d'altro del
+  proprietario non si vede, non si consuma e non invecchia a turni (il suo limite di tempo resta), e il
+  «no» o il «lascia stare» di quella voce non toccano niente di suo. `prova_studio_modalita` confronta ciò che
+  riceve il modello con ciò che riceve un ospite. *[storico fino al 02/11: stava nella conversazione del
+  proprietario, con i canali spenti a uno a uno]*
 
 **Limiti.** Della storia del proprietario, per quella frase, al modello arrivano solo i turni da quando la
-modalità si è aperta (`dal`, `Brain._storia_per_modello`, dal turno che l'ha aperta; niente riassunto): col
+modalità si è aperta (`dal`, dal turno che l'ha aperta; niente riassunto): col
 telefono sul tavolo una voce qualunque può ottenere ciò che si è detto in questi turni, non quello di prima.
 *[storico fino al 02/11: arrivava tutta la storia]* Il prezzo: una frase detta prima dell'apertura non arriva
-al modello per quel turno. `togli`, `archivia` e `conclusa` dalla voce non riconosciuta non si fanno: chi ha il telefono
+al modello per quel turno. Con `eventi: attivo` (non sulla DGX) la storia del proprietario viene dalla proiezione,
+e il turno di quella voce riportato lì non c'è: da rivedere se si accende. `togli`, `archivia` e `conclusa` dalla voce non riconosciuta non si fanno: chi ha il telefono
 in mano ma non è riconosciuta le fa dallo schermo. `indicazioni_togli` è già rifiutata: è del tutore, e con la
 voce non riconosciuta valgono solo i dati propri. Le altre scritture passano (`crea`, `sposta`, `tipo`, `tieni`,
 `salta_oggi`, `fatto`, `riprova`, gli esiti di carte e interrogazioni). La frase entra nella conversazione in memoria del proprietario, ma **non nei suoi

@@ -3941,44 +3941,33 @@ class Brain:
         return sum(p.caratteri for p in getattr(self._c(), "stanza", None) or ())
 
     # ─────────── i dati che cambiano di rado nella storia (16/10, issue #95, dati_turno.py) ───────────
-    def _voce_modalita_studio(self) -> bool:
-        """La frase è della voce non riconosciuta, dal telefono con la modalità studio aperta
-        (02/11, #376). `_speaker_key` dà il proprietario, perché sta nella sua conversazione: tutto
-        ciò che è legato a quella chiave qui si spegne (storia, riassunto, riferimenti, lavoro,
-        sviluppo, proposte fuori dallo Studio)."""
-        return bool(getattr(getattr(self.tool_ctx, "speaker_ctx", None), "dispositivo_studio", None))
-
-    def _storia_per_modello(self, upto: int) -> list[dict]:
-        """La storia prima del turno come può arrivare al modello: tutta, ma con la voce non
-        riconosciuta della modalità studio (`dispositivo_studio`) solo dalla frase del turno che
-        l'ha aperta (`studio_dal`): col telefono sul tavolo, una voce qualunque non deve ottenere ciò
-        che il proprietario ha detto o sentito prima. Decisione di chi amministra (02/11, #376)."""
-        prima = self.history[:upto]
-        if not self._voce_modalita_studio():
-            return prima
-        dal = getattr(getattr(self.tool_ctx, "speaker_ctx", None), "studio_dal", None)
-        if dal is None:
-            return []
-        return next((prima[i:] for i, m in enumerate(prima)
-                     if m.get("role") == "user" and float(m.get("_t") or 0.0) >= dal), [])
-
     def inizio_turno(self) -> float | None:
         """L'ora dell'ultima frase della persona nella storia."""
         return next((m.get("_t") for m in reversed(self.history) if m.get("role") == "user"), None)
 
-    def _apre_studio(self, nome: str, args: dict) -> bool:
-        """Questa chiamata può aprire la modalità studio? Qui, perché le righe della stanza del
-        turno a fine turno non ci sono più (`Ciclo._modalita_dopo_turno`)."""
+    def _segni_studio(self, nome: str, args: dict) -> dict:
+        """Per `Ciclo._modalita_dopo_turno`: {"studio_nota"} se la chiamata è un'azione vera di un
+        tool dello Studio, {"apre_studio"} se può anche aprire la modalità. Qui, perché a fine turno
+        le righe della stanza non ci sono più e gli argomenti del registro sono coperti."""
         from .studio import modalita
-        if nome not in modalita.TOOL:
-            return False
+        from .tools.studio import chiamata_nota
+        if nome not in modalita.TOOL or not chiamata_nota(nome, args):
+            return {}
+        out = {"studio_nota": True}
         try:
-            si = modalita.apre(nome, args, self._turno_politica())
+            t = self._turno_politica()
+            inizio = next((i for i in range(len(self.history) - 1, -1, -1)
+                           if self.history[i].get("role") == "user"), 0)
+            # I dati di questo turno, senza quelli dei tool dello Studio stessi
+            dati = [x for f, x in (t.esterni or ()) if f == "stanza"] + [
+                x for _f, x in provenienza.testi_esterni(
+                    [m for m in self.history[inizio:]
+                     if not (m.get("role") == "tool" and m.get("name") in modalita.TOOL)])]
+            if modalita.apre(nome, args, t, dati):
+                out["apre_studio"] = True
         except Exception:  # noqa: BLE001 — nel dubbio non apre
-            si = False
-        if not si:
-            self._rule("modalita_studio_non_apre")
-        return si
+            pass
+        return out
 
     def _con_ancorati(self, msgs: list[dict], conv=None) -> list[dict]:
         """`msgs` (la storia prima del turno in corso) con le righe della stanza e i dati fissi dei
@@ -4276,14 +4265,6 @@ class Brain:
                 pass
         if not p:
             return None
-        if self._voce_modalita_studio():
-            # La proposta di un tool fuori dallo Studio resta al proprietario: non si mostra e il
-            # «no» di quella voce non la chiude (senza il tool del turno, nemmeno il blocco dello
-            # stato). Quelle dello Studio servono al suo «Sì, certo.»
-            from .studio.modalita import TOOL
-            if p.get("tool") not in TOOL:
-                self._rule("modalita_studio_proposta_altrui")
-                return None
         # Valida per più turni della stessa persona (04/10, calliope/conferme.py): un turno
         # in mezzo («Scusa, io sono chi amministra») non la consuma più. Si toglie quando il
         # tool proposto riesce, quando ne arriva un'altra, scade o cambia la conversazione
@@ -4387,7 +4368,7 @@ class Brain:
     def _take_agenda_reference(self) -> str | None:
         """Come _take_reference, per l'agenda: non nella stessa risposta, finché non scade."""
         r = getattr(self, "agenda_reference", None)
-        if not r or not self._net("riferimento_agenda") or self._voce_modalita_studio():
+        if not r or not self._net("riferimento_agenda"):
             return None
         if time.monotonic() > r["scade"]:
             self.agenda_reference = None
@@ -4425,7 +4406,7 @@ class Brain:
         """Le ricerche (RICERCA_TOOLS) negli ultimi `turni_max` turni della storia fino a `upto`
         (escluso), dalla più recente, una per argomento e fonte, al più RICERCA_ELENCO_MAX:
         [{"tool", "tipo", "domanda", "turni"}] (turni: 0 = nel turno appena prima)."""
-        hist = self._storia_per_modello(len(self.history) if upto is None else upto)
+        hist = self.history if upto is None else self.history[:upto]
         turni, out, visti = 0, [], set()
         for m in reversed(hist):
             role = m.get("role")
@@ -4516,7 +4497,7 @@ class Brain:
     def _lavoro_turno(self) -> tuple[str, dict] | None:
         """(LAVORO_MSG, {"lavoro", "titolo", "avvisato", "parole"}) per il lavoro finito di chi
         parla di cui si è appena parlato, o None."""
-        if not self._net("riferimento_lavoro") or self._voce_modalita_studio():
+        if not self._net("riferimento_lavoro"):
             return None
         svc = getattr(self.tool_ctx, "lavori", None)
         if svc is None or self.tools.get("lavoro_risultato") is None:
@@ -4612,7 +4593,7 @@ class Brain:
 
     def _sviluppo_turno(self, testo: str) -> str | None:
         """I dati del turno della modalità sviluppo per chi parla, o None."""
-        if not self._net("modalita_sviluppo") or self._voce_modalita_studio():
+        if not self._net("modalita_sviluppo"):
             return None
         svs = self._sviluppi()
         chi = self._speaker_key()
@@ -4770,7 +4751,7 @@ class Brain:
         """Il riferimento dei turni prima, se è ancora valido (non si consuma: vale finché
         non ne arriva un altro o scade)."""
         r = getattr(self, "reference", None)
-        if not self._net("riferimento_casa") or self._voce_modalita_studio():
+        if not self._net("riferimento_casa"):
             return None
         if not r or time.monotonic() > r["scade"]:
             self.reference = None
@@ -4793,10 +4774,7 @@ class Brain:
             k = getattr(sc, "conoscente", None)
             if isinstance(k, dict) and k.get("id"):
                 return str(k["id"])
-            # La modalità studio (02/11, #376): la conversazione è del proprietario
-            name = getattr(sc, "dispositivo_studio", None)
-            if not name:
-                return None
+            return None
         speakers = getattr(ctx, "speakers", None)
         try:
             prof = speakers.get(name) if speakers is not None else None
@@ -5411,21 +5389,18 @@ class Brain:
         tail: list[dict] = []    # spinta del solo giro successivo, in fondo (vedi sotto)
 
         # Il riassunto dei turni compressi sta subito dopo il prompt di sistema (05/10)
-        # Con la voce non riconosciuta dal telefono della modalità studio (02/11, #376): niente
-        # riassunto, e solo i turni da quando la modalità si è aperta
-        summary = [] if self._voce_modalita_studio() else self._riassunto_msgs()
-        storia_prima = self._storia_per_modello(start)
+        summary = self._riassunto_msgs()
 
         def with_memory(prefix):
             return self._con_allegati(self._con_immagini(
-                prefix + summary + self._con_ancorati(storia_prima) + stanza_ora
+                prefix + summary + self._con_ancorati(self.history[:start]) + stanza_ora
                 + dati_ora + memory + self.history[start:] + tail,
                 self.history[start] if user_text else None))
 
         # Per la guardia della cache (_misura_prefisso): i messaggi fissi (sistema e riassunto)
         # e dove comincia il turno precedente; prima di lì i turni sono definitivi (con le
         # righe della stanza e i dati fissi della storia al loro posto)
-        utenti_prima = [i for i, m in enumerate(self._con_ancorati(storia_prima))
+        utenti_prima = [i for i, m in enumerate(self._con_ancorati(self.history[:start]))
                         if m.get("role") == "user"]
         self._fissi_cache = len(system) + len(summary)
         self._confine_cache = self._fissi_cache + (utenti_prima[-1] if utenti_prima else 0)
@@ -7273,9 +7248,8 @@ class Brain:
                                 # La decisione della politica per valore accanto a quella vera
                                 # (08/10, fase 3, in ombra): nomi ed etichette, nessun valore
                                 **({"politica_ombra": ombra} if ombra else {}),
-                                # Può aprire la modalità studio (02/11, #376)
-                                **({"apre_studio": True}
-                                   if self._apre_studio(call["name"], args) else {}),
+                                # La modalità studio (02/11, #376): la tiene viva, può aprirla
+                                **self._segni_studio(call["name"], args),
                                 # Il nome inventato dal modello (12/10): corretto da Brain
                                 # (`nome_inventato`, quello scritto) o senza un tool vicino
                                 # (`sconosciuto`); per la metrica della scelta dei tool

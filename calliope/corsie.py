@@ -283,8 +283,13 @@ class RegistroConversazioni:
             persona riconosciuta dalla voce da poco su **questo** satellite): la sua
             conversazione se è l'ultima di questo satellite o se non ce n'è una (nuova, con la
             ripresa); se nel frattempo l'ha usata un altro satellite, anonima;
+          - la voce non riconosciuta con la modalità studio («modalita», 02/11, #376): una
+            conversazione da ospite sua, per satellite, con le eccezioni in prestito
+            (studio/modalita.py), mai quella di un ospite vero;
           - ospite o voce incerta: la conversazione anonima di questo satellite."""
         with self._cond:
+            if how == "modalita":
+                return self._di(self.chiave_ospite(corsia.chiave) + ":studio"), "modalita"
             if persona_id and how == "voce":
                 chiave = self.chiave_persona(persona_id)
                 nuova = chiave not in self._conv
