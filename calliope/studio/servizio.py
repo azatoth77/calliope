@@ -2416,7 +2416,8 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
              "carte": "le carte", "mappa": "la mappa concettuale",
              "prove": "le prove (la verifica finta e le domande)",
              "tutore": "la vista del tutore",
-             "libreria": "una scheda della libreria (studio, azione libreria)"}
+             "libreria": "una scheda della libreria (studio, azione libreria)",
+             "esercizi": "gli esercizi guidati (studio_esercizio)"}
 
     def riga_vista(self, chi, vista: dict | None) -> str:
         """La riga per i dati del turno quando una pagina dello Studio è aperta sullo schermo

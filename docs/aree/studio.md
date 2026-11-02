@@ -194,8 +194,16 @@ satellite (`Studio.modalita`) con due effetti soltanto.
   tutore. La voce di un altro è un altro profilo come migliore sopra `speaker_continuita_soglia`
   (0,36).
 
-**Limiti.** Con la voce non riconosciuta la conversazione è quella anonima: uno studio che continua senza
-il contesto di prima. Il telefono di un adulto in mano a un minore mai sentito lì, con una voce lontana
+- **La conversazione**: la voce non riconosciuta sta nella conversazione del proprietario, se è l'ultima
+  di questo satellite (come la continuità), così il «Sì, certo.» sa a cosa risponde. Per quella frase al
+  modello non arrivano i ricordi del proprietario: chi parla è nessuno, quindi i ricordi non si leggono, e
+  quelli già nella storia si rifanno (`dati_turno`, la cache del prefisso si perde una volta, e una
+  volta al ritorno della sua voce). Nemmeno le righe della stanza (in pausa); i dati del turno dicono che
+  è una voce non riconosciuta. *[storico fino al 02/11: la conversazione anonima]*
+
+**Limiti.** **La storia della conversazione del proprietario arriva al modello** anche per quella frase:
+ciò che lei ha detto o sentito nei turni prima può tornare a una voce non riconosciuta sul suo telefono. E la
+frase entra nella sua conversazione e nel suo archivio. Il telefono di un adulto in mano a un minore mai sentito lì, con una voce lontana
 da tutti i profili, vale come l'adulto per i tool dello Studio: è un limite dell'identità, come
 nella decisione. La frase media a 0,375 (la voce della issue) non diventa riconosciuta fuori dalla
 modalità: per tutto il resto resta ospite. Le misure vere sono da fare.

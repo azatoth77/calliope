@@ -470,20 +470,108 @@ verifica("turno 3, «Sì, grazie.»: con la stanza in pausa la verifica è creat
 st.modalita.chiudi(1, stz4)
 verifica("uscita dalla sezione: la stanza riprende", stz4.accesa_qui(1))
 st.close()
-# Il turno 5 da solo: la voce non riconosciuta, con la modalità aperta
+# La voce non riconosciuta nella conversazione del proprietario: la decisione del ciclo
+print("— la voce non riconosciuta sta nella conversazione del proprietario")
+
+
+def conv_di(c_, nome_voce=None):
+    """Con che persona e come il ciclo sceglie la conversazione del turno."""
+    visto = {}
+
+    class C_:
+        def turno(self, brain, nome, how, in_session, testo, rec, scritto, persona_id=None, impronta=None):
+            visto.update(persona=persona_id, come=how, nome=nome)
+            return True
+
+    c_.corsia = C_()
+    c_.s.cfg.debug_audio_dir = None
+    c_.s.instradamento = types.SimpleNamespace(persona=lambda p: None)
+    c_._chiedi_chi_parla = lambda t_: False
+    c_._frasi_turno = lambda t_: None
+    c_._persona_id = lambda n: {"Andrea": ANDREA.id, "Bruno": "b1"}.get(n)
+    c_.brain = None
+    c_._conversazione_del_turno(types.SimpleNamespace(
+        speaker_name=nome_voce, continuita=False, proprietario=False, in_session=True, text="Sì, certo.",
+        scritto=None, emb_job=None, audio=None))
+    return visto
+
+
+c_ = ciclo_mod()
+vale(c_)
+verifica("il ciclo: la conversazione del proprietario, come la continuità", conv_di(c_)
+         == {"persona": ANDREA.id, "come": "continuita", "nome": None}, conv_di(c_))
+c_ = ciclo_mod()
+c_.rec["voce"] = {"migliore": "Bruno", "punteggio": 0.44}
+vale(c_)
+verifica("contrario: la voce chiara di un altro: l'anonima", conv_di(c_)["persona"] is None, conv_di(c_))
+c_ = ciclo_mod(aperta=False)
+vale(c_)
+verifica("contrario: fuori dalla modalità: l'anonima", conv_di(c_)["persona"] is None, conv_di(c_))
+
+
+class Visto(PP.Copione):
+    """Il modello finto che tiene ciò che gli arriva."""
+    def __init__(self):
+        super().__init__()
+        self.visti = []
+
+    def stream(self, messages, tools):
+        self.visti.append(" ".join(str(m.get("content") or "") for m in messages))
+        yield from super().stream(messages, tools)
+
+
+class Memoria:
+    def facts(self, pid):
+        return ["la password del garage è 4821"] if pid == ANDREA.id else []
+
+    def __getattr__(self, n):
+        return lambda *a, **k: []
+
+
+# Il giro vero: la domanda in storia, il «Sì, certo.» a 0,375 e la verifica creata
 st = PT.studio(PT.cfg_nuova("mod_giro5.db"))
-b = brain_di(st, None)
+b = brain_di(st, ANDREA)
+b.backend = Visto()
+b.tool_ctx.memory = Memoria()
 sc = b.tool_ctx.speaker_ctx
-sc.dispositivo_studio = "Andrea"
+DOMANDA = "Non ho ancora una verifica di fisica: vuoi che la crei per venerdì?"
+r0 = turno(b, "Venerdì ho la verifica di fisica.", "voce", None, PP.testo(DOMANDA))
+verifica("(il controllo di questa prova: alla voce riconosciuta i ricordi arrivano)",
+         "4821" in b.backend.visti[-1], b.backend.visti[-1][-300:])
+storia_prima = len(b.history)
+sc.current_speaker, sc.dispositivo_studio, sc.current_level = None, "Andrea", "ospite"
 r5 = turno(b, "Sì, certo.", None, None, PP.chiama("studio", {"azione": "crea", "data": "venerdì",
-                                                            "materia": "fisica"}),
-           PP.testo("Fatto."))
-verifica("turno 5, «Sì, certo.» a 0,375: con la modalità aperta la verifica è del proprietario",
-         materie(st) == ["fisica"] and "modalita_studio_voce" in b.rules_fired(), (r5, b.rules_fired()))
-r6 = turno(b, "Che tempo fa?", None, None, PP.chiama("ricorda", {"fatto": "domani piove"}),
-           PP.testo("Va bene."))
-verifica("contrario: nella stessa frase un tool fuori dallo Studio resta da ospite",
-         not b.last_tools[-1]["ok"], (r6, b.last_tools))
+                                                            "materia": "fisica"}), PP.testo("Fatto."))
+visto = b.backend.visti[1]
+verifica("il «Sì, certo.» a 0,375: la stessa conversazione, con la domanda in storia",
+         DOMANDA in visto and len(b.history) > storia_prima, visto[-400:])
+verifica("…e la verifica è creata, del proprietario, per la sola chiamata",
+         materie(st) == ["fisica"] and "modalita_studio_voce" in b.rules_fired()
+         and st.dati.tutti("SELECT persona FROM studio_verifiche")[0]["persona"] == ANDREA.id
+         and sc.current_speaker is None, (r5, b.rules_fired()))
+verifica("…i ricordi del proprietario non arrivano al modello per quella frase, e i dati del turno "
+         "dicono che è una voce non riconosciuta", "4821" not in visto and "voce non riconosciuta" in visto,
+         visto[-400:])
+r6 = turno(b, "Che tempo fa?", None, None, PP.chiama("ricorda", {"fatto": "domani piove"}), PP.testo("Va bene."))
+verifica("contrario: un tool fuori dallo Studio resta da ospite", not b.last_tools[-1]["ok"], (r6, b.last_tools))
+sc.current_speaker, sc.dispositivo_studio, sc.current_level = "Andrea", None, "familiare"
+r7 = turno(b, "Com'è la password del garage?", "voce", None, PP.testo("Ok."))
+verifica("alla voce riconosciuta, dopo, i ricordi tornano e la conversazione è la stessa",
+         "4821" in b.backend.visti[-1] and DOMANDA in b.backend.visti[-1], b.backend.visti[-1][-200:])
+st.close()
+# I dati fissi già in storia (ricordi una volta sola, #95)
+st = PT.studio(PT.cfg_nuova("mod_giro6.db"))
+st.cfg.dati_stabili_in_storia = True
+b = brain_di(st, ANDREA)
+b.backend = Visto()
+b.tool_ctx.memory = Memoria()
+sc = b.tool_ctx.speaker_ctx
+turno(b, "Venerdì ho la verifica di fisica.", "voce", None, PP.testo(DOMANDA))
+primo = b.backend.visti[-1]
+sc.current_speaker, sc.dispositivo_studio, sc.current_level = None, "Andrea", "ospite"
+turno(b, "Sì, certo.", None, None, PP.testo("Ok."))
+verifica("anche i ricordi già nella storia (dati fissi) escono per quella frase", "4821" in primo
+         and "4821" not in b.backend.visti[-1], b.backend.visti[-1][-300:])
 st.close()
 
 print("\n" + ("TUTTO OK" if not errori else f"{errori} ERRORI"))

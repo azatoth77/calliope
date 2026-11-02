@@ -3538,6 +3538,12 @@ class Ciclo:
             # per conoscente come per le persone di casa (va nell'archivio su disco); i
             # permessi restano da ospite
             persona_id, how = k["id"], k.get("modo") or "voce"
+        proprietario = getattr(self.speaker_ctx, "dispositivo_studio", None)
+        if proprietario and not t.speaker_name:
+            # La modalità studio (02/11, #376): la voce non riconosciuta dal suo telefono sta nella
+            # conversazione del proprietario, se è l'ultima di questo satellite, come la continuità
+            # (altrimenti l'anonima); i permessi restano da ospite, tranne i tool dello Studio
+            persona_id, how = self._persona_id(proprietario), "continuita"
         if not self.corsia.turno(self.brain, t.speaker_name, how,
                                  t.in_session, t.text, self.rec, t.scritto,
                                  persona_id=persona_id,

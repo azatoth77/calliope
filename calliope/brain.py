@@ -4746,7 +4746,10 @@ class Brain:
             k = getattr(sc, "conoscente", None)
             if isinstance(k, dict) and k.get("id"):
                 return str(k["id"])
-            return None
+            # La modalità studio (02/11, #376): la conversazione è del proprietario
+            name = getattr(sc, "dispositivo_studio", None)
+            if not name:
+                return None
         speakers = getattr(ctx, "speakers", None)
         try:
             prof = speakers.get(name) if speakers is not None else None
@@ -6323,6 +6326,13 @@ class Brain:
                 who += " " + VOCE_RICONOSCIUTA_MSG.format(nome=name)
                 if "voce_ora_riconosciuta" not in (getattr(self, "last_rules", None) or ()):
                     self._rule("voce_ora_riconosciuta")
+        elif getattr(sctx, "dispositivo_studio", None):
+            # La modalità studio (02/11, #376): un dato su chi parla, i permessi li decide il codice
+            prop = sctx.dispositivo_studio
+            young = self._minor_note(prop)
+            who = (f"persona: voce non riconosciuta, dal telefono di {prop} con lo Studio aperto: per "
+                   f"lo Studio vale {prop}, per tutto il resto è un ospite"
+                   + (f"; {young}" if young else "") + ".")
         elif isinstance(getattr(sctx, "conoscente", None), dict) and sctx.conoscente.get("nome"):
             # Un conoscente (14/10, decisione 0030, rifiniture): il nome come dato su chi parla,
             # ma resta un ospite (i permessi li decide il codice, non questa riga)

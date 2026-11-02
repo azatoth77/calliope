@@ -19,8 +19,9 @@ del ripasso non si toccano. Una pausa in memoria come le altre: dopo un riavvio 
 frase detta dal dispositivo personale vale come del proprietario, **solo per i tool dello Studio e
 sui suoi dati** (`solo_propri`, `servizio.permesso`). Vale come la zona grigia (al più familiare,
 `dispositivo.proprio`). La voce chiaramente di un altro vince. Niente con la compagnia, un
-conoscente, un minore possibile; un tool fuori dallo Studio resta da ospite. La conversazione resta
-quella anonima dell'ospite: la storia del proprietario non si apre a una voce non riconosciuta.
+conoscente, un minore possibile; un tool fuori dallo Studio resta da ospite. La conversazione è
+quella del proprietario, se è l'ultima di quel satellite (come la continuità): senza, un «sì» non sa a
+cosa risponde. Per quella frase niente ricordi né avvisi del proprietario; la storia sì.
 """
 from __future__ import annotations
 

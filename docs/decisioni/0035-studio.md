@@ -947,9 +947,9 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
       prudenza con un minore possibile), frase di sfida, blocco con una prova aperta, «ESEGUITE con un
       bersaglio dal dato» a 0. Mai per un ospite su un dispositivo non suo, con la compagnia o un
       conoscente; un tool fuori dallo Studio resta da ospite.
-    - **La conversazione resta quella anonima** dell'ospite: la storia del proprietario non si apre a
-      una voce non riconosciuta. Quindi un «sì» da solo, con la voce non riconosciuta, non ha il
-      contesto della domanda di prima.
+    - **La conversazione è quella del proprietario**, se è l'ultima di quel satellite: senza, un «sì» non
+      saprebbe a cosa risponde. Per quella frase i ricordi e gli avvisi del proprietario non arrivano al
+      modello; la storia della conversazione sì.
 
 ## Conseguenze
 

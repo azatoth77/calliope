@@ -26,8 +26,10 @@ VISTA_S = 600.0
 # «tutore» (31/10, passo 10, #250): la vista del tutore su una verifica del suo minore
 # «libreria» (31/10, #297): una scheda della libreria aperta su una verifica (quale scheda no: la
 # vista porta solo numeri)
+# «esercizi» (02/11, #376): gli esercizi guidati (#278). La pagina la mandava dal 31/10 e il server
+# rispondeva 400: niente riga nei dati del turno
 TIPI = ("home", "piano", "argomenti", "pagine", "pagina", "sessione",
-        "carte", "mappa", "prove", "tutore", "libreria")
+        "carte", "mappa", "prove", "tutore", "libreria", "esercizi")
 
 
 def valida(dati) -> dict | None:
