@@ -532,9 +532,23 @@ def _data_risolta(valore, ctx=None):
     return next(iter(dd)) if len(dd) == 1 else None
 
 
+_GIORNO = re.compile(r"(?<![a-zà-ù])(luned|marted|mercoled|gioved|venerd|sabato|domenica)", re.I)
+_SOLO_GIORNO = re.compile(r"\W*(?:il\s+|la\s+|questo\s+|questa\s+|prossim[oa]\s+)*"
+                          r"[a-zà-ù]+(?:\s+prossim[oa])?\W*", re.I)
+
+
+def _giorno_con_altro(v) -> bool:
+    """Il nome di un giorno con altre parole («venerdì di dicembre», «il primo venerdì»): la lettura
+    della data guarda solo il giorno, quindi non è il «venerdì» di questa settimana."""
+    return bool(_GIORNO.search(str(v))) and not _SOLO_GIORNO.fullmatch(str(v))
+
+
 def _stessa_data(a, b, ctx=None) -> bool:
     """Due valori sono la stessa data, confrontata risolta («20 novembre» e «2026-11-20»: una
-    delle date possibili, se l'altro valore ne ha una sola); altrimenti il confronto esatto."""
+    delle date possibili, se l'altro valore ne ha una sola); altrimenti il confronto esatto. Un
+    giorno con altre parole si confronta esatto."""
+    if _giorno_con_altro(a) or _giorno_con_altro(b):
+        return _esatto(a) == _esatto(b)
     da, db = _date_possibili(a, ctx), _date_possibili(b, ctx)
     # La lettura di «venerdì 13» non guarda il numero: i numeri detti devono esserci anche nell'altra
     na, nb = _gettoni_numeri(a), _gettoni_numeri(b)

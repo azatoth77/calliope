@@ -209,8 +209,9 @@ def _cambio(a: dict, k: str | None) -> bool:
 
 
 def _verbo_cambia(a: dict, altrimenti: str) -> str:
-    """Il verbo della domanda per `cambia` (02/11, #376): la frase dice che cosa fa la chiamata."""
-    return {"togli": "tolga", "aggiungi": "aggiunga tempo a", "imposta": "sposti"}.get(
+    """Il verbo della domanda per `cambia` (02/11, #376): la frase dice che cosa fa la chiamata. Il
+    tool sposta la voce (`builtin._sposta`): «togli» la anticipa, «aggiungi» la rimanda."""
+    return {"togli": "anticipi", "aggiungi": "rimandi", "imposta": "sposti"}.get(
         _s(a, "cambia").lower(), altrimenti)
 
 
