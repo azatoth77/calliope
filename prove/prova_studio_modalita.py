@@ -99,6 +99,16 @@ md.apri(1, "l1", stz)
 verifica("aperta: la stanza in pausa su quel satellite, motivo «studio»",
          stz.stato_pausa(1)["motivo"] == MOTIVO and not stz.accesa_qui(1))
 verifica("contrario: l'altro satellite resta acceso", stz.accesa_qui(2) and md.di(2, stz) is None)
+segni = {}
+stz.schermi = types.SimpleNamespace(stanza_segno=lambda stanza, src, testo: segni.__setitem__(src, testo))
+stz._segno(1)
+stz._segno(2)
+verifica("sugli schermi «stanza in pausa» solo per quel satellite",
+         "stanza in pausa" in str(segni.get("sat:1")) and segni.get("sat:2") == "Ascolto la stanza", segni)
+s1, s2 = stz.stato_per({"id": 1, "nome": "telefono"}), stz.stato_per({"id": 2, "nome": "cucina"})
+verifica("al satellite lo stato dice di non mandare la stanza; all'altro sì",
+         not s1.get("attiva") and s2.get("attiva"), (s1, s2))
+stz.schermi = None
 verifica("niente righe nel turno da lì: il blocco non c'è",
          SC.costruisci(stz, 1, cfg, time.time()) is None)
 verifica("contrario: sull'altro satellite le righe ci sono",
