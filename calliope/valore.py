@@ -549,6 +549,11 @@ def _stessa_data(a, b, ctx=None) -> bool:
     giorno con altre parole si confronta esatto."""
     if _giorno_con_altro(a) or _giorno_con_altro(b):
         return _esatto(a) == _esatto(b)
+    # I numeri detti devono esserci anche nell'altro: «20 novembre o 21 novembre» non è il 20
+    # (revisione della PR #377: tolto con c1edccd7 perché sembrava superfluo, non lo era)
+    na, nb = _gettoni_numeri(a), _gettoni_numeri(b)
+    if not (nb <= na if forma_data(a) else na <= nb if forma_data(b) else na == nb):
+        return False
     da, db = _date_possibili(a, ctx), _date_possibili(b, ctx)
     if da and db and (len(da) == 1 or len(db) == 1):
         return bool(da & db)

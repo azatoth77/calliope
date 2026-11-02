@@ -2229,3 +2229,7 @@ la frase non afferma niente, ma la persona deve ripeterlo con parole sue.
 - La riscrittura senza stanza è da misurare sulla DGX: non si sa quanto spesso gemma4 riscrive una
   chiamata. «accendi luce salotto» per «accendi la luce del salotto» è un'altra chiamata (l'articolo
   conta solo in testa): costa una domanda, al più due.
+- Una data con parole intorno che non sono un giorno: «dopo il 20 novembre» richiamato con `2026-11-20` vale
+  la stessa chiamata, e al «sì» si esegue il 20. La domanda dopo dice la data vera e si può spostare.
+  «20 novembre o 21 novembre» e «20-21 novembre» invece danno una domanda nuova (i numeri detti devono
+  esserci anche nell'altro valore).
