@@ -2130,6 +2130,14 @@ class Config:
     # il piano si calcola, ma niente arriva al modello né agli schermi: solo le misure nel
     # registro; «attivo» = per il tool e le pagine dello Studio (passo 4.5, non ancora fatti)
     studio_modo: str = "spento"
+    # La modalità studio (02/11, #376, studio/modalita.py): stato in memoria per satellite, dalla
+    # prima chiamata di un tool dello Studio dal dispositivo personale del proprietario o dalla
+    # sezione Studio aperta su quello schermo, fino all'uscita dalla sezione, a mezzanotte o a
+    # questi minuti senza attività dello Studio. Due effetti soltanto: la stanza in pausa su quel
+    # satellite, e la voce non riconosciuta da lì che vale il proprietario per i soli tool dello
+    # Studio. 20 minuti: più di una pagina letta o di un esercizio fatto in silenzio, senza
+    # lasciare il telefono sordo alla stanza per una sera dopo che ha smesso. 0 = spenta
+    studio_modalita_inattivita_min: float = 20.0
     # Minuti di studio al giorno per una verifica (il tutore li ritocca per verifica); con più
     # verifiche aperte negli stessi giorni si dividono
     studio_minuti_giorno: int = 45
@@ -3621,7 +3629,7 @@ SEZIONI: dict[str, list[str]] = {
                "guardiano_timeout_s", "guardiano_se_guasto", "guardiano_keep_alive",
                "guardiano_num_ctx", "guardiano_ospiti", "guardiano_pericolo",
                "guardiano_pericolo_modello", "guardiano_pericolo_url"],
-    "studio": ["studio_modo", "studio_minuti_giorno", "studio_minuti_pagina", "studio_fascia",
+    "studio": ["studio_modo", "studio_modalita_inattivita_min", "studio_minuti_giorno", "studio_minuti_pagina", "studio_fascia",
                "studio_giorni_senza_piano", "studio_obiettivo", "studio_tenuta_giorni",
                "studio_cartella", "studio_pagina_lato", "studio_pagina_max_mb",
                "studio_pdf_max_mb", "studio_pdf_max_pagine", "studio_pagine_max",

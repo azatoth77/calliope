@@ -326,6 +326,35 @@ class ToolRegistry:
         """Gli schemi di tutti i tool, senza filtro: servono a riconoscerne i nomi."""
         return [t.schema() for t in self._tools.values()]
 
+    def _come_proprietario(self, name, arguments, ctx, level) -> str | None:
+        """La chiamata di un tool dello Studio con la voce non riconosciuta dal dispositivo
+        personale, con la modalità studio aperta (studio/modalita.py, effetto 2): per questa sola
+        chiamata chi parla è il proprietario, come nella zona grigia (`dispositivo.proprio`, al più
+        familiare), e sui soli suoi dati (`per` di un altro no). Tutto il resto è la chiamata di
+        sempre: permessi, minori, politica, prova aperta. None: non vale, resta l'ospite."""
+        from ..studio.modalita import TOOL, solo_propri
+        sc = ctx.speaker_ctx
+        nome = sc.dispositivo_studio
+        if name not in TOOL or level != "ospite":
+            return None
+        per = str((arguments or {}).get("per") or "").strip()
+        if per and per.lower() != str(nome).lower():
+            return None
+        speakers = getattr(ctx, "speakers", None)
+        if speakers is None or speakers.get(nome) is None:
+            return None
+        prima = {k: getattr(sc, k, None) for k in ("current_speaker", "identified_by",
+                                                   "from_session", "dispositivo_studio")}
+        try:
+            sc.current_speaker, sc.identified_by = nome, "conversazione"
+            sc.from_session, sc.dispositivo_studio = True, None
+            note_rule(ctx, "modalita_studio_voce")
+            with solo_propri():
+                return self.call(name, arguments, ctx, "familiare")
+        finally:
+            for k, v in prima.items():
+                setattr(sc, k, v)
+
     def call(self, name: str, arguments: dict, ctx: ToolContext,
              level: str | None = None) -> str:
         """Esegue un tool e restituisce JSON. Un errore non solleva eccezioni verso
@@ -358,6 +387,11 @@ class ToolRegistry:
                 return self.sconosciuto(name)
             note_rule(ctx, "tool_nome_corretto")
             name, spec = vero, self._tools[vero]
+        # La modalità studio con la voce non riconosciuta (02/11, #376): solo i tool dello Studio
+        if getattr(getattr(ctx, "speaker_ctx", None), "dispositivo_studio", None):
+            come = self._come_proprietario(name, arguments, ctx, level)
+            if come is not None:
+                return come
         if name == "estensione_gestisci" and self._tools.get("sviluppo_apri") is not None:
             # «Modifica l'estensione X» chiamato come azione di estensione_gestisci, che non
             # c'è (12/10, lavoro 3): è sviluppo_apri con modifica = X, con tutti i controlli

@@ -929,6 +929,28 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
 - **Lo Studio solo per i minori** (domanda 5, b): scartata. Il tool è già per i familiari e il
   progetto non lo esclude.
 
+## La modalità studio (#376, 02/11)
+
+54. **La modalità studio è uno stato in memoria con due effetti, e basta** (decisione di chi
+    amministra del 02/11). Per satellite, in memoria (`studio/modalita.py`); non cambia la
+    configurazione e non è un meccanismo per cambiare interruttori. Si apre alla prima chiamata di un
+    tool dello Studio dal dispositivo personale del proprietario, o aprendo la sezione Studio su
+    quello schermo; si chiude uscendo, dopo `studio_modalita_inattivita_min` (20 minuti) senza
+    attività dello Studio, a mezzanotte.
+    - **Effetto 1:** la stanza in pausa solo su quel satellite, motivo «studio»: niente righe nel
+      turno e niente ascolto da lì, e lo si vede sullo schermo. Gli altri satelliti restano come sono;
+      la pausa scelta da una persona e quella del ripasso non si toccano.
+    - **Effetto 2:** con la voce non riconosciuta, la frase dal dispositivo personale vale come del
+      proprietario, solo per i tool dello Studio e sui suoi dati, come la zona grigia (al più
+      familiare). La voce chiaramente di un'altra persona vince. Vale anche per un proprietario minore.
+    - **Non cambia:** permessi, tutele dei minori (`dispositivo.proprio`, `_proprietario_continua`, la
+      prudenza con un minore possibile), frase di sfida, blocco con una prova aperta, «ESEGUITE con un
+      bersaglio dal dato» a 0. Mai per un ospite su un dispositivo non suo, con la compagnia o un
+      conoscente; un tool fuori dallo Studio resta da ospite.
+    - **La conversazione resta quella anonima** dell'ospite: la storia del proprietario non si apre a
+      una voce non riconosciuta. Quindi un «sì» da solo, con la voce non riconosciuta, non ha il
+      contesto della domanda di prima.
+
 ## Conseguenze
 
 - *[storico fino al 30/10]* Fino al passo 4.5 lo Studio non c'è: un minore che chiede aiuto per i compiti ha solo la regola

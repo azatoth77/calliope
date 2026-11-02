@@ -171,6 +171,35 @@ che…?»: ora conta «1. vero, 2. falso», «la prima è vera», «il secondo �
 Sulla DGX col ramo: tutti gli 11 casi 3/3, la pagina 116 letta in 3 giri su 3 (e in 2 su 3 in un
 secondo giro del solo caso).
 
+## La modalità studio (02/11, issue #376, ramo `issue-376-modalita-studio`)
+
+Decisione 0035 punto 54; il perché nella issue. `studio/modalita.py`: uno stato in memoria per
+satellite (`Studio.modalita`) con due effetti soltanto.
+- **Si apre**: `Ciclo._modalita_dopo_turno` (un tool dello Studio che la politica ha fatto passare,
+  detto dal proprietario sul suo satellite personale; regola `modalita_studio_aperta`) e
+  `POST /api/vista` (la sezione aperta, se il satellite dello schermo è dello stesso proprietario).
+- **Si chiude**: `{vista: null}`, `studio_modalita_inattivita_min` (20 minuti: più di una pagina letta
+  o di un esercizio fatto in silenzio, senza lasciare il telefono sordo alla stanza per una sera; 0 =
+  spenta), mezzanotte. Una pagina chiusa senza dirlo scade da sola: la pausa ha il suo `fino`.
+- **L'effetto 1** è `Stanza.pausa(sat, "studio")`: `accesa_qui` falso, niente blocco nel turno, il
+  satellite smette di mandare la stanza (`_annuncia`), «Ascolto della stanza in pausa» sullo schermo.
+  Anche le righe già nella conversazione si nascondono al modello, come per ogni pausa
+  (`Brain._stanza_prepara_dentro`, `nascosti`), e la politica non vede più la stanza.
+  Alla ripresa le righe di prima ci sono ancora (la pausa non cancella). Sulla tenuta non cambia
+  niente: sul registro restano gli eventi di pausa e ripresa, come per le altre pause. Dopo un
+  riavvio modalità e pausa non ci sono più, e la stanza riparte.
+- **L'effetto 2**: `Ciclo._modalita_voce` decide per la frase (`SpeakerContext.dispositivo_studio`),
+  `ToolRegistry._come_proprietario` vale per la sola chiamata (identità come la zona grigia, regola
+  `modalita_studio_voce`), `servizio.permesso` con `solo_propri` toglie i dati dei minori di cui è
+  tutore. La voce di un altro è un altro profilo come migliore sopra `speaker_continuita_soglia`
+  (0,36).
+
+**Limiti.** Con la voce non riconosciuta la conversazione è quella anonima: uno studio che continua senza
+il contesto di prima. Il telefono di un adulto in mano a un minore mai sentito lì, con una voce lontana
+da tutti i profili, vale come l'adulto per i tool dello Studio: è un limite dell'identità, come
+nella decisione. La frase media a 0,375 (la voce della issue) non diventa riconosciuta fuori dalla
+modalità: per tutto il resto resta ospite. Le misure vere sono da fare.
+
 ## La verifica che non si creava col «sì» e il vicolo cieco (02/11, issue #376, ramo `issue-376-si-con-la-stanza`)
 
 Il giro del «sì» con la stanza accesa è in [sicurezza-politica](sicurezza-politica.md), stessa data.

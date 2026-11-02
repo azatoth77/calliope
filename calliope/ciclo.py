@@ -2724,10 +2724,12 @@ class Ciclo:
         speaker_ctx.senza_nome = False
         speaker_ctx.conoscente = None                                     # (14/10)
         speaker_ctx.minore_ospite = None                                  # (16/10)
+        speaker_ctx.dispositivo_studio = None                             # (02/11, #376)
         if t.scritto is not None:
             self._chi_scrive(t)
         if t.emb_job is not None:
             self._riconosci_voce(t)
+            self._modalita_voce(t)
         self._segna_minore(t.speaker_name)
         speaker_ctx.minore_ospite = self._minore_per_ospite(t)
         self._anello_turno(t)
@@ -3020,6 +3022,79 @@ class Ciclo:
                                         di=di if isinstance(di, str) else None)
         except Exception:  # noqa: BLE001 — il dispositivo non ferma la voce
             return None
+
+    def _modalita(self):
+        """(la modalità studio, il satellite, la stanza) di questa corsia, o None."""
+        st = getattr(self.s, "studio", None)
+        mod = getattr(st, "modalita", None)
+        sat = getattr(self.corsia, "satellite_id", None)
+        return (mod, sat, getattr(self.s, "stanza", None)) if mod is not None and sat is not None \
+            else None
+
+    def _modalita_voce(self, t):
+        """L'effetto 2 della modalità studio (02/11, #376, studio/modalita.py): la voce di questa
+        frase non è riconosciuta, dal dispositivo personale col proprietario in modalità. La voce
+        chiaramente di un altro vince: un altro profilo come migliore sopra
+        `speaker_continuita_soglia`. Niente con la compagnia, un conoscente, un minore possibile
+        (sentito da poco qui, o secondo a un soffio dal proprietario adulto)."""
+        sc = self.speaker_ctx
+        m = self._modalita()
+        if (m is None or t.scritto is not None or getattr(sc, "current_speaker", None) is not None
+                or any(getattr(sc, k, None) for k in (
+                    "compagnia", "compagnia_sconosciute", "conoscente", "minore_ospite",
+                    "minore_incerto", "minore_vicino", "incerta"))):
+            return
+        mod, sat, stanza = m
+        stato = mod.di(sat, stanza)
+        nome = self._proprietario_satellite() if stato else None
+        reg = self.s.registry
+        prof = reg.get(nome) if nome else None
+        if prof is None or str(getattr(prof, "id", "")) != stato["persona"]:
+            return
+        voce = (self.rec or {}).get("voce") or {}
+        cfg = self.s.cfg
+        soglia = float(getattr(cfg, "speaker_continuita_soglia", 0.36))
+        migliore, punti = voce.get("migliore"), float(voce.get("punteggio") or 0.0)
+        if migliore not in (None, nome) and punti >= soglia:
+            return
+        sec = voce.get("secondo")
+        if (migliore == nome and sec and sec != nome and not minori.e_minore(prof)
+                and minori.e_minore(reg.get(sec))
+                and float(voce.get("secondo_punteggio") or 0.0) >= soglia
+                and float(voce.get("margine") or 0.0) < float(
+                    getattr(cfg, "speaker_id_margine", 0.08))):
+            return
+        sc.dispositivo_studio = nome
+
+    def _modalita_dopo_turno(self, t):
+        """Una chiamata di un tool dello Studio che la politica ha fatto passare: apre la modalità
+        (dal dispositivo personale del proprietario, la sua voce sicura o il suo dispositivo, senza
+        dubbi con un minore) o la tiene viva. Mai da uno schermo di stanza, mai per uno scritto:
+        lo schermo la apre da sé (`POST /api/vista`). Una chiamata rifiutata non apre niente."""
+        m = self._modalita()
+        if m is None or t.scritto is not None:
+            return
+        from .studio.modalita import TOOL
+        if not any(x.get("nome") in TOOL
+                   and (x.get("politica_ombra") or {}).get("finale", "esegui") == "esegui"
+                   for x in getattr(self.brain, "last_tools", None) or ()):
+            return
+        mod, sat, stanza = m
+        nome = self._proprietario_satellite()
+        prof = self.s.registry.get(nome) if nome else None
+        if prof is None:
+            return
+        sc = self.speaker_ctx
+        stato = mod.di(sat, stanza)
+        if stato is not None and stato["persona"] == str(getattr(prof, "id", "")):
+            mod.apri(sat, prof.id, stanza)        # rinnova, anche dall'effetto 2
+            return
+        if (getattr(sc, "current_speaker", None) == nome
+                and getattr(sc, "identified_by", None) in ("voce", "breve", "conversazione")
+                and not any(getattr(sc, k, None) for k in ("incerta", "minore_incerto",
+                                                           "minore_vicino", "compagnia"))):
+            if mod.apri(sat, prof.id, stanza):
+                self.rule("modalita_studio_aperta")
 
     def _proprietario_satellite(self) -> str | None:
         """Il nome del proprietario del satellite di questa corsia, se è personale (abbinato con
@@ -4681,6 +4756,7 @@ class Ciclo:
         # morbida), e si ferma se qualcuno ricomincia a parlare
         self._compressione_dopo(t)
         self._oscura_registro(t)
+        self._modalita_dopo_turno(t)
         regole = set(brain.rules_fired())
         self._meta_turno = {"t": round(time.time() - (time.perf_counter() - t.t0), 3),
                             "luogo": self._luogo_turno(t),

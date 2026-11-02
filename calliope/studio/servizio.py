@@ -187,6 +187,10 @@ def permesso(chi, proprietario, registry=None) -> str | None:
     """«proprietario», «tutore» o None. Gli ospiti e i conoscenti mai, da nessuna parte."""
     if chi is None or proprietario is None:
         return None
+    # La modalità studio con una voce non riconosciuta (02/11, #376): solo i suoi dati
+    from .modalita import solo_propri_attivo
+    if solo_propri_attivo() and getattr(chi, "id", None) != getattr(proprietario, "id", None):
+        return None
     if _categoria(chi) in ("ospite", "conoscente") or \
             _categoria(proprietario) in ("ospite", "conoscente"):
         return None
@@ -243,6 +247,9 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
         self.modo_padronanza = m if m in PD.MODI else PD.OMBRA
         # L'orologio (le prove lo fingono)
         self.adesso = adesso or datetime.datetime.now
+        # La modalità studio (02/11, #376): in memoria, per satellite
+        from .modalita import Modalita
+        self.modalita = Modalita(cfg)
         self.dati = D.Dati(cfg.memory_db)
         # All'avvio via i provvisori di un crollo (PR #312), solo quelli più vecchi di
         # `PROVVISORI_AVVIO_S` (terza revisione della PR #312, fatto con la 4.5): un'altra
