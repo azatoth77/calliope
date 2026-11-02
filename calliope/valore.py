@@ -536,6 +536,10 @@ def _stessa_data(a, b, ctx=None) -> bool:
     """Due valori sono la stessa data, confrontata risolta («20 novembre» e «2026-11-20»: una
     delle date possibili, se l'altro valore ne ha una sola); altrimenti il confronto esatto."""
     da, db = _date_possibili(a, ctx), _date_possibili(b, ctx)
+    # La lettura di «venerdì 13» non guarda il numero: i numeri detti devono esserci anche nell'altra
+    na, nb = _gettoni_numeri(a), _gettoni_numeri(b)
+    if not (nb <= na if forma_data(a) else na <= nb if forma_data(b) else na == nb):
+        return False
     if da and db and (len(da) == 1 or len(db) == 1):
         return bool(da & db)
     return _esatto(a) == _esatto(b)
@@ -943,7 +947,8 @@ _ISTRUZIONE = re.compile(
 # La frase che chiude: non afferma niente, chiede di ripeterlo (valore_dalla_stanza,
 # valore_non_dicibile, valore_troppe_domande)
 CON_LE_TUE_PAROLE = "Per farlo ho bisogno che me lo chieda tu: dimmelo con le tue parole."
-# Al più tante domande del codice per richiesta (una frase che non è un consenso riparte da zero)
+# Al più tante domande della politica per richiesta: una frase che non è un consenso, o la domanda
+# consumata, ripartono da zero (Brain)
 DOMANDE_MAX, _DOMANDE = 2, "__domande__"
 
 
@@ -1043,23 +1048,37 @@ def _fonte_del_dato(args: dict, t, tipi: dict | None, fidati=()) -> str:
 def domanda_del_codice(cosa: str, name: str, args: dict, t, tipi, ctx, fidati, E: int, fonte: str,
                        spec=None):
     """La decisione con la domanda del codice: l'azione e i valori veri, e da dove viene il valore se
-    è in un dato. E3–E4: la frase di sfida. Se un valore non si può dire, o dopo `DOMANDE_MAX`
-    domande per questa richiesta, nessuna domanda: «dimmelo con le tue parole»."""
-    giro = getattr(t, "giro_valore", None)
-    fatte = giro.get(_DOMANDE, 0) if isinstance(giro, dict) else 0
-    if fatte >= DOMANDE_MAX:
-        return pol.Decisione("rifiuta", "valore_troppe_domande", CON_LE_TUE_PAROLE, fonte)
+    è in un dato. E3–E4: la frase di sfida. Se un valore non si può dire, nessuna domanda: «dimmelo
+    con le tue parole»."""
     testo = cosa_coi_valori(cosa, name, args, tipi, ctx, spec)
     if testo is None:
         return pol.Decisione("rifiuta", "valore_non_dicibile", CON_LE_TUE_PAROLE, fonte)
-    if isinstance(giro, dict):
-        giro[_DOMANDE] = fatte + 1
     da = _fonte_del_dato(args, t, tipi, fidati)
     prima = f"Viene {_da_studio(da)}, non da te" if da else "Non me l'hai chiesto"
     if E >= E3:
         return pol.Decisione("sfida", "valore_non_ancorata_sfida", f"{prima}: vuoi che {testo}?",
-                             da or fonte)
-    return pol.Decisione("conferma", "valore_non_ancorata", f"{prima}: vuoi che {testo}?", da or fonte)
+                             da or fonte, fonte_detta=bool(da))
+    return pol.Decisione("conferma", "valore_non_ancorata", f"{prima}: vuoi che {testo}?", da or fonte,
+                         fonte_detta=bool(da))
+
+
+def azzera_domande(giro):
+    """Una richiesta nuova, o la domanda consumata: il tetto riparte (Brain)."""
+    if isinstance(giro, dict):
+        giro.pop(_DOMANDE, None)
+
+
+def tetto_domande(d, t):
+    """Al più `DOMANDE_MAX` domande della politica per richiesta, con la stanza o senza: un modello
+    che riscrive la chiamata a ogni «sì» non gira in tondo (02/11, #376)."""
+    giro = getattr(t, "giro_valore", None)
+    if not isinstance(giro, dict) or (
+            d.esito != "conferma" and d.regola != "valore_non_ancorata_sfida"):
+        return d
+    giro[_DOMANDE] = giro.get(_DOMANDE, 0) + 1
+    if giro[_DOMANDE] > DOMANDE_MAX:
+        return pol.Decisione("rifiuta", "valore_troppe_domande", CON_LE_TUE_PAROLE, d.fonte)
+    return d
 
 
 def consumo_zona_grigia(name: str, args: dict, cl, t, ctx, cosa=None):
@@ -1253,7 +1272,7 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
     det = {"effetto": NOMI_EFFETTO.get(E, "E3"), "argomenti": {}, "bersagli": []}
     if (t is not None and getattr(t, "sospeso_politica", False) and cl.classe != pol.SICURO
             and pol.consenso_turno(name, args, cl, t)[0]):
-        d = consumo_zona_grigia(name, args, cl, t, ctx, cosa)
+        d = None if base.esito in ("blocca", "vieta") else consumo_zona_grigia(name, args, cl, t, ctx, cosa)
         if d is not None:
             return d, det
         _registra_consumo(name, args, t, tipi, fidati, det)
@@ -1306,7 +1325,7 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
                 return pol.Decisione(
                     "conferma", "valore_proposta_data_dato",
                     f"«{_data_mostrata(v, ctx)}» viene {_da_studio(da)}, non da te: vuoi davvero "
-                    f"che {cosa}?", da), det
+                    f"che {cosa}?", da, fonte_detta=True), det
             return pol.Decisione(
                 "conferma", "valore_proposta_data_non_detta",
                 f"Questa data, «{_data_mostrata(v, ctx)}», non l'hai detta tu, e c'è di mezzo "
@@ -1349,8 +1368,6 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
             det["sfida_portata"] = True
     if not risposta and not ancorata(cl, name, args, t):
         persona = consenso_della_persona(ctx)
-        if isinstance(getattr(t, "giro_valore", None), dict) and not pol.consenso(t.testo):
-            t.giro_valore[_DOMANDE] = 0
         giro = pol.consenso(t.testo) and persona and _gia_rifiutata(name, t, ctx)
         # Il «sì» chiuso della persona riconosciuta salta il rifiuto (decisione del 02/11). Non
         # esegue: porta alla domanda del codice
@@ -1448,14 +1465,14 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         cit, dove = _citato(k, da)
         domanda = f"«{cit}» viene {dove}, non da te: vuoi davvero che {cosa}?"
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_bersaglio_dato",
-                             domanda, da), det
+                             domanda, da, fonte_detta=True), det
     if cont_dato and E >= E2:
         k = cont_dato[0]
         da = _da(k)
         cit, dove = _citato(k, da)
         domanda = f"«{cit}» viene {dove}, non da te: vuoi davvero che {cosa}?"
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_contenuto_dato",
-                             domanda, da), det
+                             domanda, da, fonte_detta=True), det
     if cont_modello and E >= E2:
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_contenuto_non_detto",
                              f"C'è di mezzo {prov.detta(fonte)}, quindi chiedo a te: vuoi che "

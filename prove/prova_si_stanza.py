@@ -585,7 +585,7 @@ verifica("contrario: la conversazione pulita non ha domande", len(fatti) == 1, f
 st.close()
 
 print("— 15. la domanda dice tutto ciò che si esegue")
-dice("un'azione che la `cosa` non dice", {"cosa": "dentista", "quando": "giovedì", "cambia": "togli"}, "togli")
+dice("un'azione che la frase dice col verbo", {"cosa": "dentista", "quando": "giovedì", "cambia": "togli"}, "tolga")
 dice("per_tutti", {"fatto": "il codice è segreto", "per_tutti": True}, "per tutti", tool="ricorda")
 dice("una parola corta", {"azione": "crea", "materia": "fisica", "data": "venerdì", "per": "Ada"}, "Ada",
      tool="studio")
@@ -598,7 +598,7 @@ b, st, fatti = nuovo()
 b.tools.register(_br().get(A_))
 t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo faccia?"))
 r = t(b, "Sì.", [ALTRA], "breve", ch(A_, {"cosa": "dentista", "quando": "giovedì", "cambia": "togli"}), tx("Ok."))
-verifica("il tool vero `appuntamento_aggiungi` con `togli`: la domanda lo dice", "togli" in r, r)
+verifica("il tool vero `appuntamento_aggiungi` con `togli`: la domanda lo dice", "tolga" in r, r)
 st.close()
 
 print("— 16. la frase che chiude non afferma ciò che non sa")
@@ -626,6 +626,171 @@ om = b.last_tools[-1].get("politica_ombra") or {}
 m = AT._ombra([{"tool": [{"nome": "agenda_annulla", "politica_ombra": om}]}])
 verifica("una domanda senza la fonte, il valore entra nei dati dopo: differenza 1", len(fatti) == 1
          and "non da te" not in r1 and m["dato_eseguite"] - m["dato_confermate"] == 1, (r1, om, m))
+st.close()
+
+print("— 18. il tetto vale per richiesta (quarta revisione)")
+b, st, fatti = nuovo()
+RICH = (("Giovedì ho il dentista.", "Se vuoi lo segno.", A_, DENT),
+        ("È finito il latte.", "Se vuoi lo aggiungo.", "lista_aggiungi", {"cose": "latte", "lista": "spesa"}),
+        ("Lunedì ho il notaio.", "Se vuoi lo segno.", A_, {"cosa": "notaio", "quando": "lunedì"}),
+        ("Martedì ho il meccanico.", "Se vuoi lo segno.", A_, {"cosa": "meccanico", "quando": "martedì"}))
+for frase_, off_, tool_, a_ in RICH:
+    t(b, frase_, [ALTRA], "voce", tx(off_))
+    t(b, "Sì, grazie.", [ALTRA], "breve", ch(tool_, a_), tx("Ok."))
+    t(b, "Sì.", [ALTRA], "breve", ch(tool_, a_), tx("Fatto."))
+verifica("quattro richieste vere di fila: tutte eseguite", len(fatti) == 4, fatti)
+st.close()
+# Consumata la domanda, il tetto riparte anche senza una frase nuova in mezzo
+b, st, fatti = nuovo()
+for tool_, a_ in ((A_, DENT), ("lista_aggiungi", {"cose": "latte", "lista": "spesa"}),
+                  (A_, {"cosa": "notaio", "quando": "lunedì"})):
+    t(b, "Sì, grazie.", [ALTRA], "breve", ch(tool_, a_), tx("Ok."))
+    t(b, "Sì.", [ALTRA], "breve", ch(tool_, a_), tx("Fatto."))
+verifica("anche di fila soli «sì»: la domanda consumata fa ripartire il tetto", len(fatti) == 3, fatti)
+st.close()
+b, st, fatti = nuovo()
+for i in range(3):
+    t(b, "Sì.", [ALTRA], "breve", ch(A_, {"cosa": "dentista", "quando": f"ore {9 + i}"}), tx("Ok."))
+for _ in range(2):
+    t(b, "Che ore sono?", [ALTRA], "voce", tx("Le tre."))
+r = t(b, "Sì.", [ALTRA], "breve", ch(A_, DENT), tx("Ok."))
+verifica("dopo il tetto, frasi d'altro: la domanda torna", "vuoi che" in r, r)
+st.close()
+
+print("— 19. il tetto vale anche senza la stanza")
+b, st, fatti = nuovo()
+rr_ = []
+rr_.append(t(b, "Come va?", None, "voce", tx("Vuoi?")))
+# Una domanda della politica nata con la stanza, poi una persona sola che dice sì
+t(b, "Sì.", [ALTRA], "breve", ch(A_, DENT), tx("Ok."))
+for i in range(8):
+    rr_.append(t(b, "Sì.", None, "breve", ch(A_, {"cosa": "dentista", "quando": f"ore {9 + i}"}), tx("Ok.")))
+fatte = sum("vuoi che" in x for x in rr_)
+verifica("il modello che riscrive senza stanza: al più due domande", fatte <= 2, (fatte, rr_, fatti))
+st.close()
+
+
+def casa_sola(comandi):
+    b, st, fatti = nuovo()
+    def f(ctx, **kw):
+        fatti.append(kw)
+        return {"ok": True, "conferma": "Fatto.", "risposta_finale": "Fatto."}
+    b.tools.register(ToolSpec(name="casa_comando", description="casa", parameters={
+        "type": "object", "properties": {"comando": {"type": "string"}}}, func=f, risk="azione",
+        levels=frozenset({"familiare", "amministra"})))
+    rr_ = [t(b, "Che freddo qui.", None, "voce", ch("casa_comando", {"comando": comandi[0]}), tx("Ok."))]
+    rr_ += [t(b, "Sì.", None, "voce", ch("casa_comando", {"comando": c}), tx("Ok.")) for c in comandi[1:]]
+    return rr_, fatti, st
+
+
+rr_, fatti, st = casa_sola([f"accendi la luce numero {i}" for i in range(8)])
+verifica("`casa_comando` riscritto a ogni turno, persona sola: non otto domande", sum(
+    "vuoi che" in x for x in rr_) <= 2, (rr_, fatti))
+st.close()
+
+print("— 20. la zona grigia non passa davanti a un blocco; la data; la fonte; cambia")
+b, st, fatti, rr = percorso([ALTRA])
+pid = st.dati.tutti("SELECT id FROM studio_pagine LIMIT 1")[0]["id"]
+st.dati.scrivi("UPDATE studio_pagine SET testo = ? WHERE id = ?", ("Una pagina qualunque.", pid))
+r = t(b, "Sì.", [ALTRA], "conversazione", ch("studio_pagina_leggi", {"pagina": "P1"}), ch(A_, DENT), tx("Ok."))
+verifica("in zona grigia, dopo un dato letto nella stessa risposta: il blocco, non la frase di sfida",
+         not fatti and "valore_consenso_sfida" not in b.rules_fired() and "ripeti:" not in r,
+         (r, b.rules_fired()))
+st.close()
+from calliope import valore as V_  # noqa: E402
+from calliope import politica as POL_  # noqa: E402
+_sc = types.SimpleNamespace(current_speaker="Leo", identified_by="conversazione")
+_t = POL_.Turno(testo="Sì.", contaminazione=frozenset({"stanza"}), persona_txt="", esterni=[],
+                in_sospeso=A_, args_sospeso=dict(DENT), sfida=False, dato_nuovo=False, letto_ora="",
+                risposta={}, persona="Leo", intenzioni=[], sospeso_politica=True)
+_ctx = types.SimpleNamespace(speaker_ctx=_sc, cfg=None)
+_cl = POL_.classe_di(A_, None)
+_blocco = POL_.Decisione("blocca", "politica_dopo_dato")
+_d, _ = V_._matrice(A_, dict(DENT), _cl, _t, _blocco, ctx=_ctx)
+verifica("in zona grigia la frase di sfida non passa davanti a un blocco della politica", _d is _blocco, _d)
+_d, _ = V_._matrice(A_, dict(DENT), _cl, _t, POL_.Decisione("esegui"), ctx=_ctx)
+verifica("contrario: senza il blocco, in zona grigia la frase di sfida", _d.esito == "sfida", _d)
+verifica("«venerdì 13» non è «venerdì»; «20 novembre» è la sua data scritta in cifre",
+         not V_._stessa_data("venerdì 13", "venerdì") and not V_._stessa_data("venerdì", "venerdì 13")
+         and V_._stessa_data("venerdì", "venerdì") and V_._stessa_data("20 novembre", "2026-11-20")
+         and not V_._stessa_data("venerdì 13", "2026-10-30"))
+b, st, fatti = nuovo()
+t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo faccia?"))
+r1 = t(b, "Sì.", [ALTRA], "breve", ch("agenda_annulla", {"cosa": "dentista non da te"}), tx("Ok."))
+verifica("un valore con «non da te» non vale come fonte detta", b.pending.get("fonte_detta") is False,
+         (r1, b.pending.get("fonte_detta")))
+st.close()
+from calliope import politica as POL  # noqa: E402
+for tool_, a_, atteso, no in (
+        ("promemoria_imposta", {"testo": "dentista", "cambia": "togli"}, "tolga", "sposti"),
+        (A_, {"cosa": "dentista", "quando": "giovedì", "cambia": "togli"}, "tolga", "segni"),
+        (A_, {"cosa": "dentista", "quando": "giovedì", "cambia": "imposta"}, "sposti", "segni"),
+        (A_, DENT, "segni", "tolga")):
+    c_ = POL._cosa(POL.classe_di(tool_, None), a_)
+    verifica(f"la frase di {tool_} con {a_.get('cambia')}: «{atteso}»", atteso in c_ and no not in c_, c_)
+
+print("— 21. `lavoro_affida` con un adulto, il compito riscritto dal modello")
+LUNGO = ("Cerca gli orari dei treni regionali da Milano a Bergamo per sabato mattina, confronta i "
+         "prezzi con quelli dei bus e prepara un riassunto breve con i tre collegamenti migliori.")
+RISCRITTO = ("Trova orari e prezzi dei treni regionali fra Milano e Bergamo di sabato mattina e dei bus, "
+             "e fai un riassunto breve coi tre collegamenti migliori.")
+CHIESTA = "Fammi una ricerca sugli orari dei treni da Milano a Bergamo per sabato, coi prezzi."
+
+
+def adulto():
+    b, st, f = nuovo()
+    sc = b.tool_ctx.speaker_ctx
+    sc.current_speaker, sc.voce_sicura = "Andrea", "Andrea"
+    sc.current_level = sc.profile_level = "familiare"
+
+    def fn(ctx, tipo="", compito=""):
+        if not getattr(ctx, "tool_in_sospeso", None):
+            frase = "Lo affido a un agente: ci vorrà qualche minuto. Procedo?"
+            return {"ok": True, "fatto": "proposto", "conferma": frase, "risposta_finale": frase,
+                    "in_sospeso": {"tool": "lavoro_affida", "domanda": frase, "cosa": "affidare il lavoro",
+                                   "argomenti": {"tipo": tipo, "compito": compito}}}
+        f.append(compito)
+        return {"ok": True, "conferma": "Lavoro partito.", "risposta_finale": "Lavoro partito."}
+    b.tools.register(ToolSpec(name="lavoro_affida", description="x", parameters={"type": "object", "properties": {
+        "tipo": {"type": "string"}, "compito": {"type": "string"}}}, func=fn, risk="azione",
+        levels=frozenset({"familiare", "amministra"})))
+    return b, st, f
+
+
+LA, LR = {"tipo": "ricerca", "compito": LUNGO}, {"tipo": "ricerca", "compito": RISCRITTO}
+b, st, f = adulto()
+t(b, CHIESTA, None, "voce", ch("lavoro_affida", LA), tx("Ok."))
+r = t(b, "Sì.", None, "breve", ch("lavoro_affida", LR), tx("Ok."))
+verifica("senza stanza: «Procedo?», riscritto al «sì»: parte", len(f) == 1, (r, f))
+st.close()
+b, st, f = adulto()
+t(b, CHIESTA, [ALTRA], "voce", ch("lavoro_affida", LA), tx("Ok."))
+r = t(b, "Sì.", [ALTRA], "breve", ch("lavoro_affida", LA), tx("Ok."))
+verifica("con la stanza, lo stesso compito al «sì»: parte", len(f) == 1, (r, f))
+st.close()
+b, st, f = adulto()
+t(b, CHIESTA, [ALTRA], "voce", ch("lavoro_affida", LA), tx("Ok."))
+r1 = t(b, "Sì.", [ALTRA], "breve", ch("lavoro_affida", LR), tx("Ok."))
+verifica("con la stanza, riscritto al «sì»: una domanda, niente parte", not f and "chiedo a te" in r1, r1)
+r2 = t(b, "Sì.", [ALTRA], "breve", ch("lavoro_affida", LR), tx("Ok."))
+verifica("…e al «sì» con lo stesso testo parte", len(f) == 1, (r2, f))
+st.close()
+b, st, f = adulto()
+t(b, "Sabato devo andare a Bergamo.", [ALTRA], "voce", tx("Se vuoi faccio una ricerca sui treni."))
+r = t(b, "Sì, grazie.", [ALTRA], "breve", ch("lavoro_affida", LA), tx("Ok."))
+verifica("un'offerta del modello col compito lungo: «dimmelo con le tue parole»", not f
+         and "con le tue parole" in r, r)
+t(b, CHIESTA, [ALTRA], "voce", ch("lavoro_affida", LA), tx("Ok."))
+r = t(b, "Sì.", [ALTRA], "breve", ch("lavoro_affida", LA), tx("Ok."))
+verifica("…detto con le sue parole, parte", len(f) == 1, (r, f))
+st.close()
+b, st, f = adulto()
+CO = {"tipo": "ricerca", "compito": "orari dei treni per Bergamo"}
+t(b, "Sabato devo andare a Bergamo.", [ALTRA], "voce", tx("Se vuoi faccio una ricerca sui treni."))
+r1 = t(b, "Sì, grazie.", [ALTRA], "breve", ch("lavoro_affida", CO), tx("Ok."))
+r2 = t(b, "Sì.", [ALTRA], "breve", ch("lavoro_affida", CO), tx("Ok."))
+verifica("un'offerta col compito corto: la domanda, e al «sì» parte", "Non me l'hai chiesto" in r1
+         and len(f) == 1, (r1, r2, f))
 st.close()
 
 print("\n" + ("TUTTO OK" if not errori else f"{errori} ERRORI"))

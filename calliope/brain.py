@@ -3087,6 +3087,9 @@ class Brain:
         # Un «no» alla proposta la chiude, e la politica non la lascia riproporre (09/10)
         pending = self._rifiuto_proposta(user_text, pending)
         self._chiudi_intenzioni(user_text)
+        # Una frase che non è un consenso è una richiesta nuova: il tetto delle domande riparte
+        if not politica.consenso(user_text or ""):
+            valore.azzera_domande(self._giro_valore())
         # Numero della risposta: un'installazione proposta in questa risposta si può avviare
         # solo nella prossima (calliope/installa/servizio.py)
         self.turn_number = getattr(self, "turn_number", 0) + 1
@@ -7186,9 +7189,11 @@ class Brain:
         if ok and p and call["name"] == p.get("tool") and call["name"] == getattr(
                 self, "turn_pending_tool", None) and not self._offer:
             self.pending = None
-            # Consumata: una seconda chiamata nello stesso «sì» non ha più una domanda (02/11, #376)
+            # Consumata: una seconda chiamata nello stesso «sì» non ha più una domanda, e il tetto
+            # delle domande riparte (02/11, #376)
             self.turn_pending_tool = None
             self._set_ctx("tool_in_sospeso", None)
+            valore.azzera_domande(self._giro_valore())
         # Le intenzioni (calliope/valore.py, fase 2): riuscita si chiude, fallita resta aperta
         # (gli errori sono errori: la chiamata corretta non chiede di nuovo)
         try:

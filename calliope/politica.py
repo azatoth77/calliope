@@ -208,6 +208,12 @@ def _cambio(a: dict, k: str | None) -> bool:
     return bool(k) and _s(a, k).lower() not in _NUOVA
 
 
+def _verbo_cambia(a: dict, altrimenti: str) -> str:
+    """Il verbo della domanda per `cambia` (02/11, #376): la frase dice che cosa fa la chiamata."""
+    return {"togli": "tolga", "aggiungi": "aggiunga tempo a", "imposta": "sposti"}.get(
+        _s(a, "cambia").lower(), altrimenti)
+
+
 def _timer_cosa(a: dict) -> str:
     modo = _s(a, "cambia").lower()
     if modo == "togli":
@@ -307,11 +313,13 @@ CLASSI: dict[str, Classe] = {
                                "true", "1", "sì", "si", "yes")),
     "timer_imposta": _c(A, chiave=("nome",), cambio="cambia", cosa=lambda a: _timer_cosa(a)),
     "promemoria_imposta": _c(A, chiave=("testo",), cambio="cambia",
-                             cosa=lambda a: f"sposti il promemoria «{_s(a, 'testo')}»"
+                             cosa=lambda a: f"{_verbo_cambia(a, 'sposti')} il promemoria "
+                                            f"«{_s(a, 'testo')}»"
                              if _cambio(a, "cambia") else f"ti ricordi «{_s(a, 'testo')}»"),
     "agenda_annulla": _c(A, cosa=lambda a: f"cancelli «{_s(a, 'cosa', 'una voce')}» dall'agenda"),
     "appuntamento_aggiungi": _c(A, chiave=("cosa",),
-                                cosa=lambda a: f"segni l'appuntamento «{_s(a, 'cosa')}»"),
+                                cosa=lambda a: f"{_verbo_cambia(a, 'segni')} l'appuntamento "
+                                               f"«{_s(a, 'cosa')}»"),
     "lista_aggiungi": _c(A, chiave=("cose", "lista"),
                          cosa=lambda a: f"aggiunga {_s(a, 'cose')} alla lista "
                                         f"{_s(a, 'lista', 'della spesa')}"),
@@ -1452,6 +1460,8 @@ class Decisione:
     regola: str = ""
     domanda: str = ""
     fonte: str = ""
+    # La domanda dice da dove viene il valore: lo scrive chi la fa, per la metrica (#376)
+    fonte_detta: bool = False
     # Una conferma per azione (06/10): la persona ha già detto «sì» (con la voce) o superato la
     # sfida per proprio questa chiamata, a una domanda del codice che la descriveva; il tool che
     # chiederebbe il suo «Procedo?» (lavoro_affida, sviluppo_apri) parte senza chiederlo
@@ -1710,7 +1720,7 @@ def _lettura_che_esce(name: str, args: dict, cl: Classe, t: Turno) -> Decisione:
     if fuori:
         return Decisione("conferma", "politica_argomento_esterno",
                          f"«{_s(args, k)[:80]}» viene {prov.da(da)}, non da te: vuoi davvero "
-                         f"che {_cosa(cl, args)}?", da)
+                         f"che {_cosa(cl, args)}?", da, fonte_detta=True)
     return ESEGUI
 
 
@@ -1825,7 +1835,7 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
             valore = _s(args, k)
             return Decisione("sfida" if cl.sfida else "conferma", "politica_argomento_esterno",
                              f"«{valore[:80]}» viene {prov.da(da)}, non da te: "
-                             f"vuoi davvero che {cosa}?", da)
+                             f"vuoi davvero che {cosa}?", da, fonte_detta=True)
     # Un documento scritto da Calliope per chi parla (Classe.propria, 07/10): come un'azione
     # interna, la richiesta con le parole del tool o il «sì» alla domanda bastano
     if propria and cl.classe == PERICOLOSO:
@@ -2096,15 +2106,14 @@ def accettata(ctx) -> bool:
     return bool(getattr(ctx, "politica_accettata", False))
 
 
-def _risultato(domanda: str, name: str, args: dict, regola: str, fonte: str = "") -> dict:
+def _risultato(domanda: str, name: str, args: dict, regola: str, fonte: str = "",
+               fonte_detta: bool = False) -> dict:
     clean = {k: v for k, v in (args or {}).items() if v not in (None, "")}
     return {"ok": False, "fatto": f"{NIENTE}, chiedo conferma",
             "conferma": domanda, "risposta_finale": domanda,
             "in_sospeso": {"domanda": domanda, "cosa": "l'azione proposta", "tool": name,
                            "argomenti": clean, "politica": regola,
-                           # La domanda ha detto la fonte («viene da una pagina, non da te»): per la
-                           # metrica, al consumo (valore._registra_consumo)
-                           "fonte_detta": "non da te" in str(domanda)}}
+                           "fonte_detta": fonte_detta}}
 
 
 def _domanda_ripetuta(name: str, args: dict, cl: Classe, t: Turno | None) -> bool:
@@ -2264,7 +2273,7 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
         d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
         # Anche con la conversazione tornata pulita (una stanza andata in pausa)
         g_ = (valore.consumo_zona_grigia(name, args or {}, cl, t, ctx, cosa)
-              if per_valore and cl.classe != SICURO else None)
+              if per_valore and cl.classe != SICURO and d.esito not in ("blocca", "vieta") else None)
         d = g_ or d
     # Una domanda in più prima di eseguire (Classe.chiedi_se, 17/10): non al «sì» alla domanda,
     # e solo con la chiamata identica a quella chiesta (tutti gli argomenti: terza revisione
@@ -2303,6 +2312,7 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
                 d = Decisione("esegui", "sviluppo_senza_domanda")
         except Exception as e:  # noqa: BLE001 — nel dubbio, la decisione di sempre
             print(f"   [POLITICA] sviluppo: {type(e).__name__}: {e}", flush=True)
+    d = valore.tetto_domande(d, t)
     # L'ombra segue la decisione finale (09/10, analisi delle regole § 3.4): `nuova` è la
     # matrice, `finale` ciò che è successo dopo le correzioni (sviluppo, domanda non ripetuta,
     # persona non riconosciuta); attrito.py conta su `finale`
@@ -2369,4 +2379,4 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
             frase = f"{prima} {res['risposta_finale']}"
             res = {**res, "conferma": frase, "risposta_finale": frase}
         return res
-    return _risultato(d.domanda, name, args, d.regola, d.fonte)
+    return _risultato(d.domanda, name, args, d.regola, d.fonte, d.fonte_detta)

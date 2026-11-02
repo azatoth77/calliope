@@ -2191,8 +2191,9 @@ riguardava solo lo Studio: ogni azione di un turno «sì», in ogni casa con la 
     argomento nuovo non resta muto per dimenticanza. Ciò che non si sa dire per intero (un valore oltre
     60 caratteri, a capo, indirizzi, markdown, emoji, parole di un'istruzione, un oggetto; la domanda
     oltre 160) porta a «dimmelo con le tue parole», regola `valore_non_dicibile`.
-  - **Al più 2 domande del codice per richiesta** (`valore_troppe_domande`), poi la stessa frase; una
-    frase che non è un consenso riparte da zero.
+  - **Al più 2 domande della politica per richiesta** (`valore.tetto_domande`, regola
+    `valore_troppe_domande`), con la stanza o senza; poi «dimmelo con le tue parole». Il tetto riparte
+    quando la domanda è consumata e a ogni frase che non è un consenso.
   - **Da dove viene:** «Viene da una pagina, non da te: vuoi che…?».
   - **La zona grigia al consumo** va alla frase di sfida (`valore_consenso_sfida`). C'era già sulla
     base, dove in certi casi eseguiva. È l'unico ramo in più rispetto alla regola: un caso provato
@@ -2219,3 +2220,12 @@ va con la modalità studio.
 **Limite di `dalla_stanza`:** basta una parola del verbo del tool in una riga altrui, quindi scatta anche
 su frasi innocue («Ho segnato il compito sul diario.» con un «sì» a un appuntamento). Non esegue niente e
 la frase non afferma niente, ma la persona deve ripeterlo con parole sue.
+
+**Limiti noti (quarta revisione della PR #377).**
+- Conversazione pulita con una chiamata diversa: fa il percorso normale, come sulla base, quindi senza
+  dati di mezzo un'altra chiamata esegue. Da guardare se la stanza sparisce davvero dal contesto.
+- La metrica è cieca dopo la frase di sfida: un bersaglio dal dato eseguito con la sfida superata non ha
+  `consumo` e non si conta. È la conferma più forte, ma non si vede.
+- La riscrittura senza stanza è da misurare sulla DGX: non si sa quanto spesso gemma4 riscrive una
+  chiamata. «accendi luce salotto» per «accendi la luce del salotto» è un'altra chiamata (l'articolo
+  conta solo in testa): costa una domanda, al più due.
