@@ -116,6 +116,16 @@ AVVISI_PIANO = {
 }
 
 
+def chiamata_nota(nome: str, args: dict) -> bool:
+    """L'azione o la parte della chiamata esiste (quelle che qui sotto tornano «sconosciuta»). Per
+    Studio.modalita.apre: un'azione inventata dal modello non apre la modalità."""
+    chiave, nomi = {"studio": ("azione", AZIONI), "studio_carte": ("parte", PARTI_CARTE),
+                    "studio_interroga": ("parte", PARTI_INTERROGA),
+                    "studio_esercizio": ("parte", PARTI_ESERCIZIO),
+                    "studio_ascolta": ("azione", AZIONI_ASCOLTA)}.get(nome, (None, None))
+    return chiave is None or str((args or {}).get(chiave) or "").strip().lower() in nomi
+
+
 def _f(frase: str, ok: bool = True, **kw) -> dict:
     return {"ok": ok, **({"errore": frase} if not ok else {}), "conferma": frase,
             "risposta_finale": frase, **kw}

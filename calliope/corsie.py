@@ -165,6 +165,7 @@ class Corsia:
         conv = reg.occupa(conv, self)
         self._in_uso = conv
         self.conv = conv
+        conv.ultima_corsia = self.chiave     # l'ultimo turno, non un annuncio né un ritorno
         try:
             brain.conv = conv
         except AttributeError:
@@ -283,8 +284,13 @@ class RegistroConversazioni:
             persona riconosciuta dalla voce da poco su **questo** satellite): la sua
             conversazione se è l'ultima di questo satellite o se non ce n'è una (nuova, con la
             ripresa); se nel frattempo l'ha usata un altro satellite, anonima;
+          - la voce non riconosciuta con la modalità studio («modalita», 02/11, #376): una
+            conversazione da ospite sua, per satellite, con le eccezioni in prestito
+            (studio/modalita.py), mai quella di un ospite vero;
           - ospite o voce incerta: la conversazione anonima di questo satellite."""
         with self._cond:
+            if how == "modalita":
+                return self._di(self.chiave_ospite(corsia.chiave) + ":studio"), "modalita"
             if persona_id and how == "voce":
                 chiave = self.chiave_persona(persona_id)
                 nuova = chiave not in self._conv
@@ -301,7 +307,7 @@ class RegistroConversazioni:
             elif persona_id and how == "continuita":
                 chiave = self.chiave_persona(persona_id)
                 c = self._conv.get(chiave)
-                if c is None or corsia.conv is c:
+                if c is None or (corsia.conv is c and self.ultima_qui(c, corsia)):
                     return self._di(chiave), "continuita"
             elif persona_id and how == "schermo":
                 # Dal 28/10 (#301) lo scritto e il tocco dallo schermo personale valgono anche
@@ -309,6 +315,17 @@ class RegistroConversazioni:
                 # dopo un riavvio). Prima finiva nell'anonima della corsia, quella degli ospiti
                 return self._di(self.chiave_persona(persona_id)), "schermo"
             return self._di(self.chiave_ospite(corsia.chiave)), "anonima"
+
+    def ultima_qui(self, conv, corsia) -> bool:
+        """L'ultimo turno in `conv` non è di un altro satellite: la corsia tiene il puntatore anche
+        dopo (None: nessun turno ancora)."""
+        ultima = getattr(conv, "ultima_corsia", None)
+        return ultima is None or ultima == getattr(corsia, "chiave", None)
+
+    def della_voce(self, corsia) -> Conversazione | None:
+        """La conversazione della voce non riconosciuta con la modalità studio su questa corsia."""
+        with self._cond:
+            return self._conv.get(self.chiave_ospite(corsia.chiave) + ":studio")
 
     def di_persona(self, persona_id, crea: bool = False) -> Conversazione | None:
         """La conversazione in corso di una persona (annunci per lei)."""

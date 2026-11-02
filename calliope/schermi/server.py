@@ -1399,6 +1399,31 @@ def crea_app(hub: Schermi) -> Starlette:
 
     viste_fatte: dict[int, list[float]] = {}
 
+    def modalita_dalla_vista(schermo: dict, v: dict):
+        """La sezione Studio aperta o chiusa su questo schermo personale apre o chiude la modalità
+        studio (02/11, #376, studio/modalita.py), solo se il satellite legato allo schermo è dello
+        stesso proprietario: mai uno schermo legato a un satellite di stanza, né fuori orario per
+        un minore."""
+        serv = getattr(hub, "servizi", None)
+        mod = getattr(getattr(serv, "studio", None), "modalita", None)
+        sat = schermo.get("satellite")
+        if mod is None or not sat:
+            return
+        stanza = getattr(serv, "stanza", None)
+        try:
+            if v.get("vista") is None:
+                mod.chiudi(sat, stanza)
+                return
+            coll = hub.satelliti.per_id(sat) if hub.satelliti is not None else None
+            di = (getattr(coll, "satellite", None) or {}).get("proprietario")
+            if di and di == schermo.get("proprietario"):
+                from .. import minori
+                prof = profilo_di(schermo)
+                if prof is None or not minori.fuori_orario(prof):
+                    mod.apri(sat, di, stanza)
+        except Exception as e:  # noqa: BLE001 — la modalità non ferma la pagina
+            hub.log(f"[STUDIO] modalità studio: {type(e).__name__}")
+
     async def vista_api(request: Request):
         """{vista, verifica?, pagina?} → {ok}: la vista dello Studio aperta su questo schermo
         personale (30/10, passo 4.5, studio/vista.py), al più una al secondo; {vista: null} quando
@@ -1417,6 +1442,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if viste is not None:
             from ..studio.vista import chiave
             viste.metti(chiave(schermo), v)
+        modalita_dalla_vista(schermo, v)
         return _json({"ok": True})
 
     async def studio_home(request: Request):

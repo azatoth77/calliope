@@ -718,6 +718,25 @@ verifica("«venerdì 13» non è «venerdì»; «20 novembre» è la sua data sc
 for x_ in ("venerdì della prossima settimana", "il primo venerdì di dicembre", "venerdì di dicembre"):
     verifica(f"«{x_}» non vale «venerdì» né la sua data", not V_._stessa_data(x_, "venerdì")
              and not V_._stessa_data("venerdì", x_) and x_ and V_._stessa_data(x_, " " + x_.upper()))
+verifica("più date in un valore non valgono una sola: «20 novembre o 21 novembre», «20-21 novembre»",
+         not V_._stessa_data("20 novembre o 21 novembre", "2026-11-20")
+         and not V_._stessa_data("2026-11-20", "20 novembre o 21 novembre")
+         and not V_._stessa_data("20-21 novembre", "2026-11-21")
+         and not V_._stessa_data("20 novembre", "21 novembre"))
+verifica("contrari: la stessa data in un'altra forma resta uguale",
+         V_._stessa_data("20 novembre", "2026-11-20") and V_._stessa_data("2026-11-20", "il 20 novembre")
+         and V_._stessa_data("2026-11-20", "2026-11-20") and V_._stessa_data("20 novembre", "20 Novembre"))
+for x_, iso_ in (("20 novembre o 21 novembre", "2026-11-20"), ("20-21 novembre", "2026-11-21")):
+    b, st, _ = nuovo()
+    base_ = verifiche(st)
+    CX = {"azione": "crea", "materia": "fisica"}
+    t(b, "Come va?", [ALTRA], "voce", tx("Vuoi che lo faccia?"))
+    r1 = t(b, "Sì.", [ALTRA], "breve", ch("studio", {**CX, "data": x_}), tx("Ok."))
+    r2 = t(b, "Sì.", [ALTRA], "breve", ch("studio", {**CX, "data": iso_}), tx("Ok."))
+    verifica(f"«{x_}» richiamato con {iso_}: una domanda nuova, niente creato", x_ in r1
+             and "Non me l'hai chiesto" in r2 and "fisica" not in verifiche(st) and verifiche(st) == base_,
+             (r1, r2, verifiche(st)))
+    st.close()
 from calliope.tools.studio import _data_detta as _dd  # noqa: E402
 _ven = _dd("venerdì", __import__("datetime").date.today()).isoformat()
 verifica("contrari: «venerdì» e la sua data, «il prossimo venerdì», «venerdì prossimo» restano uguali",

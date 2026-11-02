@@ -103,6 +103,10 @@ def _stanza_pausa(ctx: ToolContext, azione: str = "", minuti: float | None = Non
                 or getattr(sc, "identified_by", None) != "voce"):
             return _final("Ascolto di nuovo la stanza solo se me lo chiede a voce una persona "
                           "di casa che riconosco.", ok=False)
+        # La modalità studio aperta qui non rimette la pausa di nascosto (02/11, #376)
+        modalita = getattr(getattr(ctx, "studio", None), "modalita", None)
+        if modalita is not None:
+            modalita.ascolta(sat)
         if not stanza.riprendi(sat):
             return _final("Sto già ascoltando la stanza.")
         note_rule(ctx, "stanza_riprendi")

@@ -108,6 +108,12 @@ class Conversazione:
         # Detto una volta nei dati del turno che la voce è riconosciuta dopo un ospite (22/10,
         # issue #171, Brain._voce_ora_riconosciuta): non si ripete in questa conversazione
         self.voce_ora_detta = False
+        # La modalità studio (02/11, #376, studio/modalita.py): la conversazione della voce non
+        # riconosciuta ha in prestito le eccezioni da quella del proprietario. Solo in memoria
+        self.prestito = None
+        # La chiave della corsia dell'ultimo turno (02/11, #376, Corsia.turno):
+        # «l'ultima di questo satellite» è questa, non il puntatore che la corsia tiene
+        self.ultima_corsia = None
         # Le righe della conversazione di stanza mandate al modello (14/10 sera,
         # stanza/contesto.Pezzo): un pezzo per turno, messo nella richiesta subito prima della
         # frase di quel turno (che ha il segno `_stanza` col numero del pezzo). Solo in memoria:
@@ -130,6 +136,11 @@ class Conversazione:
         self.dati_n = 0
 
     # ── stato ──
+    def riporta_turno(self, messaggi: list[dict]):
+        """I messaggi di un turno fatto da Brain nella conversazione della voce non riconosciuta
+        (studio/modalita.py, `riporta`): già passati dai controlli di Brain, tornano qui."""
+        self.history.extend(messaggi)
+
     def vuota(self) -> bool:
         return not (self.history or self.pending or self.reference
                     or self.agenda_reference or self.riassunto)

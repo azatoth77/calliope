@@ -112,6 +112,18 @@ def scenario_telefono(t, hub, st, vid, eid):
     t.tocca('button[data-esercizio="elenco"]')
     ok = aspetta(lambda: t.v("!!document.querySelector('button[data-esercizio=\"apri\"]')"), 6)
     verifica("«I miei esercizi»: l'elenco col problema pronto", bool(ok), testo_di(t, ".studio-e")[:200])
+    from calliope.studio.vista import chiave as _chiave_vista
+    def vista_al_server():
+        for s_ in hub.abbinati():
+            x = hub.viste_studio.di(_chiave_vista(s_))
+            if x and x[0].get("vista") == "esercizi":
+                return x[0]
+        return None
+    ok = aspetta(vista_al_server, 5)
+    verifica("la pagina manda la vista «esercizi» e il server la tiene (dava 400)",
+             bool(ok) and ok.get("verifica") == vid, str(ok))
+    verifica("…e diventa la riga dei dati del turno", "esercizi guidati" in st.riga_vista(LEO, ok or {}),
+             st.riga_vista(LEO, ok or {}))
     t.tocca('button[data-esercizio="apri"]')
     ok = aspetta(lambda: "Quanto è lunga la base?" in testo_di(t, ".studio-e-passo"), 6)
     verifica("«Comincia»: il testo del problema e il passo 1 di 4",

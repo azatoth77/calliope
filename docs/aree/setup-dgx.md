@@ -39,7 +39,7 @@ scritta nei documenti; «non scritta» dove nessun documento la dice.
 | `speaker_impronte_deriva_arruolamento` | `0.60` (con le impronte in ombra) | `0.70` | 18/10 (#42) | [stt-tts](stt-tts.md) |
 | `arbitro_memoria` | `ombra` | `spento` | non scritta (#1) | [capacita-installazioni](capacita-installazioni.md) |
 | `stanza` | `ombra` | `spenta` | 14/10 | [stt-tts](stt-tts.md), [contesto-conversazione](contesto-conversazione.md) |
-| `stanza_contesto` | `true` | `false` | 14/10 | [contesto-conversazione](contesto-conversazione.md) |
+| `stanza_contesto` | `true` (con la modalità studio, 02/11 #376, aprendo lo Studio la stanza si ferma su quel telefono: si vede all'installazione, [studio](studio.md)) | `false` | 14/10 | [contesto-conversazione](contesto-conversazione.md) |
 | `stanza_cerca` | `true` | `false` | 14/10 | [contesto-conversazione](contesto-conversazione.md) |
 | `stanza_tenuta` | `true` | `false` | 14/10 sera (prova in auto) | [contesto-conversazione](contesto-conversazione.md) |
 | `stanza_durante_voce` | `true` | `false` | 14/10, dopo la misura sul portatile; criterio per il telefono non scritto (#37) | [stt-tts](stt-tts.md) |

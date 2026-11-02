@@ -3941,6 +3941,34 @@ class Brain:
         return sum(p.caratteri for p in getattr(self._c(), "stanza", None) or ())
 
     # ─────────── i dati che cambiano di rado nella storia (16/10, issue #95, dati_turno.py) ───────────
+    def inizio_turno(self) -> float | None:
+        """L'ora dell'ultima frase della persona nella storia."""
+        return next((m.get("_t") for m in reversed(self.history) if m.get("role") == "user"), None)
+
+    def _segni_studio(self, nome: str, args: dict) -> dict:
+        """Per `Ciclo._modalita_dopo_turno`: {"studio_nota"} se la chiamata è un'azione vera di un
+        tool dello Studio, {"apre_studio"} se può anche aprire la modalità. Qui, perché a fine turno
+        le righe della stanza non ci sono più e gli argomenti del registro sono coperti."""
+        from .studio import modalita
+        from .tools.studio import chiamata_nota
+        if nome not in modalita.TOOL or not chiamata_nota(nome, args):
+            return {}
+        out = {"studio_nota": True}
+        try:
+            t = self._turno_politica()
+            inizio = next((i for i in range(len(self.history) - 1, -1, -1)
+                           if self.history[i].get("role") == "user"), 0)
+            # I dati di questo turno, senza quelli dei tool dello Studio stessi
+            dati = [x for f, x in (t.esterni or ()) if f == "stanza"] + [
+                x for _f, x in provenienza.testi_esterni(
+                    [m for m in self.history[inizio:]
+                     if not (m.get("role") == "tool" and m.get("name") in modalita.TOOL)])]
+            if modalita.apre(nome, args, t, dati):
+                out["apre_studio"] = True
+        except Exception:  # noqa: BLE001 — nel dubbio non apre
+            pass
+        return out
+
     def _con_ancorati(self, msgs: list[dict], conv=None) -> list[dict]:
         """`msgs` (la storia prima del turno in corso) con le righe della stanza e i dati fissi dei
         turni prima, ognuno davanti alla frase del suo turno e nell'ordine di allora (prima le
@@ -5090,7 +5118,7 @@ class Brain:
                                     and (m.get("content") or "").strip()][-8:]
         if user_text is not None:
             # Provenienza della frase (05/10, calliope/provenienza.py): voce, breve, scritto…
-            msg_u = {"role": "user", "content": user_text,
+            msg_u = {"role": "user", "content": user_text, "_t": time.time(),
                      "_prov": provenienza.persona(getattr(self.tool_ctx, "speaker_ctx", None))}
             if str(getattr(self._c(), "chiave", "") or "").startswith("ospite:"):
                 # Chi l'ha detta, nella conversazione anonima del satellite (13/10): per i
@@ -6323,6 +6351,13 @@ class Brain:
                 who += " " + VOCE_RICONOSCIUTA_MSG.format(nome=name)
                 if "voce_ora_riconosciuta" not in (getattr(self, "last_rules", None) or ()):
                     self._rule("voce_ora_riconosciuta")
+        elif getattr(sctx, "dispositivo_studio", None):
+            # La modalità studio (02/11, #376): un dato su chi parla, i permessi li decide il codice
+            prop = sctx.dispositivo_studio
+            young = self._minor_note(prop)
+            who = (f"persona: voce non riconosciuta, dal telefono di {prop} con lo Studio aperto: per "
+                   f"lo Studio vale {prop}, per tutto il resto è un ospite"
+                   + (f"; {young}" if young else "") + ".")
         elif isinstance(getattr(sctx, "conoscente", None), dict) and sctx.conoscente.get("nome"):
             # Un conoscente (14/10, decisione 0030, rifiniture): il nome come dato su chi parla,
             # ma resta un ospite (i permessi li decide il codice, non questa riga)
@@ -7213,6 +7248,8 @@ class Brain:
                                 # La decisione della politica per valore accanto a quella vera
                                 # (08/10, fase 3, in ombra): nomi ed etichette, nessun valore
                                 **({"politica_ombra": ombra} if ombra else {}),
+                                # La modalità studio (02/11, #376): la tiene viva, può aprirla
+                                **self._segni_studio(call["name"], args),
                                 # Il nome inventato dal modello (12/10): corretto da Brain
                                 # (`nome_inventato`, quello scritto) o senza un tool vicino
                                 # (`sconosciuto`); per la metrica della scelta dei tool

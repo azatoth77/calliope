@@ -611,6 +611,11 @@ class SpeakerContext:
         # il modo di parlare nei dati del turno (minori.dato_ospite, senza il nome). Non cambia
         # chi parla né il livello (resta ospite). Vale una frase (ciclo._chi_parla)
         self.minore_ospite: str | None = None
+        # La modalità studio (02/11, #376, studio/modalita.py, ciclo._modalita_voce): la voce di
+        # questa frase non è riconosciuta, viene dal dispositivo personale di questa persona con la
+        # modalità aperta. Vale lei solo per i tool dello Studio (tools/registry.py). Vale una frase
+        self.dispositivo_studio: str | None = None
+        self.studio_dal: float | None = None     # da quando vale la storia, per quella frase
         # In compagnia (09/10, calliope/compagnia.py, con `compagnia_enabled: attiva`): più voci
         # vicino a questo satellite negli ultimi minuti. Le azioni vogliono la voce riconosciuta
         # in questa frase (la zona grigia non basta: tools/registry.py) e per i minori la voce
