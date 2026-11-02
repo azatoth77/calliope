@@ -146,8 +146,9 @@ def scenario_telefono(t, hub, st, vid, aid, pid, ctx_fn):
              item and item["argomenti"]["azione"] == "riprova" and r and r["ok"]
              and next(p for p in st.pagine(LEO, vid) if p["id"] == pid)["stato"] == "da_leggere")
     # Inizia: le due domande. Si tocca a home riletta: «Da decidere» esce, e il tasto si sposta
-    aspetta(lambda: t.v("!document.querySelector('button[data-tocco=\"studio_riprova\"]') "
-                        "&& !!document.querySelector('button[data-domande]')"), 6)
+    ok = aspetta(lambda: t.v("!document.querySelector('button[data-tocco=\"studio_riprova\"]') "
+                             "&& !!document.querySelector('button[data-domande]')"), 6)
+    verifica("«Riprova»: la home si rilegge e la pagina esce da «Da decidere»", bool(ok))
     t.tocca("button[data-domande]")
     ok = aspetta(lambda: t.v("document.querySelectorAll('.studio-h-chip').length === 11"), 4)
     verifica("«Inizia»: le due domande, 5 livelli e 6 stati", bool(ok))

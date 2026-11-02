@@ -53,6 +53,18 @@ GUIDA = {"passi": [
      "indizio": "Somma i quattro lati."}], "risultato": "26 cm"}
 
 
+# Lo stesso testo e la stessa scelta su passi di fila, per il doppio tocco
+UGUALI = {"passi": [
+    {"domanda": "Quanto è lunga la base?", "tipo": "numero", "risposta": "8 cm", "indizio": "Rileggi."},
+    {"domanda": "Quanto è lungo il lato uguale?", "tipo": "numero", "risposta": "8 cm", "indizio": "Rileggi."},
+    {"domanda": "Che figura è?", "tipo": "scelta", "opzioni": ["quadrato", "cerchio", "triangolo"],
+     "risposta": "quadrato", "indizio": "Conta i lati."},
+    {"domanda": "Con quanti angoli retti?", "tipo": "scelta", "opzioni": ["quattro", "due", "uno"],
+     "risposta": "quattro", "indizio": "Guarda gli angoli."},
+    {"domanda": "Quanto vale il perimetro?", "tipo": "scelta", "opzioni": ["32 cm", "16 cm", "8 cm"],
+     "risposta": "32 cm", "indizio": "Somma i lati."}], "risultato": "32 cm"}
+
+
 def misure(t, etichetta):
     m = t.v(MISURA_HOME) or {}
     verifica(f"{etichetta}: niente fuori dallo schermo né di lato", not m.get("fuori") and not m.get("lato"),
@@ -202,9 +214,55 @@ def scenario_telefono(t, hub, st, vid, eid):
     ok = aspetta(lambda: "prova aperta" in testo_di(t, ".studio-e"), 6)
     verifica("con una prova aperta la sezione lo dice", bool(ok), testo_di(t, ".studio-e")[:200])
     st.dati.scrivi("UPDATE studio_prove SET stato = 'consegnata' WHERE verifica = ?", (vid,))
+    # Il doppio tocco non ignora una risposta nuova: lo stesso testo al passo dopo, subito
+    from calliope.studio import esercizi_genera as EG
+    tq = "Un quadrato ha il lato di 8 cm. Calcola il perimetro."
+    e2 = st.aggiungi_esercizio(LEO, vid, tq)["esercizio"]
+    passi, ris, av = EG.proposte(UGUALI, tq)
+    st.scrivi_guida(e2, EG.firma(st._riga_es(e2)["testo"], "guida"), passi, ris, av)
+    t.tocca('button[data-esercizio="chiudi"]')
+    aspetta(lambda: t.v("!!document.querySelector('button[data-esercizio=\"elenco\"]')"), 5)
+    t.tocca('button[data-esercizio="elenco"]')
+    sel_e2 = f"""button[data-esercizio="apri"][data-dati*='"esercizio":{e2}']"""
+    ok = aspetta(lambda: t.v(f"!!document.querySelector({json.dumps(sel_e2)})"), 6)
+    verifica("(il problema coi passi uguali nell'elenco)", bool(ok), testo_di(t, ".studio-e")[:200])
+    t.tocca(sel_e2)
+
+    def al_passo(n):
+        return aspetta(lambda: f"Passo {n} di 5" in testo_di(t, ".studio-e-passo"), 6)
+
+    def manda_testo(testo):
+        scrivi(t, ".studio-e-passo input.studio-c-campo", testo)
+        t.tocca('button[data-esercizio="rispondi"]')
+
+    def manda_scelta(valore):
+        t.tocca(f'.studio-e-passo input[type=radio][value="{valore}"]')
+        t.tocca('button[data-esercizio="rispondi"]')
+
+    al_passo(1)
+    manda_testo("8 cm")
+    al_passo(2)
+    manda_testo("8 cm")
+    verifica("lo stesso testo al passo dopo, subito: è una risposta nuova, si va avanti", bool(al_passo(3)),
+             testo_di(t, ".studio-e")[:300])
+    manda_scelta("a")
+    al_passo(4)
+    manda_scelta("a")
+    verifica("la stessa scelta al passo dopo, subito: è una risposta nuova, si va avanti", bool(al_passo(5)),
+             testo_di(t, ".studio-e")[:300])
+
+    def errori_e2():
+        return st.dati.tutti("SELECT errori FROM studio_esercizi WHERE id = ?", (e2,))[0]["errori"]
+
+    manda_scelta("b")
+    aspetta(lambda: errori_e2() == 1, 5)
+    # Si aspetta il tasto riacceso (lo fa `tocca`) e si corregge subito, con un'altra
+    manda_scelta("c")
+    ok = aspetta(lambda: errori_e2() == 2, 5)
+    verifica("una risposta diversa subito dopo una sbagliata: conta", bool(ok), f"errori={errori_e2()}")
 
 
-def scenario_pc(t, hub):
+def scenario_pc(t, hub, eid):
     B.dimensione(t, 1440, 900)
     ok = aspetta(lambda: t.v("document.body.classList.contains('con-sezioni')"), 15)
     verifica("PC: lo schermo personale con le sezioni", bool(ok))
@@ -215,8 +273,9 @@ def scenario_pc(t, hub):
     ok = aspetta(lambda: t.v("!!document.querySelector('#studio-home .studio-e')"), 8)
     verifica("PC: la sezione «Esercizi guidati»", bool(ok))
     t.tocca('button[data-esercizio="elenco"]')
-    aspetta(lambda: t.v("!!document.querySelector('button[data-esercizio=\"apri\"]')"), 6)
-    t.tocca('button[data-esercizio="apri"]')
+    sel = f"""button[data-esercizio="apri"][data-dati*='"esercizio":{eid}']"""
+    aspetta(lambda: t.v(f"!!document.querySelector({json.dumps(sel)})"), 6)
+    t.tocca(sel)
     ok = aspetta(lambda: "Passo 2 di 4" in testo_di(t, ".studio-e-passo"), 6)
     m = t.v(MISURA_HOME) or {}
     verifica("PC: il passo dove l'aveva lasciato, niente di lato", bool(ok) and not m.get("fuori")
@@ -277,7 +336,7 @@ def main() -> int:
         tp = B.T(pc)
         try:
             pc._chiama("DOM.enable")
-            scenario_pc(tp, hub)
+            scenario_pc(tp, hub, eid)
             pc.pompa(0.3)
             errori = [r for r in pc.log if r.startswith("ECCEZIONE") or "Content Security" in r]
             verifica("PC: nessun errore JavaScript né violazione della CSP", not errori, "; ".join(errori)[:300])

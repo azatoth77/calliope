@@ -276,7 +276,8 @@
       es.risposto = r ? { testo: risposta, ora: Date.now() } : null;
       if (r && r.ultimo) {
         es.esito = String(r.ultimo.frase || ESITI[r.ultimo.esito] || "");
-        if (["giusto", "da_rivedere"].includes(r.ultimo.esito)) es.risposta = "";
+        // Passo avanti: vale solo il campo vuoto, lo stesso testo al passo dopo è una risposta nuova
+        if (["giusto", "da_rivedere"].includes(r.ultimo.esito)) { es.risposta = ""; es.risposto.testo = ""; }
       }
       ctx.ridisegna();
       return;
