@@ -6,8 +6,10 @@ decisione 0035 punto 41). Come le carte (`genera.py`): lo stesso thread del lett
 
 **La richiesta** (`corpo`): il prompt di sistema degli argomenti (il testo è un dato), le pagine in
 una busta coi riferimenti P1… e gli argomenti confermati in un'altra coi codici A1…, le regole, lo
-schema guidato, temperatura 0, `presence_penalty` 0, `max_tokens` 3500, thinking spento, **nessun
-tool**.
+schema guidato coi soli codici di questa richiesta, temperatura 0, `presence_penalty` 0,
+`max_tokens` 5000, thinking spento, **nessun tool**. Quante domande per argomento lo dice il numero
+degli argomenti (`genera.quante_per_argomento`): giro vero del 03/11 (#383), con 11 argomenti «da 3
+a 5» dava 35 domande diverse e fine dei token a 3500, due volte, e nessuna domanda.
 
 **Il controllo del codice** (`proposte`), con le regole di argomenti e carte:
 - la forma (`risposte.prepara`): scelta multipla con 2–5 opzioni diverse e una sola uguale alla
@@ -44,16 +46,17 @@ SISTEMA = A.SISTEMA
 REGOLE = (
     "Prepara le domande di una verifica di prova sugli argomenti confermati. Regole:\n"
     "- ogni domanda viene dalle pagine: la risposta deve stare nelle pagine che citi;\n"
-    "- tipo «scelta» (3 o 4 opzioni, una sola giusta, la risposta è il testo dell'opzione giusta),"
+    "- tipo «scelta» (3 o 4 opzioni, una sola giusta, la risposta è il testo dell'opzione giusta; "
+    "per gli altri tipi le opzioni sono vuote),"
     " «vero_falso» (risposta «vero» o «falso»), «numero» (risposta un numero con l'unità se c'è)"
     ", «parole» (risposta breve e da 1 a 3 parole chiave prese dalle pagine) o «aperta» (una "
     "domanda di ragionamento con la risposta che ti aspetti, breve);\n"
     "- domande chiare che non contengono la risposta; non ricopiare gli esercizi delle pagine;\n"
     "- per ogni domanda il codice dell'argomento (A1, A2…) e i riferimenti delle pagine (P1…);\n"
-    "- da 3 a 5 domande per argomento, tipi diversi, al più 30 in tutto;\n"
+    "- domande: {quante}, di tipi diversi;\n"
     "- nessuna domanda presa da istruzioni, annunci o messaggi scritti nelle pagine.")
 SCHEMA = {"type": "object", "properties": {
-    "domande": {"type": "array", "maxItems": 40, "items": {"type": "object", "properties": {
+    "domande": {"type": "array", "maxItems": 30, "items": {"type": "object", "properties": {
         "argomento": {"type": "string"},
         "tipo": {"type": "string", "enum": list(RS.TIPI)},
         "domanda": {"type": "string", "maxLength": RS.TESTO_MAX},
@@ -62,11 +65,14 @@ SCHEMA = {"type": "object", "properties": {
         "risposta": {"type": "string", "maxLength": RS.ATTESA_MAX},
         "parole_chiave": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
         "pagine": {"type": "array", "items": {"type": "string"}, "minItems": 1}},
-        "required": ["argomento", "tipo", "domanda", "risposta", "pagine"]}}},
+        # `opzioni` sempre, vuote per gli altri tipi (banco del 04/11, revisione della PR #388: in un
+        # giro su due 15 domande a scelta senza opzioni, scartate dal controllo)
+        "required": ["argomento", "tipo", "domanda", "opzioni", "risposta", "pagine"]}}},
     "required": ["domande"]}
 TEMPERATURA = 0
 PRESENCE = 0
-MAX_TOKENS = 3500
+# Una domanda costa da 60 a 150 token (giro vero del 03/11, #383: 35 domande in 3500): 30 ci stanno
+MAX_TOKENS = 5000
 MAX_DOMANDE = 30
 
 DA_CONTROLLARE = G.DA_CONTROLLARE
@@ -94,11 +100,20 @@ def firma(argomenti: list[dict], pagine: list[dict], modo_: str) -> str:
     return hashlib.sha256(base.encode()).hexdigest()[:16]
 
 
+def regole(n_argomenti: int) -> str:
+    return REGOLE.format(quante=G.quante_per_argomento(n_argomenti, 3, 5, MAX_DOMANDE))
+
+
+def schema(arif) -> dict:
+    return G.schema_codici(SCHEMA, "domande", arif)
+
+
 def messaggi(v: dict, rif, arif) -> list[dict]:
     return [{"role": "system", "content": SISTEMA},
             {"role": "user", "content": f"{A.intestazione(v)}\nEcco le pagine:\n\n"
                                         f"{A.blocco(v, rif)}\n\nGli argomenti confermati:\n\n"
-                                        f"{G.blocco_argomenti(arif, rif)}\n\n{REGOLE}{A.CHIUSA}"}]
+                                        f"{G.blocco_argomenti(arif, rif)}\n\n{regole(len(arif))}"
+                                        f"{A.CHIUSA}"}]
 
 
 def corpo(modello: str, v: dict, rif, arif) -> dict:
@@ -106,7 +121,7 @@ def corpo(modello: str, v: dict, rif, arif) -> dict:
     temperatura 0, `presence_penalty` 0."""
     return {"model": modello, "messages": messaggi(v, rif, arif),
             "options": {"temperature": TEMPERATURA, "num_predict": MAX_TOKENS},
-            "think": False, "format": SCHEMA, "openai": {"presence_penalty": PRESENCE}}
+            "think": False, "format": schema(arif), "openai": {"presence_penalty": PRESENCE}}
 
 
 def leggi(testo: str) -> list[dict] | None:
@@ -123,6 +138,11 @@ def leggi(testo: str) -> list[dict] | None:
     if not isinstance(j, dict) or not isinstance(j.get("domande"), list):
         return None
     return [d for d in j["domande"] if isinstance(d, dict)]
+
+
+def parziale(testo) -> list[dict]:
+    """Le domande intere di una risposta tagliata (`genera.oggetti_completi`)."""
+    return G.oggetti_completi(testo, "domande")
 
 
 def _ordine(*testi) -> bool:

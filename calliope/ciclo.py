@@ -2734,6 +2734,7 @@ class Ciclo:
         speaker_ctx.minore_ospite = self._minore_per_ospite(t)
         if t.emb_job is not None:
             self._modalita_voce(t)      # dopo: guarda `minore_ospite`
+        self._modalita_turno()
         self._anello_turno(t)
         self.rec.update(livello=speaker_ctx.current_level, testo=t.text,
                         stt_s=round(time.perf_counter() - t.t0, 2))
@@ -3032,6 +3033,12 @@ class Ciclo:
         sat = getattr(self.corsia, "satellite_id", None)
         return (mod, sat, getattr(self.s, "stanza", None)) if mod is not None and sat is not None \
             else None
+
+    def _modalita_turno(self):
+        """Per il turno: la modalità studio è aperta su questo satellite? (l'effetto 3, 04/11, #383,
+        studio/modalita.py: `Brain._sviluppo_coda` la legge da qui)."""
+        m = self._modalita()
+        self.speaker_ctx.in_modalita_studio = bool(m is not None and m[0].di(m[1], m[2]))
 
     def _modalita_voce(self, t):
         """L'effetto 2 della modalità studio (02/11, #376, studio/modalita.py): la voce di questa

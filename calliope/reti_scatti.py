@@ -56,7 +56,7 @@ REGOLE_RETE: dict[str, tuple[str, ...]] = {
     "estensione_nominata": ("estensione_nominata", "estensioni_elenco_turno",
                             "estensioni_limiti_turno"),
     "modalita_sviluppo": ("sviluppo_modalita", "sviluppo_riga_fuori_tema",
-                          "sviluppo_promemoria_giorno"),
+                          "sviluppo_promemoria_giorno", "sviluppo_taciuto_studio"),
     "conferma_al_posto_del_vuoto": ("conferma_al_posto_del_vuoto", "vuoto_ripiego"),
     "vuoto_seconda_passata": ("vuoto_seconda_passata",),
     "ricerca_promessa": ("ricerca_promessa",),

@@ -481,9 +481,9 @@ def n_mappe(v=None):
     return st.dati.uno(q, (v,) if v else ())["n"]
 
 
-verifica("lo schema alla versione 15 (dalla preparazione, #297), studio_mappe fra le tabelle e nella conservazione",
+verifica("lo schema alla versione 16 (dalla preparazione, #297), studio_mappe fra le tabelle e nella conservazione",
          st.dati.uno("SELECT versione FROM meta_schema WHERE modulo='studio'")["versione"]
-         == len(D.MIGRAZIONI) == 15 and "studio_mappe" in D.TABELLE
+         == len(D.MIGRAZIONI) == 16 and "studio_mappe" in D.TABELLE
          and "studio_mappe" in __import__("calliope.conserva", fromlist=["x"]).TABELLE_STUDIO)
 vb, idsb, aidsb = carica(st, ANDREA)
 scheletro(st, vb, idsb, aidsb, chi=ANDREA)

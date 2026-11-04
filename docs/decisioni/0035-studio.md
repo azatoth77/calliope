@@ -931,8 +931,9 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
 
 ## La modalità studio (#376, 02/11)
 
-54. **La modalità studio è uno stato in memoria con due effetti, e basta** (decisione di chi
-    amministra del 02/11). Per satellite, in memoria (`studio/modalita.py`); non cambia la
+54. **La modalità studio è uno stato in memoria con un elenco chiuso di effetti** (*[storico: «con due
+    effetti, e basta» fino al 04/11]*; decisione di chi amministra del 02/11; dal 04/11 può cambiare ciò
+    che serve nella sessione, e ogni effetto si dichiara qui). Per satellite, in memoria (`studio/modalita.py`); non cambia la
     configurazione e non è un meccanismo per cambiare interruttori. Si apre alla prima chiamata di un
     tool dello Studio dal dispositivo personale del proprietario, o aprendo la sezione Studio su
     quello schermo; si chiude uscendo, dopo `studio_modalita_inattivita_min` (20 minuti) senza
@@ -950,6 +951,33 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     - **La conversazione è quella del proprietario**, se è l'ultima di quel satellite: senza, un «sì» non
       saprebbe a cosa risponde. Per quella frase i ricordi e gli avvisi del proprietario non arrivano al
       modello; la storia della conversazione sì.
+    - **Effetto 3** (04/11, #383; *[storico: «due effetti» fino al 04/11]*): vedi il punto 55.
+
+## Dal giro vero del 03/11 (#383, 04/11)
+
+55. **Una generazione tagliata tiene ciò che è intero, e chi studia non sente lo sviluppo.**
+    - **Una lista si salva a voci, una pagina no.** `finish_reason: length` su carte, domande e lezioni
+      non vuol dire «giro in tondo»: le voci intere passano dallo stesso controllo del codice (che toglie
+      anche i doppioni di un giro vero), e a temperatura 0 rifare la stessa richiesta dà lo stesso
+      taglio. Si richiede solo senza una voce intera. La pagina letta resta com'era: un pezzo di pagina
+      non è una pagina, e si rifà (punto del 30/10, #282).
+    - **La richiesta ci sta nel suo tetto.** Quante voci per argomento le dice il numero degli
+      argomenti, lo schema ha il tetto, e il budget di token basta per il tetto.
+    - **I codici degli argomenti li impone lo schema** (`enum`), e il codice legge anche «A1: titolo».
+    - **Un taglio non lascia buchi nascosti.** Si richiedono i soli argomenti rimasti senza una voce
+      pulita (anche dopo una risposta intera), al più due volte; ciò che resta scoperto sta in
+      `studio_verifiche.scoperti` (solo id), per chi mostrerà questi materiali (#384). Una risposta in
+      più può solo aggiungere: mai togliere una voce pulita già tenuta. Una carta o una domanda già
+      decisa copre il suo argomento.
+    - **Effetto 3 della modalità studio:** su quel satellite, a modalità aperta, niente promemoria degli
+      sviluppi sospesi né riga dello sviluppo aperto, e niente fase dello sviluppo nei dati del turno, a
+      meno che si parli dello sviluppo. Il promemoria non si consuma. È lo stato giusto perché dice già
+      che su quel dispositivo si sta studiando, si chiude da solo e non cambia permessi né configurazione.
+    - **Mai un vicolo cieco per una verifica che manca:** con una materia detta, chi legge o studia riceve
+      la strada verso «crea» e, con una verifica sola, il richiamo senza materia. Un'azione che cambia
+      qualcosa non si rifà su un'altra verifica: si dice in breve o si chiede quale. Senza materia resta
+      lo stesso «non la trovo» di una verifica di un altro. L'interrogazione senza domande dice ciò che
+      usa (scritte o confermate): che usi anche ciò che è generato è la #384.
 
 ## Conseguenze
 

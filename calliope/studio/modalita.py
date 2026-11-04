@@ -1,8 +1,10 @@
 """
 La modalità studio (02/11/2026, issue #376, decisione di chi amministra, 0035 punto 54).
 
-Uno stato **in memoria**, per satellite, con un **elenco chiuso di due effetti**. Non è un
-meccanismo per cambiare interruttori: non tocca la configurazione e non ha altri effetti.
+Uno stato **in memoria**, per satellite, con un **elenco chiuso di effetti**: oggi tre (*[storico: due
+fino al 04/11]*). Può cambiare ciò che serve nella sessione (decisione di chi amministra); un effetto
+nuovo si dichiara qui e nella decisione 0035. Non è un meccanismo per cambiare interruttori: non tocca
+la configurazione.
 
 **Si apre** alla prima chiamata di un tool dello Studio detta dal proprietario dal suo dispositivo
 personale (`Ciclo._modalita_dopo_turno`, `apre`), o aprendo la sezione Studio su quello schermo
@@ -24,6 +26,13 @@ sui suoi dati** (`solo_propri`, `servizio.permesso`). Vale come la zona grigia (
 `dispositivo.proprio`). La voce chiaramente di un altro vince. Niente con la compagnia, un
 conoscente, un minore possibile, fuori orario per un minore; un tool fuori dallo Studio resta da
 ospite. `togli`, `archivia` e `conclusa` non si eseguono (`SOLO_VOCE_SICURA`).
+
+**Effetto 3** (04/11, issue #383, `Ciclo._modalita_turno`, `Brain._sviluppo_coda` e `_sviluppo_turno`):
+su quel satellite, a modalità aperta, Calliope non aggiunge alle risposte il promemoria degli sviluppi
+sospesi né la riga dello sviluppo aperto, e il modello non riceve la fase dello sviluppo nei dati del
+turno, a meno che si stia parlando dello sviluppo. Il promemoria non si consuma: torna dopo la chiusura.
+Il turno che apre la modalità con un tool non è ancora dentro: si apre a fine turno. Giro vero del
+03/11: «A proposito: lo sviluppo di … è sospeso» detto a chi stava studiando.
 
 **Per quella frase Brain lavora come per un ospite qualunque**: la sua conversazione è una da ospite
 (`corsie`, «modalita»), `_speaker_key` è None, e ciò che è legato al proprietario non c'è per
