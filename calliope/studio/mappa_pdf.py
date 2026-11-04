@@ -18,11 +18,14 @@ from __future__ import annotations
 import datetime
 import math
 
+from .mappa import TELA_NODI
+
 # La pagina (mm) e la mappa dentro
 LARGO, ALTO = 297.0, 210.0
 MARGINE = 12.0
 TESTA = 30.0
 NODO_W = 46.0
+NODO_W_LUNGA = 80.0
 RIGA = 4.4
 FONT_NODO = 9
 # Lo spazio in fondo alla pagina che resta libero (il piede)
@@ -121,16 +124,18 @@ def render(mappa: dict, nome: str, materia: str, data_verifica: str, pagine: dic
     # ── pagina 1: la mappa ──
     pdf.add_page()
     testa("la mappa")
-    x0, y0 = MARGINE + NODO_W / 2, TESTA + 10
-    larga, alta = LARGO - 2 * MARGINE - NODO_W, ALTO - TESTA - MARGINE - 20
+    # Una mappa lunga (#385) è disposta su due colonne fitte: riquadri larghi, testo su meno righe
+    nodo_w = NODO_W if len(nodi) <= TELA_NODI else NODO_W_LUNGA
+    x0, y0 = MARGINE + nodo_w / 2, TESTA + 10
+    larga, alta = LARGO - 2 * MARGINE - nodo_w, ALTO - TESTA - MARGINE - 20
     pdf.set_font(fam, "", FONT_NODO)
     box = {}
     for n in nodi:
-        righe = _taglia(pdf, testo_di(n), NODO_W - 4, 3, puntini)
+        righe = _taglia(pdf, testo_di(n), nodo_w - 4, 3, puntini)
         h = len(righe) * RIGA + 4
         cx = x0 + float(n.get("x") or 0.5) * larga
         cy = y0 + float(n.get("y") or 0.5) * alta
-        box[int(n["id"])] = (cx, cy, NODO_W, h, righe)
+        box[int(n["id"])] = (cx, cy, nodo_w, h, righe)
     # Prima le frecce (sotto), poi i riquadri
     pdf.set_draw_color(60, 60, 60)
     pdf.set_line_width(0.35)

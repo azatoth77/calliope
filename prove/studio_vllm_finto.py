@@ -57,10 +57,19 @@ class VllmFinto:
 
     def chat(self, messaggi, *, schema=None, **kw):
         from calliope.studio import mappa as M
+        from calliope.studio import mappa_genera as MG
         testo = messaggi[-1]["content"]
         vid = self._verifica(testo)
         chiavi = set((schema or {}).get("properties", {}))
-        if "triple" in chiavi:
+        if "triple" in chiavi and MG.INIZIO_COPERTURA in testo:
+            # La richiesta mirata e le mappe delle parti (#385): le uscite salvate sono di prima,
+            # quindi niente; dove ci sono (`uscite["parti"]`, per titolo) quelle
+            self.richieste.append((vid, "copertura"))
+            out = {"triple": []}
+        elif "triple" in chiavi and MG.INIZIO_PARTE in testo:
+            self.richieste.append((vid, "parte"))
+            out = {"triple": []}
+        elif "triple" in chiavi:
             self.richieste.append((vid, "mappa"))
             out = {"triple": self.uscite["mappa"][vid]["triple"]}
         elif "collegamenti" in chiavi:

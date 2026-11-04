@@ -129,7 +129,9 @@ verifica("…e la stanza riprende", stz.stato_pausa(1) is None)
 ora.t = datetime.datetime(2026, 11, 2, 23, 55).timestamp()
 md.apri(1, "l1", stz)
 verifica("la pausa della stanza non passa la mezzanotte",
-         stz.stato_pausa(1)["fino"] <= datetime.datetime(2026, 11, 3, 0, 0).timestamp() + 1)
+         # La stanza conta col tempo vero, la modalità con quello finto: mancano 5 minuti (04/11:
+         # con la data fissa la prova cadeva da sola dal 03/11)
+         stz.stato_pausa(1)["fino"] <= time.time() + 5 * 60 + 1)
 ora.t = datetime.datetime(2026, 11, 3, 0, 1).timestamp()
 verifica("mezzanotte: si chiude", md.di(1, stz) is None)
 stz.riprendi(1)

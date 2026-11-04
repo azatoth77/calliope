@@ -9,7 +9,8 @@
 // v39 (31/10, #278): esercizio.js, gli esercizi guidati dello Studio (dopo l'importazione, v38)
 // v40 (31/10, #298 parte 3): la condivisione dal telefono (share target, condividi.js)
 // v41 (31/10, #297, parte 3): la preparazione dietro le quinte nella libreria (dopo la condivisione, v40)
-const CACHE = "calliope-telefono-pagina-v41";
+// v42 (04/11, #385): le mappe delle parti dello Studio, «Le parti» (dopo la preparazione, v41)
+const CACHE = "calliope-telefono-pagina-v42";
 const PAGINA = [
   "/telefono/", "/telefono/telefono.js", "/telefono/voce.js", "/telefono/microfono.js",
   "/telefono/schermo-acceso.js",

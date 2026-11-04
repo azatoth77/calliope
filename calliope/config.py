@@ -2206,8 +2206,17 @@ class Config:
     # La mappa concettuale (30/10, passo 7, #247, calliope/studio/mappa.py): al più tanti concetti
     # nello scheletro; nella mappa dello studente e a memoria la persona ne aggiunge al più 6 suoi
     # in più (`mappa.SUOI_MAX`); i collegamenti al più il doppio. Il progetto del 27/10 dice 10–15
-    # per mappa, lo scheletro 6–10: una mappa più grande si divide per capitolo (un'altra verifica)
-    studio_mappa_nodi_max: int = 12
+    # per mappa, lo scheletro 6–10: una mappa più grande si divide per capitolo (un'altra verifica).
+    # Dal 04/11 (#385) la generale deve avere ogni argomento (fino a 12, più il centro e i legami):
+    # 20; i particolari stanno nella mappa della parte. *[storico: 12 fino al 04/11]*
+    studio_mappa_nodi_max: int = 20
+    # Le mappe delle parti (04/11, #385, calliope/studio/mappa_genera.py): una per argomento del
+    # piano, dalle sole pagine di quell'argomento, da leggere (nessuno le cambia, niente «Fai la
+    # tua»). «attiva» segue `studio_mappa_genera` (ombra: misure soltanto), «spenta» niente. Una
+    # richiesta per argomento, circa 15 s a parte sulla DGX libera. Il tetto dei concetti di una
+    # parte resta nei 10–15 del progetto del 27/10, sopra quei numeri non si legge più
+    studio_mappa_parti: str = "attiva"
+    studio_mappa_parte_nodi_max: int = 16
     # Lo scheletro della mappa generato dalle pagine lette (30/10, passo 7, seconda parte, #247,
     # calliope/studio/mappa_genera.py): lo stesso thread della lettura, con la sua guardia, chiede a
     # qwen3.6 le triple (concetto, relazione, concetto) degli argomenti confermati di una verifica
@@ -3635,7 +3644,8 @@ SEZIONI: dict[str, list[str]] = {
                "studio_pdf_max_mb", "studio_pdf_max_pagine", "studio_pagine_max",
                "studio_pagine_al_minuto", "studio_nitidezza_min", "studio_lettura",
                "studio_argomenti", "studio_padronanza", "studio_carte_genera",
-               "studio_mappa_nodi_max", "studio_mappa_genera", "studio_mappa_libera",
+               "studio_mappa_nodi_max", "studio_mappa_parti", "studio_mappa_parte_nodi_max",
+               "studio_mappa_genera", "studio_mappa_libera",
                "studio_mappa_consigli", "studio_prova_domande", "studio_prova_minuti",
                "studio_finestra_giorni", "studio_domande_genera", "studio_ascolta",
                "studio_ascolta_voce", "studio_ascolta_giorni", "studio_indicazioni",
@@ -4005,6 +4015,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "studio_pdf_max_mb": (1.0, 200.0), "studio_pdf_max_pagine": (1, 500),
     "studio_pagine_max": (1, 1000), "studio_pagine_al_minuto": (1, 600),
     "studio_nitidezza_min": (0.0, 100_000.0), "studio_mappa_nodi_max": (4, 30),
+    "studio_mappa_parte_nodi_max": (4, 30),
     "studio_prova_domande": (3, 40), "studio_prova_minuti": (2, 180),
     "studio_finestra_giorni": (1, 90), "studio_ascolta_giorni": (1, 365),
     "studio_indicazioni_giorni": (1, 90), "studio_serie_pause": (0, 3),
@@ -4259,6 +4270,7 @@ _MODI_NUOVI = {
                                  falso="spenta"),
     # La mappa libera e «Parliamone» (30/10, #328): il true è ambiguo, rifiutato
     "studio_mappa_libera": _modi("studio_mappa_libera", ("spenta", "attiva"), falso="spenta"),
+    "studio_mappa_parti": _modi("studio_mappa_parti", ("spenta", "attiva"), falso="spenta"),
     "studio_mappa_consigli": _modi("studio_mappa_consigli", ("spenta", "ombra", "attiva"),
                                    falso="spenta"),
     # Le domande generate (31/10, #248): come le carte generate
