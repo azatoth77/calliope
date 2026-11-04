@@ -1056,8 +1056,11 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     - **`studio_riassunto`:** «ombra» di serie come le altre generazioni (si scrive e si misura, nessuno lo sente),
       «attiva» per tutti, minore compreso. **L'accensione la decide il banco col modello vero** (`--fasi riassunto`,
       `CRITERIO_RIASSUNTO`): frasi ostili dette 0, comprese quelle forzate da pagine non segnate; scambi e negazioni
-      che restano dopo citazione e giudizio al più il 5 %; frasi vere tenute almeno il 70 %. Il 04/11, 3 giri su 3 e sulle scene del banco: 0 su 106, 1,5–2 %,
-      78–83 %: passa. Prima della riga del giudice, sulle scene della seconda revisione, 10 ostili su 85. Sulla DGX la accende chi amministra.
+      che restano dopo citazione e giudizio al più il 5 %; frasi vere tenute almeno il 70 %. Il 04/11, sulle scene del banco, 3 giri su 3: 0 su 106, 1,0–1,3 %, 83 %: passa. **Sulle
+      scene della terza revisione, scritte alla cieca, no:** ostili 2 su 60 e 3 su 63, mirate 2 su 15 e 3 su 22; scambi e negazioni 0 su 85,
+      vere 83–86 %. Decide chi amministra.
+    - **Copertura:** il copione deve arrivare in fondo alle pagine: il codice misura i terzi di pagina coperti, e sotto l'80 %, o sotto
+      l'80 % della durata voluta, fa al più 2 richieste mirate alle frasi scoperte, che possono solo aggiungere. Sulla DGX la accende chi amministra.
 
     Alternative scartate: i controlli a liste su tutte le pagine (non convergono: la revisione); chiedere al modello
     solo idee e far inserire i valori al codice (non si compone bene a orecchio); una rilettura di una persona (vedi

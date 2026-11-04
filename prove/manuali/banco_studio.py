@@ -1271,6 +1271,15 @@ def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None, guardian
         return pagine, args, A.riferimenti(pagine), G.argomenti_rif(args)
 
     out, tutte = {}, {**materiali, **extra}
+    # Il materiale lungo: tutte le pagine delle verifiche, su tre argomenti
+    pag_tutte = [dict(p, id=f"{k}-{p['id']}") for k, x in materiali.items() for p in x["pagine"]
+                 if p.get("tipo") != "ostile"]
+    if pag_tutte:
+        terzo = max(1, len(pag_tutte) // 3)
+        tutte["lungo"] = {"id": "lungo", "materia": "Scienze", "classe": "2ª media",
+                          "data_verifica": "2026-11-20", "argomento": "Tutto il programma", "pagine": pag_tutte,
+                          "argomenti": [{"titolo": f"Parte {i + 1}", "pagine": [p["id"] for p in pag_tutte[
+                              i * terzo:(i + 1) * terzo if i < 2 else None]]} for i in range(3)]}
     for vid, ver in tutte.items():
         if not ver.get("argomenti"):
             continue
@@ -1309,8 +1318,6 @@ def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None, guardian
                     break
                 grezzi = L._aggiungi(grezzi, altre, set(codici), lambda x: bool(
                     R.valida([x], M, rif, arif, piano)["sezioni"]))
-            ris = R.valida(grezzi or [], M, rif, arif, piano)
-            dopo_codice = ris["conti"]["proposte"] and sum(len(s["frasi"]) for s in ris["sezioni"])
             t0 = time.monotonic()
             giudizio_no = [0]
 
@@ -1320,7 +1327,18 @@ def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None, guardian
                     giudizio_no[0] += 1
                     return "giudizio"
                 return None if guarda(f["testo"]) else "guardiano"
-            R.dopo_giudizi(ris, tiene, piano)
+
+            def mirata_chiedi(mirata):
+                nonlocal secondi, token, richieste
+                r = cli.chat(R.messaggi_scoperte(v, rif, mirata, M),
+                             max_token=R.max_token(mirata["quante"], len(mirata["argomenti"])),
+                             schema=R.schema(mirata["argomenti"]), temperatura=R.TEMPERATURA, presence=R.PRESENCE)
+                secondi += float(r.get("secondi") or 0)
+                token += int(r.get("token_out") or 0)
+                richieste += 1
+                testo = r.get("testo", "")
+                return R.leggi(testo) or R.parziale(testo) or None
+            ris = R.con_copertura(grezzi or [], M, rif, arif, piano, mirata_chiedi, tiene)
             s_giudizi = time.monotonic() - t0
             esito = R.giudica(ris) if grezzi is not None else G.ROTTO
             c = ris["conti"]
@@ -1339,7 +1357,9 @@ def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None, guardian
                     "secondi_giudizi": round(s_giudizi, 1), "lettura_s": c["lettura_s"],
                     "obiettivo_s": c["obiettivo_s"], "durata_s": c["durata_s"], "rapporto": c["rapporto"],
                     "argomenti": f"{c['argomenti']}/{len(utili)}", "copertura": c["copertura"],
-                    "proposte": c["proposte"], "dopo_codice": dopo_codice, "tenute": c["tenute"],
+                    "proposte": c["proposte"], "tenute_prima": c["tenute_prima"], "tenute": c["tenute"],
+                    "copertura_pagina_prima": c["copertura_pagina_prima"], "copertura_pagina": c["copertura_pagina"],
+                    "durata_prima_s": c["durata_prima_s"], "mirate": c["richieste_mirate"],
                     "giudizio_no": giudizio_no[0], "motivi": c["motivi"], "non_trovati": c["non_trovati"],
                     "ostili_proposte": sum(ostile(t) for t in proposte),
                     "ostili_rimaste": sum(ostile(f["testo"]) for f in tenute),
@@ -1356,9 +1376,11 @@ def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None, guardian
             out[f"{vid}{'' if segno else '-senza-segno'}"] = riga
             with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
                 f.write(json.dumps(riga, ensure_ascii=False) + "\n")
-            log(f"[riassunto] {vid}{'' if segno else ' senza segno'}: {esito}, {riga['durata_s']:.0f} s su "
-                f"{riga['lettura_s']:.0f} s di pagine, frasi {riga['proposte']} → codice {riga['dopo_codice']} "
-                f"→ giudizio {riga['tenute']}, argomenti {riga['argomenti']}, ostili {riga['ostili_rimaste']}, "
+            log(f"[riassunto] {vid}{'' if segno else ' senza segno'}: {esito}, durata {riga['durata_prima_s']:.0f} → "
+                f"{riga['durata_s']:.0f} s (obiettivo {riga['obiettivo_s']:.0f}) su {riga['lettura_s']:.0f} s di pagine, "
+                f"parte di pagina {riga['copertura_pagina_prima']} → {riga['copertura_pagina']}, frasi "
+                f"{riga['tenute_prima']} → {riga['tenute']}, mirate {riga['mirate']}, argomenti {riga['argomenti']}, "
+                f"ostili {riga['ostili_rimaste']}, "
                 f"{riga['motivi']}, copione {riga['secondi']:.0f} s, giudizi {riga['secondi_giudizi']:.0f} s"
                 + (f", sintesi {riga['sintesi_s']} s per {riga['audio_s']} s" if "sintesi_s" in riga else ""))
 

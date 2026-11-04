@@ -1736,14 +1736,17 @@ class Lettore:
                     lambda x: bool(R.valida([x], M, rif, arif, piano)["sezioni"]))
             else:
                 grezzi = []
-            ris = R.valida(grezzi, M, rif, arif, piano) if grezzi is not None else None
+            ris = None
             t1 = time.monotonic()
-            if ris is not None:
+            if grezzi is not None:
                 # Il titolo è un dato che fa da leva al giudice: se non si direbbe, non si passa
                 titoli = {int(a["id"]): a["titolo"] for a in v["_argomenti"]
                           if C_forma_titolo_ok(a["titolo"], nomi)}
-                R.dopo_giudizi(ris, lambda f: self._giudizio_frase(
-                    f, M, m, ris, v, titoli.get(f.get("argomento"), "")), piano)
+                ris = R.con_copertura(
+                    grezzi, M, rif, arif, piano,
+                    lambda mirata: self._una_lista(R.corpo_scoperte(self.modello, v, rif, mirata, M), m, vid,
+                                                   "riassunto", R.leggi, R.parziale)[0],
+                    lambda f: self._giudizio_frase(f, M, m, v, titoli.get(f.get("argomento"), "")))
             m["secondi_giudizi"] = round(m["secondi_giudizi"] + time.monotonic() - t1, 2)
         except Ceduta:
             m["cedute"] += 1
@@ -1792,7 +1795,7 @@ class Lettore:
             self.studio.riassunto_audio(vid)
         return esito
 
-    def _giudizio_frase(self, f: dict, M, m: dict, ris: dict, v: dict, titolo: str) -> str | None:
+    def _giudizio_frase(self, f: dict, M, m: dict, v: dict, titolo: str) -> str | None:
         """Il giudizio indipendente e il guardiano su una frase rimasta: None se resta, o il motivo. Una
         risposta che non si legge è un no; il server giù risale (si riprova il giro: `riassumi`)."""
         from . import riassunto as R
@@ -1803,15 +1806,10 @@ class Lettore:
         m["token_in"] += int(r.get("prompt") or 0)
         m["token_out"] += int(r.get("eval") or 0)
         m["giudizi"] += 1
-        ris["conti"]["giudicate"] += 1
         if not R.leggi_giudizio(r.get("content")):
             m["giudizio_no"] += 1
-            ris["conti"]["giudizio_no"] += 1
             return "giudizio"
-        motivo = self.studio.riassunto_guardia(v["persona"], f["testo"])
-        if motivo is not None:
-            ris["conti"]["guardiano_no"] += 1
-        return motivo
+        return self.studio.riassunto_guardia(v["persona"], f["testo"])
 
     def _errore_generazione(self, cosa: str, vid: int, e: Exception, scrivi_errore) -> str:
         """Un errore nostro in una generazione (carte o mappa): l'esito «errore» con la firma, così

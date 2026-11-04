@@ -182,6 +182,13 @@ controllo: le ostili che passano la cintura le ferma il giudizio.
 così 1 argomento su 20 pagine non finisce «scarso» per un obiettivo impossibile. Sotto i 45 s niente («corto»), oltre
 300 000 caratteri di frasi nemmeno («lungo», lo si dice): il prompt non ci starebbe (`--max-model-len`).
 
+**Copertura** (terza revisione della PR #391): sulle pagine da 14–15 frasi il copione prendeva le prime 3–6, e fisica si fermava a
+Newton. La richiesta chiede di distribuire; il codice misura la parte di pagina coperta (`copertura_pagine`: i terzi di ogni
+pagina con una frase citata e tenuta); sotto l'80 %, o sotto l'80 % della durata voluta, una richiesta mirata alle sole frasi
+scoperte (`con_copertura`, al più 2, come le altre generazioni). Può solo aggiungere: una frase aggiunta che non passa non pesa
+sulla sezione, le aggiunte non superano 1,2 volte la durata voluta, ogni frase si giudica una volta sola, e dentro la sezione le
+frasi stanno nell'ordine della pagina.
+
 **Se si perde troppo.** Una sezione sotto la metà delle sue frasi lascia le sue pagine, dicendolo. Più della metà del testo
 perso, meno della metà del materiale coperto o meno del 40 % della durata voluta è «scarso»: si leggono le pagine e si dice.
 «Non è ancora pronto» si dice solo se è vero: un lettore c'è, la verifica è aperta e la data non è passata.
@@ -224,17 +231,32 @@ paola-medium). Le scene sono del banco, nelle categorie delle revisioni; 3 giri,
 | Vere, riformulate a mano | 23 | 23 | 18–19 |
 | Fatti di materia con «si può», «fa bene» (fuori dal criterio) | 12 | 12 | 6–8 |
 
-**Passa in tutti e 3 i giri:** ostili 0 su 106, scambi e negazioni 1,5–2 %, vere 78–83 %. Sulle scene della seconda revisione,
+**Sulle scene del banco passa in tutti e 3 i giri** (senza la copertura): ostili 0 su 106, scambi e negazioni 1,5–2 %, vere 78–83 %. Sulle scene della seconda revisione,
 scritte da chi non conosceva il controllo, prima di questa versione: ostili 10 su 85, vere 58 %. **Costo noto della riga del
 giudice:** butta da un terzo a metà dei fatti di materia con «si può» o «fa bene». Una frase in meno, e se la sezione resta
 povera si leggono le pagine: un errore dal lato prudente, da guardare nell'uso.
 
-*Copione, banco di fantasia:* 8 su 10 «pronto» (chimica e geografia ostile
-ogni tanto «scarso», materiale breve), durata 4–84 s su 76–262 s di pagine; ostili rimaste 0; copione 3–18 s, giudizi 0–5 s (0,34 s a
-frase), sintesi 0,1–1,9 s. *Materiale vero del giro del 03/11* (solo conti stampati, niente scritto, 3 giri): 4 pagine, 11 argomenti,
-183 frasi; tutti «pronto», frasi tenute 12–15 su 23, argomenti 8–9 su 11 (gli altri leggono le pagine), durata stimata 79–96 s su 638
-(0,12–0,15), audio 65 s contro i 12,5 minuti di lettura, copione 24–30 s, giudizi 7–8 s. Il giudizio pesa circa un quarto del copione:
-sta dentro una generazione di sfondo.
+**La copertura, prima e dopo le richieste mirate** (terza revisione; prima = il copione dopo i controlli, senza mirate):
+| Materiale | Frasi tenute | Parte di pagina coperta | Durata stimata / obiettivo | Esito |
+|---|---|---|---|---|
+| Vero del 03/11, 3 giri, solo conti | 12–17 → 18–24 | 0,58–0,75 → 0,83–0,92 | 65–90 → 92–132 s / 160 s | «pronto» 3/3 |
+| Fisica, una pagina da 15 frasi | 3 → 6 | 1,0 → 1,0 | 16 → 30 s / 30 s | «pronto» |
+| Biologia, una pagina da 14 frasi | 4 → 7 | 0,33 → 1,0 | 16 → 27 s / 30 s | «pronto» |
+| Storia | 8–9 → 13–14 | 0,57–0,61 → 0,71–0,78 | 50–62 → 86–95 s / 65 s | «pronto» |
+| Scienze | 6 → 11–14 | 0,25–0,29 → 0,42–0,57 | 42–44 → 64–74 s / 61 s | «pronto» |
+| Matematica | 7–8 → 10–12 | 0,38–0,43 → 0,57–0,62 | 46–51 → 68–82 s / 58 s | «pronto» |
+| Brevi: chimica, geografia, con e senza il segno | 1–4 → 4–5 | 0,11–0,36 → 0,46–0,56 | 4–22 → 21–34 s / 30 s | «pronto» 2, «scarso» 2 |
+| Lungo: 23 pagine su 3 argomenti | 11 → 17 | 0,13 → 0,20 | 67 → 107 s / 186 s | «pronto» |
+
+Le richieste mirate costano: copione e giudizi passano da circa 35 s a 68–81 s sul materiale vero, sempre dietro la quiete della voce;
+sulle pagine di fantasia da 16 s a 45–55 s. Audio vero 73 s nel primo giro, contro i 12,5 minuti di lettura. **Limiti:** col tetto di 2
+mirate il materiale lungo resta coperto al 20 %; sui 2 brevi «scarsi» si leggono le pagine, dicendolo, e durano poco; una pagina coperta
+per terzi può lasciare fuori una frase (i vaccini in biologia, a durata finita). Scene dopo la copertura, 3 giri: ostili 0 su 106,
+scambi e negazioni 1,0–1,3 % su 301, vere 83 %, materia con «si può» 8 su 12.
+
+**Scene del revisore, alla cieca** (terza revisione, numeri suoi): ostili 2 su 60 e 3 su 63, mirate 2 su 15 e 3 su 22, scambi e negazioni
+0 su 85, vere 83–86 %, copioni pronti 39 su 39. Sulle sue scene quindi il criterio «ostili 0» **non è raggiunto**: decide chi amministra,
+e il giudice non si è toccato per questo. Le mie scene dicono 0 anche perché le ho viste.
 
 Difetti trovati così: «(P2)» nel testo letto come una formula; «1519-1521» letto come un telefono.
 
@@ -246,7 +268,7 @@ se gli si chiedono in lettere; il controllo regge tutte e due. Sullo schermo, di
 una generazione (la generazione ora aspetta la quiete, e `valida` costa 0,02 s, ma il vLLM è un'altra cosa); il giro con la
 versione installata; il tasto «Leggi le pagine» in un browser vero.
 
-Prove: `prova_studio_riassunto.py` (a secco, coi contrari delle revisioni), 45 mutanti su 45 cadono; la fonte nell'endpoint in
+Prove: `prova_studio_riassunto.py` (a secco, coi contrari delle revisioni), 52 mutanti su 52 cadono; la fonte nell'endpoint in
 `prova_studio_ascolta.py`.
 
 ## Il giro vero del 03/11 (04/11, issue #383, ramo `issue-383-giro-studio`)

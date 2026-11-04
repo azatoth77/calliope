@@ -26,6 +26,11 @@ ordine di costo:
 raggiungere, e il materiale lungo finirebbe «scarso» per una bugia). Sotto `CORTO_S` niente riassunto; oltre
 `PROMPT_MAX_CAR` di frasi nemmeno («lungo»): la richiesta non ci starebbe, e lo si dice.
 
+**La copertura** (`con_copertura`): il modello tende a fermarsi alle prime frasi di una pagina. La richiesta chiede di
+distribuire, e il codice misura la parte di pagina coperta (`copertura_pagine`: i terzi di ogni pagina con almeno una
+frase citata e tenuta). Se resta scoperto troppo, o la durata è sotto l'obiettivo, una richiesta mirata alle sole frasi
+scoperte, al più `SCOPERTE_MAX`: può solo aggiungere (una frase aggiunta che non passa non conta contro la sezione).
+
 **Se si perde troppo** una sezione lascia le sue pagine; in tutto (`giudica`) l'esito è «scarso»: si leggono le
 pagine e si dice perché. A temperatura 0 non si rifà finché la firma non cambia.
 
@@ -69,6 +74,13 @@ TOLLERANZA_DURATA = 1.5       # una sezione oltre tante volte la sua parte si ta
 # Il prompt ci deve stare (vLLM, --max-model-len 131072): 3,7 caratteri a token, col margine
 PROMPT_MAX_CAR = 300_000
 
+# ─────────────────────────── la copertura ───────────────────────────────────────────────────────
+COPERTURA_PAGINA_MIN = 0.8    # dei terzi di pagina, sotto si chiede ancora
+DURATA_SCOPERTE = 0.8         # della durata voluta, sotto si chiede ancora
+SCOPERTE_MAX = 2              # come `lettura.SECONDE_MAX`
+AGGIUNTE_MAX = 12             # le frasi di una richiesta mirata
+TOLLERANZA_TOTALE = 1.2       # la durata voluta: le aggiunte non vanno oltre
+
 # ─────────────────────────── quando si perde troppo ────────────────────────────────────────────
 PERSA_MAX = 0.5               # del testo proposto
 SEZIONE_MIN = 0.5             # delle frasi di una sezione: sotto si leggono le sue pagine
@@ -85,6 +97,8 @@ REGOLE = (
     "altre frasi;\n"
     "- ogni frase è un'affermazione completa e breve, al più 25 parole, che finisce con un punto, e "
     "comincia con la maiuscola; i codici stanno solo in «fonti», mai nel testo;\n"
+    "- distribuisci le frasi su tutto il materiale: ogni pagina e ogni sua parte, dall'inizio alla fine, "
+    "danno almeno una frase; non fermarti alle prime frasi di una pagina;\n"
     "- scegli ciò che conta di più: le idee, poi date, nomi e numeri che servono;\n"
     "- date, nomi, numeri, unità e formule esattamente come nella frase citata, senza arrotondare; se "
     "lì c'è una negazione la frase la tiene; non contare le cose se la frase citata non dice quante;\n"
@@ -196,13 +210,14 @@ def troppo_lungo(M: C.Materiale) -> bool:
     return sum(len(f) for f in M.frasi.values()) > PROMPT_MAX_CAR
 
 
-def blocco_frasi(v: dict, rif: list, M: C.Materiale) -> str:
-    """Le frasi delle pagine coi loro codici, in una busta: i codici li scrive il codice."""
+def blocco_frasi(v: dict, rif: list, M: C.Materiale, solo=None) -> str:
+    """Le frasi delle pagine coi loro codici, in una busta: i codici li scrive il codice. `solo`: i soli
+    codici da mostrare (la richiesta mirata)."""
     from .. import provenienza
     from . import piano as P
     righe = []
     for r, p in rif:
-        cod = M.per_pagina.get(r)
+        cod = [c for c in M.per_pagina.get(r) or () if solo is None or c in solo]
         if not cod:
             continue
         num = P.numero_leggibile(p.get("numero"))
@@ -245,6 +260,133 @@ def corpo(modello: str, v: dict, rif: list, arif: list, piano_: dict, M: C.Mater
     return {"model": modello, "messages": messaggi(v, rif, arif, piano_, M),
             "options": {"temperature": TEMPERATURA, "num_predict": budget(arif, piano_)},
             "think": False, "format": schema(arif), "openai": {"presence_penalty": PRESENCE}}
+
+
+def copertura_pagine(ris: dict, M: C.Materiale, pagine) -> tuple[float, list[str]]:
+    """(la parte di pagina coperta, le frasi dei terzi scoperti): per ogni pagina al più tre terzi, coperto se una
+    frase tenuta ne cita una. Misura di quanto il copione arriva in fondo; niente sul significato."""
+    citate = {c for s in ris["sezioni"] for f in s["frasi"] for c in f["fonti"]}
+    tot, coperti, scoperte = 0, 0, []
+    for r in pagine:
+        cod = M.per_pagina.get(r) or []
+        k = min(3, len(cod))
+        for i in range(k):
+            terzo = cod[i * len(cod) // k:(i + 1) * len(cod) // k]
+            tot += 1
+            if set(terzo) & citate:
+                coperti += 1
+            else:
+                scoperte += terzo
+    return (coperti / tot if tot else 1.0), scoperte
+
+
+def _pagine_utili(rif: list, arif: list, M: C.Materiale) -> list[str]:
+    citate = {int(x) for _r, a in arif for x in a["pagine"]}
+    return [r for r, p in rif if int(p["id"]) in citate and r in M.per_pagina]
+
+
+def scoperte(ris: dict, M: C.Materiale, rif: list, arif: list, piano_: dict) -> dict | None:
+    """Cosa chiedere ancora: {codici, argomenti, quante}, o None se il copione basta."""
+    pagine = _pagine_utili(rif, arif, M)
+    frazione, cod = copertura_pagine(ris, M, pagine)
+    c = ris["conti"]
+    corta = c["durata_s"] < c["obiettivo_s"] * DURATA_SCOPERTE
+    if frazione >= COPERTURA_PAGINA_MIN and not corta:
+        return None
+    if frazione >= COPERTURA_PAGINA_MIN or not cod:
+        citate = {x for s in ris["sezioni"] for f in s["frasi"] for x in f["fonti"]}
+        cod = [x for r in pagine for x in M.per_pagina[r] if x not in citate]
+    if not cod:
+        return None
+    pag = {x.split(".")[0] for x in cod}
+    ids = {int(p["id"]) for r, p in rif if r in pag}
+    argomenti = [(r, a) for r, a in arif if {int(x) for x in a["pagine"]} & ids]
+    mancano = (c["obiettivo_s"] - c["durata_s"]) * S.CARATTERI_AL_SECONDO / FRASE_CAR
+    quante = max(1, min(AGGIUNTE_MAX, len(cod), max(round(mancano), len(pag))))
+    return {"codici": set(cod), "argomenti": argomenti, "quante": quante}
+
+
+def messaggi_scoperte(v: dict, rif: list, mirata: dict, M: C.Materiale) -> list[dict]:
+    mie = _rif_di(mirata["argomenti"], rif)
+    return [{"role": "system", "content": A.SISTEMA},
+            {"role": "user", "content": f"{A.intestazione(v)}\nDel riassunto mancano queste frasi delle pagine:\n\n"
+                                        f"{blocco_frasi(v, mie, M, mirata['codici'])}\n\nGli argomenti confermati:\n\n"
+                                        f"{G.blocco_argomenti(mirata['argomenti'], mie)}\n\n"
+                                        + REGOLE.format(quante=f"in tutto {mirata['quante']}, da parti diverse")
+                                        + A.CHIUSA}]
+
+
+def corpo_scoperte(modello: str, v: dict, rif: list, mirata: dict, M: C.Materiale) -> dict:
+    return {"model": modello, "messages": messaggi_scoperte(v, rif, mirata, M),
+            "options": {"temperature": TEMPERATURA, "num_predict": max_token(mirata["quante"],
+                                                                             len(mirata["argomenti"]))},
+            "think": False, "format": schema(mirata["argomenti"]), "openai": {"presence_penalty": PRESENCE}}
+
+
+def aggiungi(grezzi: list[dict], altre: list[dict]) -> list[dict]:
+    """Le frasi di una richiesta mirata in coda alle loro sezioni, segnate: possono solo aggiungere."""
+    out = [{**s, "frasi": list(s.get("frasi") or [])} for s in grezzi]
+    per_arg = {G._arg(s.get("argomento")): s for s in out}
+    gia = {A.chiave(f.get("testo")) for s in out for f in s["frasi"] if isinstance(f, dict)}
+    for s in altre or []:
+        k = G._arg(s.get("argomento")) if isinstance(s, dict) else None
+        lista = s.get("frasi") if isinstance(s, dict) else None
+        if not k or not isinstance(lista, list):
+            continue
+        for x in lista:
+            if not isinstance(x, dict) or A.chiave(x.get("testo")) in gia:
+                continue
+            gia.add(A.chiave(x.get("testo")))
+            if k not in per_arg:
+                per_arg[k] = {"argomento": k, "frasi": []}
+                out.append(per_arg[k])
+            per_arg[k]["frasi"].append({**x, "aggiunta": True})
+    return out
+
+
+def con_copertura(grezzi: list[dict], M: C.Materiale, rif: list, arif: list, piano_: dict, chiedi, tiene) -> dict:
+    """Il copione controllato e giudicato, con le richieste mirate. `chiedi(mirata)` → le sezioni o None;
+    `tiene(frase)` → None o il motivo per toglierla, chiamata una volta sola per frase. Nei conti la copertura e
+    la durata prima delle richieste mirate."""
+    visti: dict = {}
+
+    def giudicato(gr):
+        ris = valida(gr, M, rif, arif, piano_)
+
+        def t(f):
+            if f["testo"] not in visti:
+                visti[f["testo"]] = tiene(f)
+            m = visti[f["testo"]]
+            ris["conti"]["giudicate"] += 1
+            if m == "giudizio":
+                ris["conti"]["giudizio_no"] += 1
+            elif m is not None:
+                ris["conti"]["guardiano_no"] += 1
+            return m
+        return dopo_giudizi(ris, t, piano_)
+
+    ris = giudicato(grezzi)
+    pagine = _pagine_utili(rif, arif, M)
+    prima = (round(copertura_pagine(ris, M, pagine)[0], 3), ris["conti"]["durata_s"], ris["conti"]["tenute"])
+    mirate = 0
+    for _g in range(SCOPERTE_MAX):
+        mirata = scoperte(ris, M, rif, arif, piano_)
+        if mirata is None:
+            break
+        altre = chiedi(mirata)
+        mirate += 1
+        if not altre:
+            break
+        nuovi = aggiungi(grezzi, altre)
+        if sum(len(s["frasi"]) for s in nuovi) == sum(len(s.get("frasi") or []) for s in grezzi):
+            break
+        grezzi = nuovi
+        ris = giudicato(grezzi)
+    c = ris["conti"]
+    c["richieste_mirate"] = mirate
+    c["copertura_pagina"] = round(copertura_pagine(ris, M, pagine)[0], 3)
+    c["copertura_pagina_prima"], c["durata_prima_s"], c["tenute_prima"] = prima
+    return ris
 
 
 def leggi(testo) -> list[dict] | None:
@@ -312,6 +454,8 @@ def valida(grezzi: list[dict], M: C.Materiale, rif: list, arif: list, piano_: di
              "non_trovati": 0, "sezioni_tolte": 0, "tagliate_durata": 0, "doppioni": 0,
              "scartate_sezioni": 0, "giudicate": 0, "giudizio_no": 0, "guardiano_no": 0}
     sezioni, visti, chiavi = [], set(), set()
+    car_totale = 0
+    tetto_totale = (piano_.get("obiettivo_s") or 0) * S.CARATTERI_AL_SECONDO * TOLLERANZA_TOTALE
 
     def fuori(motivo: str, n: int = 1):
         conti["motivi"][motivo] = conti["motivi"].get(motivo, 0) + n
@@ -327,14 +471,18 @@ def valida(grezzi: list[dict], M: C.Materiale, rif: list, arif: list, piano_: di
         tetto = piano_["car"].get(aid, C.FRASE_MIN_CAR) * TOLLERANZA_DURATA
         car = 0
         for x in lista:
-            proposte += 1
-            conti["proposte"] += 1
+            # Una frase di una richiesta mirata può solo aggiungere: se non passa non pesa sulla sezione
+            aggiunta = isinstance(x, dict) and bool(x.get("aggiunta"))
+            if not aggiunta:
+                proposte += 1
+                conti["proposte"] += 1
             if not isinstance(x, dict) or not isinstance(x.get("testo"), str):
                 fuori("forma")
                 continue
             al_tetto = len(x["testo"]) >= FRASE_MAX_CAR
             testo = " ".join(_senza_citazioni(x["testo"]).split())
-            conti["car_proposti"] += len(testo)
+            if not aggiunta:
+                conti["car_proposti"] += len(testo)
             if al_tetto:
                 fuori("tagliata")
                 continue
@@ -348,13 +496,14 @@ def valida(grezzi: list[dict], M: C.Materiale, rif: list, arif: list, piano_: di
                     fuori(mo)
                     conti["non_trovati"] += mo in VALORI
                 continue
-            if car + len(testo) > tetto and tenute:
+            if (car_totale + len(testo) > tetto_totale if aggiunta else car + len(testo) > tetto and tenute):
                 conti["tagliate_durata"] += 1
-                conti["car_durata"] += len(testo)
+                conti["car_durata"] += len(testo) * (not aggiunta)
                 fuori("durata")
                 continue
             chiavi.add(A.chiave(testo))
             car += len(testo)
+            car_totale += len(testo)
             pagina = esito["fonti"][0].split(".")[0]
             tenute.append({"testo": testo, "fonti": esito["fonti"], "pagine": [ids[pagina]],
                            "argomento": aid})
@@ -363,6 +512,8 @@ def valida(grezzi: list[dict], M: C.Materiale, rif: list, arif: list, piano_: di
         if len(tenute) / max(1, proposte) < SEZIONE_MIN:
             conti["sezioni_tolte"] += 1
             continue
+        # Nell'ordine della pagina: le aggiunte stanno dove sono nel materiale, non in coda
+        tenute.sort(key=lambda f: tuple(int(x) for x in f["fonti"][0][1:].split(".")))
         sezioni.append({"argomento": aid, "proposte": proposte, "frasi": tenute})
     ris = {"sezioni": sezioni, "conti": conti}
     _ricontiamo(ris, piano_)

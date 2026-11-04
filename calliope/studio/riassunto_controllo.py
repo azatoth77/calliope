@@ -193,6 +193,8 @@ def _normale(testo: str) -> str:
     t = _via_formule(testo)
     t = _MIGLIAIA_SPAZIO.sub(lambda m: m.group(1) + m.group(2).replace(" ", ""), t)
     t = _SEGNI.sub(" ", t)
+    # L'elisione non è un'unità: «numero atomico sei, l'ossigeno otto» si leggeva «6 litri»; «un'ora» resta
+    t = re.sub(r"(?i)\b(?!un['’])[a-zà-ù]+['’]", " ", t)
     t = re.sub(r"(\d)\s*[-–—]\s*(\d)", r"\1 \2", t)      # l'intervallo non è un numero negativo
     t = U._semplice(t)
     t = _GRANDI_UN.sub(lambda m: str(int(_fattore(m.group(1)))), t)
@@ -276,7 +278,8 @@ quelli quelle quei quegli ogni ciascun ciascuna ciascuno alcuni alcune altri alt
 tutto tutta molti molte molto molta pochi poche poco poca tanti tante tanto tanta piu meno non ne si ci
 sono e era erano fu furono ha hanno aveva avevano essa esso essi esse egli ella loro lui lei prima dopo
 durante allora cosi qui la gia sempre spesso infine grazie entro senza sopra sotto dentro fuori verso
-contro presso oltre circa nessun nessuna nessuno due tre ad va fa no li mi me""".split())
+contro presso oltre circa nessun nessuna nessuno due tre ad va fa no li mi me secondo attraverso mediante
+tramite nonostante sebbene benche poiche siccome oppure cioe ovvero ossia anzi tuttavia pertanto percio""".split())
 
 
 def _toglie_file(frase_n: str, detto: str) -> tuple[str, bool]:
