@@ -951,6 +951,35 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
       saprebbe a cosa risponde. Per quella frase i ricordi e gli avvisi del proprietario non arrivano al
       modello; la storia della conversazione sì.
 
+
+## Le mappe complete (#385, 04/11)
+
+55. **La mappa generale ha ogni argomento, e ogni argomento ha una mappa da leggere.** Il limite del giro
+    vero del 03/11 (11 concetti) era la richiesta, «da 6 a 10», non il tetto. Una mappa sola non può essere
+    insieme l'insieme e i particolari: due livelli. **La generale** è lo scheletro di sempre (punti 35–38
+    invariati: conferma, «Fai la tua», controllo del codice), con almeno un concetto per argomento e il tetto
+    a 20. **Una parte è un argomento del piano**: già confermato, col nome che la persona riconosce, e il
+    piano e la padronanza contano per argomento. Scartate: le pagine (una ne ha tre, di argomenti) e i gruppi
+    con pagine in comune (si incatenano). La sua mappa viene dalle sole pagine dell'argomento, **si legge
+    soltanto** (`studio_mappe` tipo «parte», nessuna colonna nuova) e nessuno la cambia.
+    - **La copertura la decide il codice**, mai il modello: un concetto buono, legato da un collegamento vero,
+      che ne parla (l'argomento detto dalla tripla e una pagina sua, o il titolo). Chi resta fuori ha **una
+      richiesta mirata**, con le sue sole pagine pulite, e le triple nuove passano dagli stessi controlli. Se
+      resta fuori ancora la pagina lo dice: **mai un concetto scritto dal codice**, che sembrerebbe un fatto.
+    - **Una parte che non riesce lascia le altre e la sua di prima**: si scrive da sola, con le regole della
+      generale (punto 36: un'ora, tre errori). Scartato: rigenerare tutto, e una tabella di stato.
+    - **Nessuno può «tenere» una voce di una parte**, quindi non ci entra ciò che nello scheletro resterebbe
+      con un avviso: le pagine con istruzioni non vanno al modello, gli ordini e gli annunci si tolgono, e la
+      pagina lo dice. Il testo resta un dato: nessun tool lo legge, nel registro solo conti.
+    - **Nascoste** a chi fa una mappa senza guardare o una prova, non al tutore: dicono le risposte più dello
+      scheletro, come le carte (scelta prudente, da confermare).
+    - Un verbo come «chiama» è anche una terza persona: è un ordine solo con un indirizzo, un annuncio o se
+      parla di assistente, regole o risposte (principio 10, coi contrari).
+    `studio_mappa_parti`, attiva di serie, segue `studio_mappa_genera`; `Lettore.prepara_mappe` è l'ingresso
+    per chi la farà partire dopo la lettura (#384). Alternative scartate: alzare solo il tetto (il modello
+    ubbidiva ai «6–10»), una mappa enorme apribile a rami (sul telefono non si legge e «Fai la tua» avrebbe
+    trenta caselle), la generale derivata dalle parti (buona per materiali grandi, da rivedere se servirà).
+
 ## Conseguenze
 
 - *[storico fino al 30/10]* Fino al passo 4.5 lo Studio non c'è: un minore che chiede aiuto per i compiti ha solo la regola

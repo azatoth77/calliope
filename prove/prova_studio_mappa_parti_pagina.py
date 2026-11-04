@@ -158,6 +158,8 @@ def scenario_telefono(t, st, vid, args):
     apri(t, args[0]["id"])
     verifica("si richiude", bool(aspetta(lambda: "Costantinopoli" not in testo(t), 4)))
     apri(t, args[1]["id"])
+    verifica("la pagina con istruzioni non usata si dice dove non c'è una mappa: solo le parti con la mappa",
+             "non usata" not in testo(t))
     verifica("una parte non riuscita lo dice", bool(aspetta(lambda: "riprovo da sola" in testo(t), 4)))
     apri(t, args[3]["id"])
     verifica("una parte su pagine con istruzioni lo dice",

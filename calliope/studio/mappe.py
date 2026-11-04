@@ -1456,15 +1456,20 @@ class Mappe:
         spente = M.modo_parti(self.cfg) == "spenta" or MG.modo(self.cfg) != MG.ATTIVA
         righe = {} if spente else self._righe_parti(v["id"])
         voci = []
-        lette = {int(p["id"]) for p in self._pagine_di(v["id"]) if p.get("stato") == "letta"}
+        pagine = self._pagine_di(v["id"])
+        lette = {int(p["id"]) for p in pagine if p.get("stato") == "letta"}
+        pulite = MG.pagine_pulite(pagine)
         for i, a in enumerate(self._argomenti_per_carte(v["id"]), 1):
-            if spente or not {int(x) for x in a["pagine"]} & lette:
+            sue = {int(x) for x in a["pagine"]} & lette
+            if spente or not sue:
                 continue
             r = righe.get(int(a["id"]))
             g = (r or {}).get("aiuto") or {}
             voce = {"argomento": int(a["id"]), "numero": i, "titolo": a["titolo"],
                     "esito": g.get("esito"), "concetti": len(r["nodi"]) if r else 0,
-                    "esclusi": int(g.get("esclusi") or 0), "mappa": None}
+                    "esclusi": int(g.get("esclusi") or 0),
+                    # Le sue pagine con un messaggio per un assistente: la mappa non le ha usate
+                    "saltate": len(sue - pulite), "mappa": None}
             if r is not None and r["nodi"] and not nascoste:
                 liv = M.livelli(r["nodi"], r["collegamenti"])
                 ordine = sorted(r["nodi"], key=lambda n: liv.get(int(n["id"]), 0))

@@ -1426,7 +1426,9 @@ def _parti_banco(cli, ver, v, args, pagine, proibiti, log) -> list[dict]:
             riga["esito"] = MG.SOLO_ISTRUZIONI
             out.append(riga)
             continue
-        rif, arif = A.riferimenti(sue), G.argomenti_rif([a])
+        pulite = MG.pagine_pulite(sue)
+        rif = A.riferimenti([p for p in sue if int(p["id"]) in pulite])
+        arif = G.argomenti_rif([a])
         chiedi, grezzi, tempi = _chiedi_banco(cli)
         r = MG.rete(chiedi, v, rif, arif, min(30, PARTE_NODI + M.PARTE_PER_PAGINA * (len(rif) - 1)),
                     titolo=a["titolo"], parte=True, altri=MG.altri_sulle_pagine(a, args))

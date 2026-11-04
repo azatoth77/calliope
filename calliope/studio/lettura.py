@@ -1731,7 +1731,9 @@ class Lettore:
                 return MG.SOLO_ISTRUZIONI
         except Exception as e:  # noqa: BLE001
             return self._errore_generazione("parte", vid, e, lambda: scrivi([], [], MG.ERRORE))
-        rif = A.riferimenti(sue)
+        # Le pagine con istruzioni non vanno nemmeno al modello: ciò che viene solo da lì in questa
+        # mappa non entrerebbe (`solo_studiabili`), e la pagina dice che non le ho usate
+        rif = A.riferimenti([p for p in sue if int(p["id"]) in pulite])
         arif = G.argomenti_rif([a])
         t0 = time.monotonic()
         try:

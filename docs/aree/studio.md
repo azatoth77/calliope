@@ -82,6 +82,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Carte generate dalle pagine lette, controllo del codice, proposte confermate dalla persona (dal 30/10 sera, passo 6, seconda parte, #246; schema «studio» alla versione 7; `studio_carte_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato; `provenienza.racchiudi`, `parole`, `vicina` | `calliope/studio/genera.py` → `corpo`, `messaggi`, `blocco_argomenti`, `argomenti_rif`, `firma`, `forma_testo`, `leggi`, `proposte`, `modo`; `calliope/studio/lettura.py` → `Lettore.genera_carte`; `calliope/studio/servizio.py` → `Studio.verifiche_per_carte`, `proponi_carte`, `conferma_carte`; `calliope/schermi/server.py` → `POST /api/studio/carte` (azione `conferma`); `prove/manuali/banco_studio.py` (fase «carte»); prova `prove/prova_studio_carte_genera.py` |
 | Mappa concettuale: lo scheletro (a mano; dal lettore con la seconda parte), la mia mappa con le caselle, a memoria, il controllo deterministico, i tentativi «mappa», il PDF (dal 30/10 sera, passo 7, #247; schema «studio» alla versione 8; `studio_mappa_nodi_max`) | SQLite (`studio_mappe`, concetti e collegamenti in JSON); fpdf2 (extra `documenti`) coi font di `documenti/render.py`; nel browser SVG scritto a mano | `calliope/studio/mappa.py` → `testo_normale`, `uguale`, `verbo_simile`, `disposizione`, `scegli_caselle`, `parole_da_mettere`, `copia`, `controlla`, `esito_tentativo`; `calliope/studio/mappe.py` → `Mappe` (in `Studio`): `scrivi_scheletro`, `nodo_mappa`, `collega`, `riempi`, `tieni_mappa`, `conferma_scheletro`, `inizia_mappa`, `rifai_mappa`, `controlla_mappa`, `carte_dagli_errori`, `riordina_mappa`, `vista_mappe`, `pdf_mappa`, `_conto_mappa`; `calliope/studio/mappa_pdf.py` → `render`; `calliope/tools/studio.py` → azione `mappa`; `calliope/schermi/server.py` → `POST /api/studio/mappa`; `calliope/schermi/pagina/studio.js` (la sezione «Mappa»); prove `prove/prova_studio_mappa.py`, `prove/prova_studio_mappa_pagina.py` |
 | Scheletro della mappa generato dalle pagine lette: le triple controllate dal codice, proposte da confermare (dal 30/10 sera, passo 7, seconda parte, #247; `studio_mappa_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato | `calliope/studio/mappa_genera.py` → `corpo`, `messaggi`, `firma`, `leggi`, `scheletro`, `modo`, `collega_isole` e `parti_fondate` (dal 31/10, #344); `prove/studio_vllm_finto.py` (le uscite del banco del 31/10); `calliope/studio/lettura.py` → `Lettore.genera_mappa`; `calliope/studio/mappe.py` → `verifiche_per_mappa`, `proponi_mappa`; `prove/manuali/banco_studio.py` (fase «mappa»); prova `prove/prova_studio_mappa_genera.py` |
+| Mappa generale con ogni argomento e una mappa da leggere per ogni parte: copertura del codice, richiesta mirata, «Le parti» sugli schermi (dal 04/11, #385; `studio_mappa_parti`, `studio_mappa_parte_nodi_max`, `studio_mappa_nodi_max` a 20; tipo «parte» di `studio_mappe`, senza colonne nuove) | qwen3.6 su vLLM col client e la guardia del lettore; SQLite | `calliope/studio/mappa_genera.py` → `regole`, `regole_parte`, `copertura`, `messaggi_copertura`, `altri_sulle_pagine`, `solo_studiabili`, `rete`, `firma_parte`; `calliope/studio/lettura.py` → `Lettore.prepara_mappe`, `genera_parte`; `calliope/studio/mappe.py` → `proponi_parte`, `_parti_da_fare`, `_parti_per_schermo`; `calliope/studio/mappa.py` → `_a_righe`, `livelli`, `parte_nodi`; `calliope/schermi/pagina/studio.js` («Le parti»); prove `prove/prova_studio_mappa_parti.py`, `prove/prova_studio_mappa_parti_pagina.py` |
 | Mappa libera: da zero con lo scheletro nascosto, «Un indizio» e «Mostra», «Ho finito» col confronto del codice e i tentativi una volta per giro, gli indicatori del metodo per giro; scheletro connesso (doppioni, composti, radice, seconda passata per le isole); «Parliamone» (dal 30/10 notte, passo 7c, #328; schema «studio» alla versione 9; `studio_mappa_libera` attiva, `studio_mappa_consigli` ombra di serie) | SQLite (`studio_mappe` tipo «libera», `giri`, `visti`); per la seconda passata qwen3.6 col client e la guardia del lettore; per «Parliamone» il modello della voce, dati in busta | `calliope/studio/mappa.py` → `chiave_insieme`, `parti`, `componenti`, `radice`, `concetti_chiave`, `forma`, `voci_riferimento`, `confronta`, `indicatori`, `rispetto_a_prima`, `tentativo_libera`, `svelati`; `calliope/studio/mappa_genera.py` → `corpo_connessione`, `connetti`; `calliope/studio/mappe.py` → `inizia_libera`, `indizio_libera`, `mostra_concetto`, `finisci_libera`, `consigli_mappa`, `misura_consigli`; `calliope/tools/studio.py` → `studio_mappa_consigli`; `calliope/brain.py` → `_consigli_chiudi`, `_consigli_ombra`; prove `prove/prova_studio_mappa_libera.py`, `prove/prova_studio_mappa_libera_pagina.py` |
 | Prove: il tipo della prova vera e la finestra «dal», le domande (scelta multipla, vero o falso, numero con l'unità, parole chiave, aperta; anche le carte), la verifica finta scritta e l'interrogazione simulata a voce, l'esito del codice, «da rivedere» della persona o del tutore, la generazione delle domande dal lettore (dal 31/10, passo 8, #248; schema «studio» alla versione 10; `studio_domande_genera` ombra di serie) | SQLite (`studio_domande`, `studio_prove`); qwen3.6 col client e la guardia del lettore per la generazione; libreria standard per l'esito | `calliope/studio/risposte.py` → `prepara`, `valuta`, `attesa_detta`; `calliope/studio/unita.py` → `leggi`, `una_misura`, `confronta`; `calliope/studio/prove.py` → `Prove` (in `Studio`): `aggiungi_domanda`, `domande`, `conferma_domande`, `inizia_prova`, `rispondi_prova`, `consegna_prova`, `rivedi_voce`, `orale_inizia`, `orale_risposta`, `orale_basta`, `_chiudi_prove`, `_conto_prove`; `calliope/studio/domande_genera.py` → `corpo`, `proposte`, `firma`; `calliope/studio/lettura.py` → `Lettore.genera_domande`; `calliope/studio/servizio.py` → `conclusa`, `_fine`; `calliope/tools/studio.py` → `studio_interroga`, azioni `tipo`, `conclusa`, `prove`; `calliope/schermi/server.py` → `POST /api/studio/prova`; `calliope/schermi/pagina/studio.js` (la sezione «Prove»); prove `prove/prova_studio_prove.py`, `prove/prova_studio_domande_genera.py`, `prove/prova_studio_prove_pagina.py` |
 | Ripasso da ascoltare: il copione a parti composto dal codice (le pagine del piano ripulite per la voce, le carte con la pausa per pensare), la lettura a voce dopo la risposta col barge-in, riprendi e ripeti, l'audio delle parti per lo schermo, la tenuta della cache (dal 31/10, passo 9, #249; schema «studio» invariato, alla versione 10; `studio_ascolta` attiva di serie con lo Studio, `studio_ascolta_voce`, `studio_ascolta_giorni`) | Piper con le voci dello Speaker (la voce di Calliope e la «voce del libro»), `wave` della libreria standard; niente modello | `calliope/studio/ascolta.py` → `paragrafi`, `frasi`, `scarto`, `frasi_pagina`, `componi`, `Copione`, `pezzi`, `sentite`, `da_ripetere`, `leggi`, `Sintesi`, `togli_audio`, `Ascolti` (in `Studio`): `ascolto_prepara`, `ascolto_vale`, `ascolto_fermo`, `nota_ascolto`, `ascolto_parti`, `ascolto_audio`; `calliope/pronuncia.py` → `per_ripasso`, `formule_dette`, `sigle_dette`, `romani_detti`, `simboli_detti`; `calliope/tts.py` → `sintesi_pcm`, `Speaker.say(spezza, voce)`, `silenzio`, `voce_per`; `calliope/eventi/uscita.py` → `turno_lettura`, `leggi`, `pausa`; `calliope/ciclo.py` → `_leggi_ripasso`; `calliope/tools/studio.py` → `studio_ascolta`; `calliope/schermi/server.py` → `POST /api/studio/ascolta`; `calliope/schermi/pagina/studio.js` («Ascolta»); prove `prove/prova_studio_ascolta.py`, `prove/prova_studio_ascolta_pagina.py`, `prove/prova_valore.py` (il ripasso attraverso Brain) |
@@ -95,6 +96,9 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## Problemi noti
 
+- Le mappe delle parti (#385, 04/11): misurate sui materiali di fantasia col banco, non ancora su una
+  verifica vera nel lettore; le pagine con istruzioni restano fuori dalla mappa di una parte anche
+  quando il resto della pagina è buono (lo dice la pagina). Parte da sola dopo la lettura con la #384.
 - L'importazione (#298) è provata solo con file e archivi di fantasia: il Takeout vero di Classroom
   non è ancora stato guardato (passo manuale in `prove/manuali/studio-takeout-vero.md`), la
   condivisione dal telefono (dal 31/10 sera, share target) non è provata sul vero (passo manuale
@@ -170,6 +174,117 @@ descrizione di `studio_pagina_leggi` ha l'esempio «dammi le risposte degli eser
 che…?»: ora conta «1. vero, 2. falso», «la prima è vera», «il secondo è falso», non la domanda.
 Sulla DGX col ramo: tutti gli 11 casi 3/3, la pagina 116 letta in 3 giri su 3 (e in 2 su 3 in un
 secondo giro del solo caso).
+
+## Le mappe complete: la generale con ogni argomento e una per parte (04/11, issue #385, ramo `issue-385-mappa-completa`)
+
+*Epic #251, decisione 0035 punto 55. Nel giro vero del 03/11 lo scheletro aveva 11 concetti e 10
+collegamenti su 4 pagine: chi aveva fotografato le pagine non trovava una mappa per studiare.*
+
+**La causa non era il tetto.** Il banco sulla versione attiva (`banco_studio.py --fasi mappa`,
+04/11 13:25, materiali di fantasia) dà 8, 9 e 11 concetti sotto un tetto di 12: il modello
+ubbidiva alla richiesta, che diceva «da 6 a 10 concetti in tutto» per l'intera verifica (scritta il
+30/10 per stare nei «10–15 per mappa» del progetto del 27/10). Alzare `studio_mappa_nodi_max` da solo
+non avrebbe cambiato niente. Il limite vero è che una mappa sola non può essere insieme l'insieme e i
+particolari: per questo due livelli.
+
+**Cosa è una parte: un argomento del piano.** Scartate le pagine (una pagina di storia ne ha tre, di
+argomenti; un argomento può stare su tre pagine) e i gruppi di argomenti con pagine in comune (in
+scienze si incatenano e diventano uno). L'argomento è già confermato dalla persona, ha il nome che
+lei riconosce e il piano e la padronanza contano per argomento.
+
+**La mappa generale** è lo scheletro di sempre: tipo, conferma, «Fai la tua» e il controllo del codice
+**non cambiano**. Cambia la richiesta (`mappa_genera.regole`: almeno un concetto per argomento, «al più
+N»), il tetto (`studio_mappa_nodi_max` 20: fino a 12 argomenti, il centro e i legami) e la firma («v2»:
+uno scheletro del modello mai toccato si rifà da solo; uno toccato o confermato no).
+
+**La mappa di una parte** (`studio_mappe` tipo «parte», senza colonne nuove: argomento, firma, esito e
+data in `aiuto`; `studio_mappa_parti`, attiva di serie, segue `studio_mappa_genera`) ha una richiesta
+sua (`regole_parte`): le sole pagine dell'argomento, il solo argomento, in busta gli altri argomenti
+delle stesse pagine da lasciare fuori (senza, la pagina di Vespucci, Tordesillas e Magellano dava tre
+mappe uguali). Tetto `studio_mappa_parte_nodi_max` (16) più 4 per ogni pagina in più, fino a 30. **Si
+legge soltanto**: niente copie, niente controllo, `_mappa(cambia=True)` la rifiuta, come il resto
+«non c'è».
+
+**La copertura la decide il codice** (`mappa_genera.copertura`, sul momento anche per la pagina): un
+argomento è coperto da un concetto buono (senza avvisi, o tenuto da una persona) legato da un
+collegamento vero, che ne parla (l'argomento detto dalla tripla **e** una pagina citata sua, o il suo
+titolo). I contrari in prova: il modello che dice «A2» citando una pagina di A1, un debole, la radice
+(ha gli argomenti di tutte le sue triple). Gli argomenti su sole pagine con istruzioni sono *esclusi*:
+non si chiedono al modello. **Se un argomento resta fuori: una richiesta mirata**, non tutto da capo
+(`messaggi_copertura`: gli argomenti che mancano, le loro sole pagine pulite, i concetti che ci sono);
+le triple nuove rifanno `scheletro` insieme alle prime, con gli stessi controlli, e dopo la mirata
+gli ultimi posti del tetto vanno alle parti staccate con un argomento che nessuno ha (`_tieni`).
+**Se resta fuori ancora, la pagina lo dice** («Fuori da questa mappa: …»): mai un concetto scritto dal
+codice. Le isole: la seconda passata di prima, ora al più due giri se il primo ha unito qualcosa.
+
+**Se una parte non riesce.** Ogni parte si scrive da sola, in una transazione sua (`proponi_parte`), e
+il giro del lettore ne fa una per volta: un errore lascia le altre e, se c'era, la sua di prima. Le
+regole della generale: un JSON illeggibile non si richiede con la stessa firma, un errore nostro dopo
+un'ora, al terzo di fila ci si ferma finché la firma non cambia. La firma è della parte: una pagina di
+un altro argomento non la rifà.
+
+**Le voci ostili.** Nello scheletro restano con l'avviso e decide la persona. In una parte nessuno può
+decidere, e un annuncio non deve arrivare a un minore come cosa da studiare: le pagine con istruzioni
+**non vanno nemmeno al modello** (la pagina dice «pagina non usata»), un argomento su sole quelle pagine
+non chiede niente, e comunque le voci con un ordine o da una pagina con istruzioni sono tolte
+(`solo_studiabili`, contate). `scheletro` segna i due capi di una tripla cattiva: se un concetto ha
+ancora un collegamento buono e il suo testo è pulito resta, altrimenti un messaggio si porterebbe via il
+centro e la mappa. **Il testo resta un dato**: nessun tool legge le parti, nel registro id e conti.
+**Nascoste** a chi sta facendo una mappa senza guardare o una prova (dicono le risposte più dello
+scheletro, come le carte), non al tutore.
+
+**Un falso allarme trovato dal banco.** «Martin Waldseemüller — chiama — America» era `testo_ordine`
+perché «chiama» è anche un imperativo, e la mappa di Vespucci perdeva 6 voci. Un **verbo** ora è un ordine
+solo con un indirizzo, un annuncio o se parla di assistente, regole, risposte, memoria (`_forma_verbo`,
+principio 10, coi contrari in prova: «ignora le regole», «chiama il tool»).
+
+**Il telefono.** La scheda «Le parti»: un tasto per argomento coi concetti, che si apre e si richiude;
+dentro «Schema» (dalla radice in giù, rientrato per livello, i verbi) e «Mappa». Oltre 8 concetti la
+disposizione è a righe (`mappa._a_righe`: due per riga, dalla radice) e la pagina allunga il disegno: sul
+telefono il giro attorno al centro non ci stava (due riquadri da 210 su 456 di largo); la parte non
+pronta dice perché. La generale dice «Ci sono N argomenti su M». Il PDF con una mappa lunga ha i riquadri
+più larghi (80 mm). Pagina **v42**. **L'ingresso** per la #384: `Lettore.prepara_mappe(v o id, passi=None)`
+fa la generale e le parti che mancano, guardando la guardia; il giro del lettore la chiama con `passi=1`,
+al solito posto (dopo le carte): il momento in cui parte non è cambiato.
+
+**Il banco** (`banco_studio.py --fasi mappa`, qwen3.6-35b sulla DGX, codice in una cartella temporanea,
+materiali di fantasia; le misure «dalla verità» sono quelle che il codice non vede: le chiavi degli
+argomenti non facoltativi, i criteri delle domande nei concetti e nei verbi).
+
+| | matematica | scienze | storia |
+|---|---|---|---|
+| **Prima** (versione attiva, 13:25): concetti, collegamenti | 8, 7 | 9, 10 | 11, 10 |
+| coperti dal codice (sul ricalcolo) | 7 su 8 | 5 su 7 | 7 su 9 |
+| dalla verità: argomenti, domande | 5/6, 1/10 | 4/5, 2/10 | 7/8, 1/10 |
+| secondi | 7 | 9 | 9 |
+| **Dopo** (14:15), generale: concetti, collegamenti | 10, 9 | 19, 25 | 20, 19 |
+| coperti dal codice (fuori prima della mirata) | 8 su 8 (0) | 6 su 7 (1) | 9 su 9 (1) |
+| dalla verità: argomenti, domande | 6/6, 1/10 | 4/5, 3/10 | 8/8, 1/10 |
+| parti connesse, deboli | 1, 0 | 1, 0 | 1, 0 |
+| secondi | 9 | 29 | 19 |
+| **Parti**: mappe, concetti per mappa | 8/8, 6–16 | 7/8, 6–24 | 9/10, 7–16 |
+| concetti nelle pagine | 92/101 | 100/107 | 111/117 |
+| una parte connessa sola, deboli | 8/8, 0 | 6/7, 1 | 9/9, 0 |
+| doppioni, voci ostili | 0, 0 | 0, 0 | 0, 0 |
+| dalla verità: argomenti, domande | 6/6, **4/10** | 5/5, **9/10** | 8/8, **10/10** |
+| secondi | 82 | 94 | 100 |
+
+La mappa che manca è un argomento su pagine con istruzioni (non si chiede). «Fuori» in scienze è
+l'argomento «Esercizi», dalla pagina degli esercizi. Le domande di matematica restano 4/10: i loro criteri
+sono risultati di esercizi, che in una mappa non ci sono né devono esserci. Il banco varia da un giro
+all'altro anche a temperatura 0 (la generale di matematica 10–19 concetti in quattro giri, una parte
+sola 67–100 %): coi giri di prima l'ordine è lo stesso. Tutto insieme circa due minuti a verifica, a
+DGX libera. Le uscite in `/tmp/banco-385/` sulla DGX, non conservate.
+
+Prove: `prova_studio_mappa_parti.py`, `prova_studio_mappa_parti_pagina.py` (browser, 390×844, 320×693 col
+125 %, PC); in `prova_studio_modalita.py` tolta una data fissa che dal 03/11 faceva cadere la prova da
+sola (`stato_pausa` usa il tempo vero).
+
+**Non provato**: una verifica vera nel lettore sulla DGX (il banco passa da `mappa_genera.rete`, lo stesso
+codice, ma non da `genera_parte`, provata col finto); il telefono vero; un materiale di decine di pagine
+(la generale manda ancora tutte le pagine); la qualità pagina per pagina resta da leggere con una
+persona. **Restano** il momento in cui parte (#384) e, da decidere, se «Fai la tua» debba valere anche per
+una parte.
 
 ## La modalità studio (02/11, issue #376, ramo `issue-376-modalita-studio`)
 

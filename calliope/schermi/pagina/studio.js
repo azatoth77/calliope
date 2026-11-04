@@ -2251,6 +2251,7 @@
     } else {
       out.push(elencoMappa(m, false));
     }
+    if (Number(x.saltate)) out.push(nodo("p", "studio-h-nota", nn(x.saltate, "pagina non usata: ha", "pagine non usate: hanno") + " un messaggio per un assistente. Guardala sul libro."));
     if (Number(x.esclusi)) out.push(nodo("p", "studio-h-nota", nn(x.esclusi, "voce non messa: viene", "voci non messe: vengono") + " da una pagina con un messaggio per un assistente o sembra un ordine."));
     return out;
   }
