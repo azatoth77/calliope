@@ -41,7 +41,12 @@ vere con la loro verità da `--foto-vere` (vedi il passo manuale).
   anche la **seconda passata** di connessione come in Calliope (solo con più parti) e le misure di
   forma: parti connesse prima e dopo, collegamenti uniti, doppioni permutati (devono essere 0) e
   quelli uniti dal codice, composti sciolti, grado della radice, isolati; nel riepilogo la
-  percentuale di verifiche con una parte sola, criterio ≥ 90 %.
+  percentuale di verifiche con una parte sola, criterio ≥ 90 %. Dal 04/11 (#385) il giro intero di
+  Calliope (`mappa_genera.rete`): la generale con la richiesta mirata, e **una mappa per argomento**
+  dalle sue pagine; la copertura del codice (coperti, fuori prima e dopo la mirata, esclusi) e quella
+  **dalla verità**, che il codice non vede (le chiavi degli argomenti non facoltativi, le domande
+  con i loro criteri nei concetti e nei verbi), per ogni parte concetti, nelle pagine, parti
+  connesse, deboli, doppioni, verbi vuoti, voci tolte, ostili e secondi.
 - `prove` (31/10, passo 8, #248): le domande delle prove con l'harness esatto di Calliope
   (`calliope/studio/domande_genera.py`: pagine e argomenti della verità in due buste, schema
   guidato coi tipi scelta, vero o falso, numero, parole chiave e aperta, temperatura 0, niente
@@ -1270,25 +1275,16 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
         v = {"materia": ver["materia"], "livello": ver.get("classe"),
              "data": ver["data_verifica"], "argomento": ver.get("argomento")}
         rif, arif = A.riferimenti(pagine), G.argomenti_rif(args)
-        r = cli.chat(MG.messaggi(v, rif, arif), max_token=MG.MAX_TOKENS, schema=MG.SCHEMA,
-                     temperatura=MG.TEMPERATURA, presence=MG.PRESENCE)
-        grezzi = MG.leggi(r.get("testo", "")) or []
-        fm = {}
-        nodi, coll = MG.scheletro(grezzi, rif, arif, 12, titolo=v.get("argomento"), misure=fm)
-        # La seconda passata come in Calliope (passo 7c, #328): solo con più parti connesse
-        prima = M.forma(nodi, coll)
-        uniti, deboli, secondi2, grezzo2, conn = 0, 0, 0.0, None, {}
-        if prima["componenti"] > 1:
-            r2 = cli.chat(MG.messaggi_connessione(v, rif, arif, nodi, coll),
-                          max_token=MG.MAX_TOKENS_CONNESSIONE, schema=MG.SCHEMA_CONNESSIONE,
-                          temperatura=MG.TEMPERATURA, presence=MG.PRESENCE)
-            grezzo2 = r2.get("testo", "")
-            uniti = len(MG.connetti(MG.leggi_connessione(grezzo2) or [], nodi, coll, rif, 12,
-                                    misure=conn))
-            secondi2 = float(r2.get("secondi") or 0)
-            # Le isole che restano: il collegamento debole alla radice, «da controllare» (#344)
-            deboli = len(MG.collega_isole(nodi, coll, 12))
+        # Il giro di Calliope (`mappa_genera.rete`, #385): la generale con la richiesta mirata e la
+        # seconda passata, lo stesso codice del lettore
+        chiedi, grezzi_l, tempi = _chiedi_banco(cli)
+        ret = MG.rete(chiedi, v, rif, arif, NODI, titolo=v.get("argomento"), argomenti=args,
+                      pagine=pagine)
+        nodi, coll, fm = ret["nodi"], ret["coll"], ret["forma"]
+        uniti, deboli = fm.get("uniti", 0), fm.get("deboli", 0)
+        conn = fm.get("connessione") or {}
         dopo = M.forma(nodi, coll)
+        secondi_gen = round(sum(tempi), 2)
         proibiti = _proibiti_risposta(ver) + [o["regex"] for x in ver.get("ostili") or []
                                               for o in x["non_deve"] if o.get("tipo") ==
                                               "argomento"]
@@ -1304,7 +1300,8 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
             x["ostile"] = any(re.search(p, _senza_accenti(x["parole"])) for p in proibiti)
             x["su_pagina_ostile"] = bool(set(x["pagine"]) & ostili_id)
         riga = {"fase": "mappa", "verifica": vid, "concetti": len(nodi), "collegamenti": len(coll),
-                "triple": len(grezzi), "pulite": sum(not x["avvisi"] for x in voci),
+                "triple": sum(len(MG.leggi(t) or []) for t in grezzi_l[:1]),
+                "pulite": sum(not x["avvisi"] for x in voci),
                 # I concetti nelle pagine che citano, calcolati a parte con il controllo delle
                 # pagine (non dall'assenza di da_controllare, che vale anche per l'argomento)
                 "concetti_fondati": sum(A.controlla(n["testo"], [r for r, q in rif if int(q["id"])
@@ -1323,7 +1320,7 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
                 # radice, isolati. Dal 31/10 (#344) le parti dopo sono quelle che le pagine
                 # reggono (senza i collegamenti deboli), le parti coi deboli a parte, i deboli e
                 # i capi scritti come codice (convertiti e scartati)
-                "componenti_prima": prima["componenti"],
+                "componenti_prima": fm.get("prima", 1),
                 "componenti": len(MG.parti_fondate(nodi, coll)),
                 "componenti_con_deboli": dopo["componenti"], "deboli": deboli,
                 "uniti": uniti, "doppioni": dopo["doppioni"],
@@ -1332,20 +1329,132 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
                 # La seconda passata (#349): i collegamenti proposti e gli scartati per motivo
                 "connessione": conn,
                 "grado_radice": dopo["grado_radice"], "isolati": dopo["isolati"],
-                "secondi": round(float(r.get("secondi") or 0) + secondi2, 2),
-                "token_out": r.get("token_out"), "nodi": nodi,
+                "secondi": secondi_gen, "richieste": len(tempi), "nodi": nodi,
                 "collegamenti_": coll,
                 # Le uscite grezze del modello (#344): il banco del 31/10 aveva solo lo
                 # scheletro già controllato, e per rifare le misure col vLLM finto le triple e i
                 # collegamenti della seconda passata si sono dovuti ricostruire
-                "grezzo": r.get("testo", ""), "grezzo_connessione": grezzo2}
+                "grezzo": grezzi_l[0] if grezzi_l else "",
+                "grezzi": grezzi_l,
+                "grezzo_connessione": grezzi_l[-1] if fm.get("connessioni") else None,
+                # La copertura (#385): dal codice, e dalla verità del banco (le chiavi degli
+                # argomenti non facoltativi e i criteri delle domande, che il codice non vede)
+                "scoperti_prima": fm.get("scoperti_prima", 0),
+                "copertura": MG.copertura(nodi, coll, args, pagine),
+                "verita": misura_verita(ver, nodi, coll),
+                "verbi_vuoti": sum(M.chiave(c.get("verbo")) in M.VERBI_VUOTI for c in coll
+                                   if not c.get("debole"))}
+        # Le mappe delle parti (#385): una per argomento, dalle sue sole pagine
+        riga["parti"] = _parti_banco(cli, ver, v, args, pagine, proibiti, log)
+        riga["verita_parti"] = misura_verita(ver, [n for p in riga["parti"] for n in p["nodi"]],
+                                             [c for p in riga["parti"]
+                                              for c in p["collegamenti_"]],
+                                             per_argomento={p["titolo"]: p for p in riga["parti"]})
         out[vid] = riga
         with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(riga, ensure_ascii=False) + "\n")
         log(f"[mappa] {vid}: {riga['concetti']} concetti, {riga['collegamenti']} collegamenti, "
             f"pulite {riga['pulite']}, ostili {riga['ostili']} (pulite {riga['ostili_pulite']}), "
             f"parti {riga['componenti_prima']} → {riga['componenti']}, radice di grado "
-            f"{riga['grado_radice']} in {riga['secondi']:.1f} s")
+            f"{riga['grado_radice']}, argomenti fuori {riga['scoperti_prima']} → "
+            f"{len(riga['copertura']['scoperti'])} in {riga['secondi']:.1f} s; "
+            f"{len(riga['parti'])} mappe di parti")
+    return out
+
+
+# I tetti di serie (`mappa.nodi_max`, `mappa.parte_nodi_max`): il banco misura ciò che parte
+NODI, PARTE_NODI = 20, 16
+
+
+def _chiedi_banco(cli):
+    """Il `chiedi` di `mappa_genera.rete` sul client del banco: (chiedi, testi, secondi)."""
+    from calliope.studio import mappa_genera as MG
+    grezzi, tempi = [], []
+
+    def chiedi(messaggi, schema, max_token):
+        r = cli.chat(messaggi, max_token=max_token, schema=schema, temperatura=MG.TEMPERATURA,
+                     presence=MG.PRESENCE)
+        tempi.append(float(r.get("secondi") or 0))
+        grezzi.append(r.get("testo", ""))
+        return r.get("testo", "")
+    return chiedi, grezzi, tempi
+
+
+def _chiave_in(chiavi, testo: str) -> bool:
+    return any(_senza_accenti(k).lower() in testo for k in chiavi)
+
+
+def misura_verita(ver: dict, nodi: list[dict], coll: list[dict], per_argomento=None) -> dict:
+    """Le misure che **non** vengono dal controllo del codice: gli argomenti non facoltativi della
+    verità con una delle loro chiavi nei concetti (nella mappa della loro parte, con
+    `per_argomento`), e le domande della verità con tutti i criteri nei concetti e nei verbi: cosa
+    trova nelle mappe chi studia da lì. Le voci con un ordine o da una pagina con istruzioni non
+    contano. Solo conti."""
+    from calliope.studio import mappa_genera as MG
+    buoni = [n for n in nodi if not set(n.get("avvisi") or ()) & set(MG.AVVISI_DURI)]
+    testo = _senza_accenti(" | ".join(str(n.get("testo") or "") for n in buoni)).lower()
+    tutto = testo + " | " + _senza_accenti(" | ".join(
+        str(c.get("verbo") or "") for c in coll if not c.get("debole"))).lower()
+    args = [a for a in ver["argomenti"] if not a.get("facoltativo")]
+    coperti = []
+    for a in args:
+        dove = testo
+        if per_argomento is not None:
+            p = per_argomento.get(a["titolo"]) or {"nodi": []}
+            dove = _senza_accenti(" | ".join(str(n.get("testo") or "") for n in p["nodi"])).lower()
+        if _chiave_in(a.get("chiavi") or [], dove):
+            coperti.append(a["titolo"])
+    dom = [d for d in ver.get("domande") or [] if d.get("criteri")]
+    trovate = sum(all(_chiave_in(g, tutto) for g in d["criteri"]) for d in dom)
+    return {"argomenti": len(args), "argomenti_trovati": len(coperti),
+            "fuori": [a["titolo"] for a in args if a["titolo"] not in coperti],
+            "domande": len(dom), "domande_trovate": trovate}
+
+
+def _parti_banco(cli, ver, v, args, pagine, proibiti, log) -> list[dict]:
+    """La mappa di ogni argomento col giro di Calliope (`genera_parte` senza la scrittura)."""
+    from calliope.studio import argomenti as A
+    from calliope.studio import genera as G
+    from calliope.studio import mappa as M
+    from calliope.studio import mappa_genera as MG
+    out = []
+    for a in args:
+        sue = MG.pagine_di(a, pagine)
+        riga = {"titolo": a["titolo"], "esito": None, "concetti": 0, "collegamenti": 0,
+                "nodi": [], "collegamenti_": [], "secondi": 0.0, "richieste": 0}
+        if not MG.pagine_pulite(sue):
+            riga["esito"] = MG.SOLO_ISTRUZIONI
+            out.append(riga)
+            continue
+        pulite = MG.pagine_pulite(sue)
+        rif = A.riferimenti([p for p in sue if int(p["id"]) in pulite])
+        arif = G.argomenti_rif([a])
+        chiedi, grezzi, tempi = _chiedi_banco(cli)
+        r = MG.rete(chiedi, v, rif, arif, min(30, PARTE_NODI + M.PARTE_PER_PAGINA * (len(rif) - 1)),
+                    titolo=a["titolo"], parte=True, altri=MG.altri_sulle_pagine(a, args))
+        nodi, coll, fm = r["nodi"], r["coll"], r["forma"]
+        per_n = {n["id"]: n["testo"] for n in nodi}
+        parole = ([n["testo"] for n in nodi]
+                  + [f"{per_n.get(c['da'], '')} {c['verbo']} {per_n.get(c['a'], '')}" for c in coll])
+        riga.update(
+            esito=MG.ROTTO if r["rotto"] else MG.PROPOSTO if nodi else MG.VUOTO,
+            concetti=len(nodi), collegamenti=len(coll), nodi=nodi, collegamenti_=coll,
+            fondati=sum(A.controlla(n["testo"], [x for x, q in rif if int(q["id"]) in n["pagine"]],
+                                    {x: q["testo"] for x, q in rif})[1] for n in nodi),
+            da_controllare=sum(MG.DA_CONTROLLARE in n["avvisi"] for n in nodi),
+            esclusi=fm.get("esclusi", 0), fuori=fm.get("fuori", 0), deboli=fm.get("deboli", 0),
+            componenti=len(MG.parti_fondate(nodi, coll)),
+            componenti_prima=fm.get("prima", 1), doppioni=M.forma(nodi, coll)["doppioni"],
+            isolati=M.forma(nodi, coll)["isolati"],
+            verbi_vuoti=sum(M.chiave(c.get("verbo")) in M.VERBI_VUOTI for c in coll
+                            if not c.get("debole")),
+            ostili=sum(any(re.search(p, _senza_accenti(t)) for p in proibiti) for t in parole),
+            secondi=round(sum(tempi), 2), richieste=len(tempi), grezzi=grezzi)
+        log(f"[mappa] {ver['id']} parte «{a['titolo']}»: {riga['concetti']} concetti, "
+            f"{riga['collegamenti']} collegamenti, parti {riga['componenti']}, fondati "
+            f"{riga['fondati']}, tolte {riga['esclusi']} + {riga['fuori']}, ostili {riga['ostili']}, "
+            f"{riga['secondi']:.1f} s")
+        out.append(riga)
     return out
 
 
@@ -1481,6 +1590,36 @@ def scrivi_riepilogo(uscita: Path, riep: dict):
                          f"{x.get('componenti_con_deboli', x.get('componenti', '?'))}), codici "
                          f"{x.get('codici', 0)} (scartati {x.get('codici_scartati', 0)})"
                          + _conn(x))
+            ve, cp = x.get("verita") or {}, x.get("copertura") or {}
+            righe.append(f"     copertura (dal codice): {len(cp.get('coperti') or ())} coperti, "
+                         f"{len(cp.get('scoperti') or ())} fuori (prima della richiesta mirata "
+                         f"{x.get('scoperti_prima', 0)}), {len(cp.get('esclusi') or ())} esclusi "
+                         "(solo pagine con istruzioni)")
+            if ve:
+                righe.append(f"     dalla verità: argomenti {ve['argomenti_trovati']}/"
+                             f"{ve['argomenti']}, domande con la risposta nella mappa "
+                             f"{ve['domande_trovate']}/{ve['domande']}; verbi vuoti "
+                             f"{x.get('verbi_vuoti', 0)}, {x.get('richieste', 1)} richieste")
+            pp = [p for p in x.get("parti") or () if p.get("concetti")]
+            if x.get("parti") is not None:
+                vp = x.get("verita_parti") or {}
+                con = sum(p["concetti"] for p in pp)
+                righe.append(
+                    f"     parti: {len(pp)}/{len(x['parti'])} mappe, concetti "
+                    f"{min((p['concetti'] for p in pp), default=0)}–"
+                    f"{max((p['concetti'] for p in pp), default=0)} ({con} in tutto), nelle pagine "
+                    f"{sum(p.get('fondati', 0) for p in pp)}/{con}, una parte connessa sola "
+                    f"{sum(p.get('componenti') == 1 for p in pp)}/{len(pp)}, tolte perché fuori dalle "
+                    f"pagine {sum(p.get('fuori', 0) for p in pp)}, doppioni "
+                    f"{sum(p.get('doppioni', 0) for p in pp)}, verbi vuoti "
+                    f"{sum(p.get('verbi_vuoti', 0) for p in pp)}, voci tolte "
+                    f"{sum(p.get('esclusi', 0) for p in pp)}, ostili "
+                    f"{sum(p.get('ostili', 0) for p in pp)}, "
+                    f"{sum(p.get('secondi', 0) for p in x['parti']):.0f} s")
+                if vp:
+                    righe.append(f"     dalla verità nelle parti: argomenti "
+                                 f"{vp['argomenti_trovati']}/{vp['argomenti']}, domande con la "
+                                 f"risposta {vp['domande_trovate']}/{vp['domande']}")
         pc = connesse_pc(riep["mappa"])
         pd = connesse_pc(riep["mappa"], deboli=True)
         righe.append(f"  una parte sola: {pc} % delle verifiche (criterio ≥ {CRITERIO_CONNESSE} %"

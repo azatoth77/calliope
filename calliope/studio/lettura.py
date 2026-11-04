@@ -613,7 +613,12 @@ class Lettore:
                                  "connessioni": 0, "connessioni_rotte": 0, "uniti": 0,
                                  "con_isole": 0, "doppioni": 0, "composti": 0,
                                  "deboli": 0, "codici": 0, "connessioni_proposte": 0,
-                                 "connessioni_stessa_parte": 0},
+                                 "connessioni_stessa_parte": 0,
+                                 # La copertura della generale e le mappe delle parti (#385)
+                                 "coperture": 0, "coperture_rotte": 0, "scoperti": 0,
+                                 "parti": 0, "parti_rotte": 0, "parti_vuote": 0,
+                                 "parti_istruzioni": 0, "parti_concetti": 0, "parti_esclusi": 0,
+                                 "parti_fuori": 0, "parti_cambiate": 0, "parti_secondi": 0.0},
                        # Le domande delle prove (passo 8, #248): conti, avvisi, tipi e tempi,
                        # mai il testo delle domande
                        "domande": {"generazioni": 0, "domande": 0, "ombra": 0,
@@ -786,7 +791,9 @@ class Lettore:
                     self.misure["attese"] += 1
                     return {"fatte": fatte, "aspetta": motivo}
                 self.in_attesa = None
-                esito = self.genera_mappa(per_mappa[0])
+                # Un passo alla volta (la generale o una parte): fra un passo e l'altro passano
+                # prima gli argomenti e le carte di una verifica nuova (#385)
+                esito = self.prepara_mappe(per_mappa[0], passi=1)
                 if esito in ("ceduta", "giu", "errore", "errore_server"):
                     return {"fatte": fatte, "aspetta": esito}
                 fatte += 1
@@ -1687,50 +1694,19 @@ class Lettore:
         grezzi = None
         nodi, coll, forma = [], [], {}
         try:
-            for prova in range(2):
-                r = self._chiedi_corpo(MG.corpo(self.modello, v, rif, arif))
-                m["token_in"] += int(r.get("prompt") or 0)
-                m["token_out"] += int(r.get("eval") or 0)
-                if not r.get("fine"):
-                    raise ErroreServer("stream senza fine")
-                self._errori_di_fila = 0
-                self._riprova_dopo = 0.0
-                self._risposte_ok += 1
-                if r.get("fine") != "length":
-                    grezzi = MG.leggi(r.get("content") or "")
-                    break
-                self._registra(f"verifica {vid}: mappa in tondo fino a max_tokens"
-                               + (", la richiedo" if not prova else ""))
-            if grezzi is not None:
-                nodi, coll = MG.scheletro(grezzi, rif, arif, M.nodi_max(self.studio.cfg),
-                                          titolo=v.get("argomento"), misure=forma)
-                forma["prima"] = len(M.componenti(nodi, coll))
-                if forma["prima"] > 1:
-                    # La seconda passata (passo 7c, #328): solo i collegamenti che uniscono le
-                    # isole, con la stessa guardia e lo stesso client. Ceduta, giù ed errori del
-                    # server come la prima; un JSON illeggibile o in tondo lascia le isole
-                    r2 = self._chiedi_corpo(MG.corpo_connessione(self.modello, v, rif, arif,
-                                                                 nodi, coll))
-                    m["token_in"] += int(r2.get("prompt") or 0)
-                    m["token_out"] += int(r2.get("eval") or 0)
-                    if not r2.get("fine"):
-                        raise ErroreServer("stream senza fine")
-                    self._risposte_ok += 1
-                    m["connessioni"] += 1
-                    g2 = (MG.leggi_connessione(r2.get("content") or "")
-                          if r2.get("fine") != "length" else None)
-                    if g2 is None:
-                        m["connessioni_rotte"] += 1
-                    conn: dict = {}
-                    forma["uniti"] = len(MG.connetti(g2 or [], nodi, coll, rif,
-                                                     M.nodi_max(self.studio.cfg), misure=conn))
-                    # Quanti ne propone il modello e quanti dentro una parte già unita (#349)
-                    m["connessioni_proposte"] += int(conn.get("proposti") or 0)
-                    m["connessioni_stessa_parte"] += int(conn.get("stessa_parte") or 0)
-                    # Le isole che restano: un collegamento debole alla radice, «da
-                    # controllare» (#344)
-                    forma["deboli"] = len(MG.collega_isole(nodi, coll,
-                                                           M.nodi_max(self.studio.cfg)))
+            r = MG.rete(self._chiedi_mappa(vid, m), v, rif, arif, M.nodi_max(self.studio.cfg),
+                        titolo=v.get("argomento"), argomenti=v["_argomenti"],
+                        pagine=v["_pagine"])
+            if not r["rotto"]:
+                grezzi, nodi, coll, forma = True, r["nodi"], r["coll"], r["forma"]
+                m["connessioni"] += int(forma.get("connessioni") or 0)
+                m["connessioni_rotte"] += int(forma.get("connessioni_rotte") or 0)
+                # Quanti ne propone il modello e quanti dentro una parte già unita (#349)
+                conn = forma.get("connessione") or {}
+                m["connessioni_proposte"] += int(conn.get("proposti") or 0)
+                m["connessioni_stessa_parte"] += int(conn.get("stessa_parte") or 0)
+                m["coperture"] += int(forma.get("copertura_chiesta") or 0)
+                m["coperture_rotte"] += int(forma.get("copertura_rotta") or 0)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: mappa, ceduto il passo a un lavoro dell'agente")
@@ -1749,7 +1725,10 @@ class Lettore:
         s = time.monotonic() - t0
         # Il controllo del codice e la scrittura dentro un try (revisione della PR #327)
         isole = 1
+        scoperti = 0
         try:
+            # Gli argomenti ancora fuori dopo la richiesta mirata (#385): li dice la pagina
+            scoperti = len(MG.copertura(nodi, coll, v["_argomenti"], v["_pagine"])["scoperti"])
             if grezzi is None:
                 nodi, coll, esito = [], [], MG.ROTTO
             else:
@@ -1787,17 +1766,150 @@ class Lettore:
         m["uniti"] += int(forma.get("uniti") or 0)
         m["deboli"] += int(forma.get("deboli") or 0)
         m["codici"] += int(forma.get("codici") or 0)
+        m["scoperti"] += scoperti if n else 0
         if n and isole > 1:
             m["con_isole"] += 1
         avv = ", ".join(f"{k} {a}" for a, k in conta.items() if k)
         dove = "in ombra" if modo == MG.OMBRA else "proposto"
         fm = (f"; parti {forma.get('prima', 1)} → {isole}, doppioni {forma.get('doppioni', 0)}, "
               f"composti {forma.get('composti', 0)}, deboli {forma.get('deboli', 0)}, "
-              f"codici {forma.get('codici', 0)}") if n else ""
+              f"codici {forma.get('codici', 0)}, argomenti fuori "
+              f"{forma.get('scoperti_prima', 0)} → {scoperti}") if n else ""
         self._registra(f"verifica {vid}: scheletro della mappa {dove}, {n} concetti e "
                        f"{len(coll)} collegamenti da {len(arif)} argomenti ({s:.1f} s"
                        + (f", avvisi {avv}" if avv else "") + fm + ")")
         return "proposto"
+
+    def _chiedi_mappa(self, vid: int, m: dict):
+        """Il `chiedi` di `mappa_genera.rete`: la stessa guardia e lo stesso client delle altre
+        generazioni. None se il modello gira in tondo; ceduta, giù ed errori del server passano."""
+        from . import mappa_genera as MG
+
+        def chiedi(messaggi: list[dict], schema: dict, max_token: int) -> str | None:
+            r = self._chiedi_corpo(MG.corpo_da(self.modello, messaggi, schema, max_token))
+            m["token_in"] += int(r.get("prompt") or 0)
+            m["token_out"] += int(r.get("eval") or 0)
+            if not r.get("fine"):
+                raise ErroreServer("stream senza fine")
+            self._errori_di_fila = 0
+            self._riprova_dopo = 0.0
+            self._risposte_ok += 1
+            if r.get("fine") == "length":
+                self._registra(f"verifica {vid}: mappa in tondo fino a max_tokens")
+                return None
+            return r.get("content") or ""
+        return chiedi
+
+    def genera_parte(self, v: dict, a: dict) -> str:
+        """La mappa di una parte (un argomento del piano, #385): dalle sole pagine di quell'argomento,
+        col giro di `mappa_genera.rete`. Ogni parte si scrive da sola, appena pronta: una che non
+        riesce lascia le altre e, se c'era, la sua di prima. Un argomento che sta solo su pagine con
+        istruzioni non chiede niente al modello. «proposto», «rotto», «vuoto», «cambiate», «ceduta»,
+        «giu», «errore_server» o «errore», come lo scheletro."""
+        from . import argomenti as A
+        from . import genera as G
+        from . import mappa as M
+        from . import mappa_genera as MG
+        m = self.misure["mappa"]
+        vid, aid, modo = int(v["id"]), int(a["id"]), v["_modo"]
+        firma = MG.firma_parte(a, v["_pagine"], modo)
+        sue = MG.pagine_di(a, v["_pagine"])
+        pulite = MG.pagine_pulite(sue)
+
+        def scrivi(nodi, coll, esito, esclusi=0, fuori=0):
+            return self.studio.proponi_parte(vid, aid, firma, nodi, coll, esito, modo,
+                                             esclusi=esclusi, fuori=fuori)
+        try:
+            if not pulite:
+                scrivi([], [], MG.SOLO_ISTRUZIONI)
+                m["parti_istruzioni"] += 1
+                self._registra(f"verifica {vid}: argomento {aid}, solo pagine con istruzioni: "
+                               "niente mappa")
+                return MG.SOLO_ISTRUZIONI
+        except Exception as e:  # noqa: BLE001
+            return self._errore_generazione("parte", vid, e, lambda: scrivi([], [], MG.ERRORE))
+        # Le pagine con istruzioni non vanno nemmeno al modello: ciò che viene solo da lì in questa
+        # mappa non entrerebbe (`solo_studiabili`), e la pagina dice che non le ho usate
+        rif = A.riferimenti([p for p in sue if int(p["id"]) in pulite])
+        arif = G.argomenti_rif([a])
+        t0 = time.monotonic()
+        try:
+            r = MG.rete(self._chiedi_mappa(vid, m), v, rif, arif,
+                        M.parte_nodi(self.studio.cfg, len(rif)), titolo=a.get("titolo"), parte=True,
+                        altri=MG.altri_sulle_pagine(a, v["_argomenti"]))
+        except Ceduta:
+            m["cedute"] += 1
+            self._registra(f"verifica {vid}: mappa di una parte, ceduto il passo a un lavoro "
+                           "dell'agente")
+            return "ceduta"
+        except _Giu:
+            return "giu"
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            attesa = self._attendi_errore()
+            self._registra(f"verifica {vid}: mappa di una parte, errore del server ({e}), riprovo "
+                           f"fra {attesa:.0f} s")
+            return "errore_server"
+        except Exception as e:  # noqa: BLE001
+            return self._errore_generazione("parte", vid, e, lambda: scrivi([], [], MG.ERRORE))
+        s = time.monotonic() - t0
+        forma = r["forma"]
+        esito = MG.ROTTO if r["rotto"] else MG.PROPOSTO if r["nodi"] else MG.VUOTO
+        try:
+            n = scrivi(r["nodi"], r["coll"], esito, esclusi=int(forma.get("esclusi") or 0),
+                       fuori=int(forma.get("fuori") or 0))
+        except Exception as e:  # noqa: BLE001
+            return self._errore_generazione("parte", vid, e, lambda: scrivi([], [], MG.ERRORE))
+        if n is None:
+            m["parti_cambiate"] += 1
+            self._registra(f"verifica {vid}: argomento {aid} o pagine cambiati durante la mappa")
+            return "cambiate"
+        m["parti"] += 1
+        m["parti_secondi"] = round(m["parti_secondi"] + s, 2)
+        if esito == MG.ROTTO:
+            m["parti_rotte"] += 1
+        elif esito == MG.VUOTO:
+            m["parti_vuote"] += 1
+        m["parti_concetti"] += n
+        m["parti_esclusi"] += int(forma.get("esclusi") or 0)
+        m["parti_fuori"] += int(forma.get("fuori") or 0)
+        m["connessioni"] += int(forma.get("connessioni") or 0)
+        # Solo id e conti, mai i testi
+        self._registra(f"verifica {vid}: mappa dell'argomento {aid} ({esito}), {n} concetti e "
+                       f"{len(r['coll'])} collegamenti ({s:.1f} s, {forma.get('esclusi', 0)} voci "
+                       f"con un ordine o istruzioni, {forma.get('fuori', 0)} fuori dalle pagine)")
+        return esito
+
+    def prepara_mappe(self, v, passi: int | None = None) -> str:
+        """**L'ingresso unico**: prepara le mappe di una verifica, la generale se serve e poi le
+        parti che mancano o che sono cambiate. `v` è una riga di `Studio.verifiche_per_mappa`, o l'id
+        della verifica (così la chiama chi la fa partire dopo la lettura, #384). Con `passi` si
+        ferma dopo tanti passi (il giro del lettore ne fa uno alla volta); senza, guarda la guardia
+        prima di ogni richiesta e si ferma con «attesa» se la DGX non è libera: ciò che è già scritto
+        resta, e il resto riparte da solo al giro dopo. L'ultimo esito: «fatto» se non c'era niente
+        da fare, «ceduta», «giu», «errore», «errore_server», «cambiate», «attesa» se si è fermata."""
+        if not isinstance(v, dict):
+            righe = self.studio.verifiche_per_mappa(int(v))
+            if not righe:
+                return "fatto"
+            v = righe[0]
+        esito, fatti = "fatto", 0
+        lavori = ([("generale", None)] if v.get("_generale") else []) + [
+            ("parte", a) for a in v.get("_parti") or ()]
+        for cosa, a in lavori:
+            if passi is not None and fatti >= passi:
+                break
+            if passi is None:
+                motivo = self.guardia.motivo()
+                if motivo is not None:
+                    self.in_attesa = motivo
+                    self.misure["attese"] += 1
+                    return "attesa"
+            esito = self.genera_mappa(v) if cosa == "generale" else self.genera_parte(v, a)
+            fatti += 1
+            if esito in ("ceduta", "giu", "errore", "errore_server", "cambiate"):
+                break
+        return esito
 
     # ── scrivere ──
     def _chiudi(self, pid: int, stato: str, testo, metodo, avvisi: list):

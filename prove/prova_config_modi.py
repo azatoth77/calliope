@@ -84,6 +84,8 @@ CASI = {
     "studio_mappa_genera": ("attiva", " Attiva ", ("attivo", "attiva"), ["accesa", "sì", "genera"]),
     # La mappa libera e «Parliamone» (30/10, #328)
     "studio_mappa_libera": ("spenta", " Spenta ", ("spento", "spenta"), ["accesa", "sì", "libera"]),
+    # Le mappe delle parti (04/11, #385)
+    "studio_mappa_parti": ("spenta", " Spenta ", ("spento", "spenta"), ["accesa", "sì", "parti"]),
     "studio_mappa_consigli": ("attiva", " Attiva ", ("attivo", "attiva"), ["accesa", "sì", "parla"]),
     "studio_domande_genera": ("attiva", " Attiva ", ("attivo", "attiva"), ["accesa", "sì", "genera"]),
     # Il ripasso da ascoltare (31/10, #249)

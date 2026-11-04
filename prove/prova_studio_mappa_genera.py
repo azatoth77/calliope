@@ -84,8 +84,9 @@ GIRO = {"triple": TRIPLE["triple"][:7]}
 
 
 def prepara(cfg_kw=None, nome="g"):
+    # Le mappe delle parti (#385) hanno le loro prove, in `prova_studio_mappa_parti.py`
     kw = {"studio_mappa_genera": "ombra", "studio_carte_genera": "spenta",
-          "studio_domande_genera": "spenta", **(cfg_kw or {})}
+          "studio_domande_genera": "spenta", "studio_mappa_parti": "spenta", **(cfg_kw or {})}
     cfg = PA.cfg_nuova(nome, modo="attivo", studio_argomenti=False, **kw)
     st = PA.studio(cfg)
     vid, ids = PA.verifica_con_pagine(st)
@@ -173,9 +174,9 @@ verifica("4. una tripla scartata (senza verbo, pagina che non c'è) non sporca i
 print("— la richiesta")
 c = MG.corpo("qwen", st.verifica(LEO, vid), rif, arif)
 testo = c["messages"][1]["content"]
-verifica("niente tool, schema guidato, temperatura 0, thinking spento, max_tokens 2500",
+verifica("niente tool, schema guidato, temperatura 0, thinking spento, max_tokens 4000",
          "tools" not in c and c["format"] == MG.SCHEMA and c["think"] is False
-         and c["options"] == {"temperature": 0, "num_predict": 2500})
+         and c["options"] == {"temperature": 0, "num_predict": 4000})
 verifica("le pagine e gli argomenti in due buste, coi riferimenti del codice",
          "argomenti confermati" in testo and "[P2 · pagina stampata 112]" in testo
          and "A1: Perché gli europei partirono (P2)" in testo
@@ -224,11 +225,12 @@ verifica("attiva: lo scheletro «proposto», di Calliope, con gli avvisi; la mia
 # Una rinomina con lo scheletro del modello mai toccato: si rifà
 a2 = st.argomenti(LEO, vid)[1]["id"]
 st.rinomina_argomento(LEO, a2, "La rotta portoghese")
-PA.rispondi({"triple": TRIPLE["triple"][:3]})
+# (l'argomento 3 resta fuori: la richiesta mirata, #385, che qui non trova niente)
+PA.rispondi({"triple": TRIPLE["triple"][:3]}, {"triple": []})
 lett.giro()
 s2 = st.vista_mappe(LEO, vid)["scheletro"]
 verifica("una rinomina rifà lo scheletro del modello mai toccato",
-         len(PA.F.richieste) == 2 and len(s2["nodi"]) == 4 and len(s["nodi"]) > 4,
+         len(PA.F.richieste) == 3 and len(s2["nodi"]) == 4 and len(s["nodi"]) > 4,
          str(s2)[:200])
 r = st.conferma_scheletro(ANDREA, s2["id"])
 s3 = st.vista_mappe(LEO, vid)["scheletro"]
@@ -239,7 +241,7 @@ st.rinomina_argomento(LEO, a2, "Il Portogallo")
 PA.rispondi(GIRO)
 lett.giro()
 verifica("mai sopra uno scheletro confermato: nessuna richiesta",
-         len(PA.F.richieste) == 2 and st.vista_mappe(LEO, vid)["scheletro"]["id"] == s2["id"])
+         len(PA.F.richieste) == 3 and st.vista_mappe(LEO, vid)["scheletro"]["id"] == s2["id"])
 st.close()
 
 PA.azzera()
@@ -399,14 +401,15 @@ UNISCI = {"collegamenti": [{"da": "C1", "relazione": "portano a", "a": "C4", "pa
                            {"da": "C2", "relazione": "porta a", "a": "C5", "pagine": ["P4"]}]}
 PA.azzera()
 st, vid, ids, lett = prepara({"studio_mappa_genera": "attiva"}, nome="connessione")
-PA.rispondi(ISOLE, UNISCI)
+# ISOLE lascia fuori il primo argomento: prima la richiesta mirata (#385), che qui non trova niente
+PA.rispondi(ISOLE, {"triple": []}, UNISCI)
 lett.giro()
 s = st.vista_mappe(LEO, vid)["scheletro"]
 m = lett.stato()["mappa"]
 verifica("due parti: la seconda richiesta con lo scheletro in busta; un collegamento solo le unisce "
          "(il secondo unirebbe parti già unite), proposto",
-         len(PA.F.richieste) == 2 and "scheletro della mappa" in json.dumps(
-             PA.F.richieste[1], ensure_ascii=False)
+         len(PA.F.richieste) == 3 and "scheletro della mappa" in json.dumps(
+             PA.F.richieste[2], ensure_ascii=False)
          and s is not None and s["parti"] == 1 and len(s["collegamenti"]) == 4
          and m["connessioni"] == 1 and m["uniti"] == 1 and m["con_isole"] == 0
          and st.verifica(LEO, vid)["mappa_esito"] == MG.PROPOSTO, f"{s and s['parti']} {m}")
@@ -416,12 +419,12 @@ verifica("la radice dello scheletro generato: l'argomento della verifica, al cen
 st.close()
 PA.azzera()
 st, vid, ids, lett = prepara({"studio_mappa_genera": "attiva"}, nome="connessione_rotta")
-PA.rispondi(ISOLE, "non è json")
+PA.rispondi(ISOLE, {"triple": []}, "non è json")
 lett.giro()
 s = st.vista_mappe(LEO, vid)["scheletro"]
 riga = st.dati.uno("SELECT aiuto FROM studio_mappe WHERE verifica = ?", (vid,))
 verifica("la seconda risposta illeggibile: lo scheletro resta con le sue isole e lo dice",
-         len(PA.F.richieste) == 2 and s["parti"] == 2 and '"isole": 2' in (riga["aiuto"] or "")
+         len(PA.F.richieste) == 3 and s["parti"] == 2 and '"isole": 2' in (riga["aiuto"] or "")
          and lett.stato()["mappa"]["connessioni_rotte"] == 1
          and lett.stato()["mappa"]["con_isole"] == 1
          and st.verifica(LEO, vid)["mappa_esito"] == MG.PROPOSTO, str(riga))
@@ -514,7 +517,7 @@ cli3.chat = lambda messaggi, **kw: (cli3.messaggi.append((messaggi, kw)) or
 x3 = PA.B.fase_mappa(cli3, {"storia": mat["storia"]}, {}, usc, lambda m: None).get("storia") or {}
 verifica("banco: con più parti la seconda passata (schema della connessione), le parti prima e "
          "dopo, i doppioni (0) e il grado della radice",
-         len(cli3.messaggi) == 2 and cli3.messaggi[1][1]["schema"] == MG.SCHEMA_CONNESSIONE
+         any(x[1]["schema"] == MG.SCHEMA_CONNESSIONE for x in cli3.messaggi)
          and x3.get("componenti_prima", 0) > 1 and x3.get("componenti") == 1
          and x3.get("uniti", 0) == x3["componenti_prima"] - 1 and x3.get("doppioni") == 0
          and x3.get("grado_radice", 0) >= 2, str({k: x3.get(k) for k in (
@@ -659,7 +662,7 @@ verifica("la seconda richiesta dice il centro della mappa",
 PA.azzera()
 st, vid, ids, lett = prepara({"studio_mappa_genera": "attiva", "studio_mappa_libera": "attiva"},
                              nome="debole_tieni")
-PA.rispondi(ISOLE, "non è json")
+PA.rispondi(ISOLE, {"triple": []}, "non è json")
 lett.giro()
 s = st.vista_mappe(LEO, vid)["scheletro"]
 deb = [c for c in s["collegamenti"] if c.get("debole")]
@@ -688,7 +691,7 @@ verifica("la copia a memoria non ha il debole (né la freccia «è collegato a»
 st.close()
 PA.azzera()
 st, vid, ids, lett = prepara({"studio_mappa_genera": "attiva"}, nome="debole_cambia")
-PA.rispondi(ISOLE, "non è json")
+PA.rispondi(ISOLE, {"triple": []}, "non è json")
 lett.giro()
 s = st.vista_mappe(LEO, vid)["scheletro"]
 deb = next(c for c in s["collegamenti"] if c.get("debole"))
@@ -721,6 +724,8 @@ PA.azzera()
 
 # Le uscite vere del banco del 31/10, ricostruite (prove/studio_vllm_finto.py), col codice di oggi
 usc5 = Path(tempfile.mkdtemp(prefix="banco-3110-"))
+# Quelle uscite sono state prese col tetto di allora (12 concetti, «da 6 a 10» nella richiesta)
+PA.B.NODI = 12
 fin = VllmFinto(materiali=mat)
 r5 = PA.B.fase_mappa(fin, mat, {}, usc5, lambda m: None)
 uscite = carica_uscite()
@@ -792,18 +797,26 @@ verifica("le regole della prima richiesta chiedono la rete (ogni tripla dopo la 
 usc6 = Path(tempfile.mkdtemp(prefix="banco-0702-"))
 u0702 = carica_uscite(Path(__file__).resolve().parent / "manuali" / "studio"
                       / "uscite_banco_3110_0702.json")
-r6 = PA.B.fase_mappa(VllmFinto(uscite=u0702, materiali=mat), mat, {}, usc6, lambda m: None)
+# Quelle uscite sono di prima della richiesta mirata (#385): senza, il giro è quello di allora
+vera_copertura = MG.copertura
+MG.copertura = lambda *a, **k: {"coperti": [], "scoperti": [], "esclusi": []}
+try:
+    r6 = PA.B.fase_mappa(VllmFinto(uscite=u0702, materiali=mat), mat, {}, usc6, lambda m: None)
+finally:
+    MG.copertura = vera_copertura
 verifica("le uscite del 31/10 07:02 col vLLM finto rifanno il banco (parti 5 → 5, 2 → 2, 5 → 3; "
          "concetti nelle pagine 10, 12, 11)",
          [(r6[v]["componenti_prima"], r6[v]["componenti"], r6[v]["concetti_fondati"])
           for v in ("matematica", "scienze", "storia")] == [(5, 5, 10), (2, 2, 12), (5, 3, 11)]
          and all(u0702["mappa"][v]["banco"]["componenti"] == r6[v]["componenti"] for v in r6),
          {v: (x["componenti_prima"], x["componenti"]) for v, x in r6.items()})
+# (il finto ridà la stessa risposta al secondo giro di connessione: in storia i due di prima, ora
+# dentro la stessa parte, #385)
 verifica("la causa misurata: in matematica e scienze l'unico collegamento proposto è dentro la "
          "stessa parte; in storia i due proposti uniscono",
          r6["matematica"]["connessione"]["stessa_parte"] == 1
          and r6["scienze"]["connessione"]["stessa_parte"] == 1
-         and r6["storia"]["connessione"] == {"proposti": 2, "codice": 0, "stessa_parte": 0,
+         and r6["storia"]["connessione"] == {"proposti": 4, "codice": 0, "stessa_parte": 2,
                                               "verbo": 0, "tetto": 0},
          {v: x["connessione"] for v, x in r6.items()})
 testo6 = PA.B.scrivi_riepilogo(usc6, {"mappa": r6, "modello": "finto"})

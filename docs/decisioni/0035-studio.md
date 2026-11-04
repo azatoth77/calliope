@@ -979,6 +979,45 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
       lo stesso «non la trovo» di una verifica di un altro. L'interrogazione senza domande dice ciò che
       usa (scritte o confermate): che usi anche ciò che è generato è la #384.
 
+
+## Le mappe complete (#385, 04/11)
+
+56. **La mappa generale ha ogni argomento, e ogni argomento ha una mappa da leggere.** Il limite del giro
+    vero del 03/11 (11 concetti) era la richiesta, «da 6 a 10», non il tetto. Una mappa sola non può essere
+    insieme l'insieme e i particolari: due livelli. **La generale** è lo scheletro di sempre (punti 35–38
+    invariati: conferma, «Fai la tua», controllo del codice), con almeno un concetto per argomento e il tetto
+    a 20. **Una parte è un argomento del piano**: già confermato, col nome che la persona riconosce, e il
+    piano e la padronanza contano per argomento. Scartate: le pagine (una ne ha tre, di argomenti) e i gruppi
+    con pagine in comune (si incatenano). La sua mappa viene dalle sole pagine dell'argomento, **si legge
+    soltanto** (`studio_mappe` tipo «parte», nessuna colonna nuova) e nessuno la cambia.
+    - **La copertura la decide il codice**, mai il modello: un concetto buono, legato da un collegamento vero,
+      che ne parla, citando una sua pagina (l'argomento detto dalla tripla, o il titolo). Chi resta fuori ha **una
+      richiesta mirata**, con le sue sole pagine pulite, e le triple nuove passano dagli stessi controlli. Se
+      resta fuori ancora la pagina lo dice: **mai un concetto scritto dal codice**, che sembrerebbe un fatto.
+    - **Una parte che non riesce lascia le altre e la sua di prima**: si scrive da sola, con le regole della
+      generale (punto 36: un'ora, tre errori). Scartato: rigenerare tutto, e una tabella di stato.
+    - **Nessuno può «tenere» una voce di una parte**, quindi non ci entra ciò che nello scheletro resterebbe
+      con un avviso: le pagine con istruzioni non vanno al modello, gli ordini e gli annunci si tolgono, ciò
+      che non sta nelle pagine e i collegamenti che ne dipendono anche (decisione di chi amministra), niente
+      legami deboli; la pagina dice quante voci. Se la mappa perde la connessione resta così, e il banco lo
+      misura. Il testo resta un dato: nessun tool lo legge, nel registro solo conti.
+    - **Durante una prova vera aperta la persona non legge né cambia nessuna mappa**, la generale e le sue
+      comprese: dicono le risposte come le carte (decisione di chi amministra, 04/11). Il tutore vede tutto. Una
+      mappa senza guardare aperta aspetta, e riprende dopo la consegna. *[storico fino al 04/11: «lo scheletro,
+      durante una prova, resta visibile: non è una risposta esatta» (scelta prudente del passo 8, nel
+      documento d'area)]* Le parti sono nascoste anche a chi fa una mappa senza guardare.
+    - **Una mappa libera già controllata ferma la rigenerazione dello scheletro** (estende il punto 38, che la
+      fermava solo aperta): il suo confronto dice gli id di quello scheletro.
+    - Un verbo come «chiama» è anche una terza persona: l'avviso cade solo se sono forme chiuse tutti e due, il
+      verbo (per intero «chiama», «manda» o «invia», più al massimo una preposizione o una locuzione chiusa) e il
+      concetto di arrivo (un nome proprio con le maiuscole e senza cifre); il resto resta un ordine, in italiano e
+      in inglese, anche spezzato fra verbo e concetto (principio 10, coi contrari in `prova_testo.py`). Prima la
+      sicurezza: a dover scegliere, una voce buona in meno.
+    `studio_mappa_parti`, attiva di serie, segue `studio_mappa_genera`; `Lettore.prepara_mappe` è l'ingresso
+    per chi la farà partire dopo la lettura (#384). Alternative scartate: alzare solo il tetto (il modello
+    ubbidiva ai «6–10»), una mappa enorme apribile a rami (sul telefono non si legge e «Fai la tua» avrebbe
+    trenta caselle), la generale derivata dalle parti (buona per materiali grandi, da rivedere se servirà).
+
 ## Conseguenze
 
 - *[storico fino al 30/10]* Fino al passo 4.5 lo Studio non c'è: un minore che chiede aiuto per i compiti ha solo la regola
