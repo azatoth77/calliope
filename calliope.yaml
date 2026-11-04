@@ -989,8 +989,17 @@ studio:
   # La mappa concettuale (30/10, passo 7, #247, calliope/studio/mappa.py): al più tanti concetti
   # nello scheletro; nella mappa dello studente e a memoria la persona ne aggiunge al più 6 suoi
   # in più (`mappa.SUOI_MAX`); i collegamenti al più il doppio. Il progetto del 27/10 dice 10–15
-  # per mappa, lo scheletro 6–10: una mappa più grande si divide per capitolo (un'altra verifica)
-  studio_mappa_nodi_max: 12
+  # per mappa, lo scheletro 6–10: una mappa più grande si divide per capitolo (un'altra verifica).
+  # Dal 04/11 (#385) la generale deve avere ogni argomento (fino a 12, più il centro e i legami):
+  # 20; i particolari stanno nella mappa della parte. *[storico: 12 fino al 04/11]*
+  studio_mappa_nodi_max: 20
+  # Le mappe delle parti (04/11, #385, calliope/studio/mappa_genera.py): una per argomento del
+  # piano, dalle sole pagine di quell'argomento, da leggere (nessuno le cambia, niente «Fai la
+  # tua»). «attiva» segue `studio_mappa_genera` (ombra: misure soltanto), «spenta» niente. Una
+  # richiesta per argomento, circa 15 s a parte sulla DGX libera. Il tetto dei concetti di una
+  # parte resta nei 10–15 del progetto del 27/10, sopra quei numeri non si legge più
+  studio_mappa_parti: attiva
+  studio_mappa_parte_nodi_max: 16
   # Lo scheletro della mappa generato dalle pagine lette (30/10, passo 7, seconda parte, #247,
   # calliope/studio/mappa_genera.py): lo stesso thread della lettura, con la sua guardia, chiede a
   # qwen3.6 le triple (concetto, relazione, concetto) degli argomenti confermati di una verifica
@@ -1125,14 +1134,14 @@ studio:
   # Da quanti secondi la voce dev'essere ferma (arbitro_memoria.quiete) perché si prepari
   studio_preparazione_quiete_s: 120
   # Il riassunto da ascoltare (04/11, #386, calliope/studio/riassunto.py): a pagine lette il lettore
-  # scrive un copione in proporzione al materiale, il codice cerca numeri, date, nomi e formule
-  # nelle pagine frase per frase, e il ripasso lo dice con la voce di Calliope; se il controllo
-  # perde troppo si leggono le pagine, dicendolo. «attiva» di serie, a differenza delle altre
-  # generazioni: chi amministra lo vuole nel suo giro, lo Studio è comunque spento di serie, e non
-  # c'è una conferma che lo aspetta (in ombra nessuno lo sentirebbe mai). «ombra» scrive e misura
-  # soltanto, «spenta» niente: il ripasso legge le pagine. Le pagine si chiedono sempre a voce e
-  # con un tasto
-  studio_riassunto: attiva
+  # scrive un copione in proporzione al materiale, dove ogni frase cita le frasi della pagina da cui
+  # viene; il codice le confronta con quelle, un giudizio del modello e il guardiano fanno il resto, e
+  # il ripasso lo dice con la voce di Calliope. Se si perde troppo si leggono le pagine, dicendolo.
+  # Nessuna persona lo valida prima che lo studente lo senta: la sicurezza sta nei controlli. «ombra»
+  # di serie, come le altre generazioni: si scrive e si misura, nessuno lo sente. «attiva» lo sentono
+  # tutti, minore compreso: si accende quando il banco passa il criterio della decisione 0035, punto
+  # 57. «spenta» niente. Le pagine si chiedono sempre a voce e con un tasto
+  studio_riassunto: ombra
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

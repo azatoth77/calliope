@@ -125,6 +125,10 @@ def scenario_telefono(t, st, vid):
     verifica("«Consegna»: la correzione con l'esito a parole e la risposta attesa",
              bool(ok) and "risposto giusto a 4 domande su 5" in el and "da rivedere" in el
              and ATTESE[0] in el, el[:500])
+    esiti_voce = t.v("[...document.querySelectorAll('.studio-p-esito-voce')].map((e) => e.textContent)") or []
+    verifica("gli esiti delle voci a parole, mai il codice (revisione della PR #389)",
+             "giusta" in esiti_voce and "da rivedere" in esiti_voce
+             and not {"giusto", "da_rivedere", "vuota", "indizio", "sbagliato"} & set(esiti_voce), str(esiti_voce))
     verifica("i tentativi del codice nel db", len(tent) == 4
              and all(x["fonte"] == "codice" and x["tipo"] == "verifica_finta" for x in tent), str(tent))
     misure(t, "390×844 con la correzione")

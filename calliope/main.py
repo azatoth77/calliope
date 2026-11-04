@@ -806,7 +806,9 @@ class Avvio:
                 for spec in studio_specs(cfg):
                     s.tools.register(spec)
             # La lettura delle pagine (30/10, passo 4.3, #282): un thread che legge con il
-            # modello dell'agente quando la DGX è libera e cede ai lavori e alla voce
+            # modello dell'agente quando la DGX è libera e cede ai lavori e alla voce; la preparazione e
+            # il riassunto aspettano anche che la voce sia ferma (`quiete`), e il riassunto va al modello
+            # solo con lo Studio «attivo» (`per_modello`)
             try:
                 s.studio.avvia_lettura(getattr(s, "lavori", None))
             except Exception as e:  # noqa: BLE001 — la lettura non ferma l'avvio
@@ -874,6 +876,9 @@ class Avvio:
             return
         try:
             guardiano = s.guardiano = guardia.Guardiano(cfg)
+            # Il riassunto da ascoltare (#386): le frasi del copione passano anche da lui
+            if getattr(s, "studio", None) is not None:
+                s.studio.guardiano = guardiano
             atexit.register(guardiano.close)
 
             def scalda_guardiano():

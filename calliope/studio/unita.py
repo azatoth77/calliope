@@ -70,7 +70,7 @@ _TABELLA = (
     ("L", VOL, 0.001, ("litro", "litri"), ("l", "lt")),
     ("mL", VOL, 1e-6, ("millilitro", "millilitri"), ("ml",)),
     ("g/cm3", DENS, 1000.0, ("grammi al centimetro cubo", "grammi per centimetro cubo",
-                             "grammi al millilitro"), ("g/cm3", "g/ml")),
+                             "grammo al centimetro cubo", "grammi al millilitro"), ("g/cm3", "g/ml")),
     ("kg/m3", DENS, 1.0, ("chilogrammi al metro cubo", "chilogrammi per metro cubo"),
      ("kg/m3",)),
     ("N", FORZA, 1.0, ("newton", "niuton"), ("n",)),

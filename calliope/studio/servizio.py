@@ -597,6 +597,10 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
             finally:
                 db.execute(f"PRAGMA secure_delete = {int(prima)}")
         n = D.togli_file(file, D.cartella_di(self.cfg))
+        # L'audio del ripasso e la posizione a voce (04/11, #386): niente del materiale tolto
+        from .ascolta import togli_audio
+        n += togli_audio(D.cartella_di(self.cfg), solo=[int(v["id"])])
+        self.ascolto_via_verifica(v["id"])
         self.ricalcola_persona(v["persona"])
         return {"verifiche": 1, "file": n}
 

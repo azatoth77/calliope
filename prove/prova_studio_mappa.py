@@ -253,7 +253,7 @@ verifica("una casella vuota è «vuota», e non dà un tentativo",
          and M.esito_tentativo(M.GIUSTA, M.MEMORIA) == "giusto"
          and M.esito_tentativo(M.SBAGLIATA, M.MEMORIA) == "sbagliato")
 verifica("i concetti al più `studio_mappa_nodi_max`, fra 4 e 30",
-         M.nodi_max(Config()) == 12 and M.nodi_max(types.SimpleNamespace(
+         M.nodi_max(Config()) == 20 and M.nodi_max(types.SimpleNamespace(
              studio_mappa_nodi_max=100)) == 30)
 
 # ═══════════════════════════ 2. lo scheletro ═══════════════════════════
@@ -288,8 +288,8 @@ verifica("la conferma tiene i proposti puliti, quello con un avviso resta propos
 st.togli_nodo(LEO, mid, 50)
 st.togli_nodo(LEO, mid, 51)
 verifica("al più `studio_mappa_nodi_max` concetti",
-         solleva(lambda: [st.nodo_mappa(LEO, mid, f"Concetto {i}") for i in range(10)],
-                 ValueError) and len(st._riga_mappa(mid)["nodi"]) == 12)
+         solleva(lambda: [st.nodo_mappa(LEO, mid, f"Concetto {i}") for i in range(20)],
+                 ValueError) and len(st._riga_mappa(mid)["nodi"]) == 20)
 for x in [x for x in st._riga_mappa(mid)["nodi"] if x["testo"].startswith("Concetto")]:
     st.togli_nodo(LEO, mid, x["id"])
 mo = st.scrivi_scheletro(LEO, vid)
@@ -869,7 +869,7 @@ verifica("pagina: il testo dei concetti solo con textContent (niente innerHTML n
          "innerHTML" not in pezzo and "insertAdjacentHTML" not in pezzo
          and "sp.textContent = riga" in pezzo and "outerHTML" not in pezzo)
 sw = (QUI.parent / "calliope" / "schermi" / "pagina" / "telefono" / "sw.js").read_text("utf-8")
-verifica("il service worker alla v42 (il riassunto da ascoltare, #386)", "calliope-telefono-pagina-v42" in sw)
+verifica("il service worker alla v43 (il riassunto da ascoltare, #386, dopo le mappe delle parti)", "calliope-telefono-pagina-v43" in sw)
 
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
 sys.exit(1 if errori else 0)

@@ -84,6 +84,8 @@ CASI = {
     "studio_mappa_genera": ("attiva", " Attiva ", ("attivo", "attiva"), ["accesa", "sì", "genera"]),
     # La mappa libera e «Parliamone» (30/10, #328)
     "studio_mappa_libera": ("spenta", " Spenta ", ("spento", "spenta"), ["accesa", "sì", "libera"]),
+    # Le mappe delle parti (04/11, #385)
+    "studio_mappa_parti": ("spenta", " Spenta ", ("spento", "spenta"), ["accesa", "sì", "parti"]),
     "studio_mappa_consigli": ("attiva", " Attiva ", ("attivo", "attiva"), ["accesa", "sì", "parla"]),
     "studio_domande_genera": ("attiva", " Attiva ", ("attivo", "attiva"), ["accesa", "sì", "genera"]),
     # Il ripasso da ascoltare (31/10, #249)
@@ -95,7 +97,7 @@ CASI = {
     # La preparazione dietro le quinte (31/10, #297, parte 3)
     "studio_preparazione": ("attiva", " Attiva ", ("attivo", "attiva"), ["accesa", "sì", "prepara"]),
     # Il riassunto da ascoltare (04/11, #386)
-    "studio_riassunto": ("ombra", " Ombra ", ("spento", "spenta"), ["accesa", "sì", "riassunto"]),
+    "studio_riassunto": ("attiva", " Attiva ", ("spento", "spenta"), ["accesa", "sì", "riassunto"]),
     "agenti_arbitro": ("mai", " MAI ", None, ["acceso", "talvolta"]),
     "agenti_sandbox_motore": ("processo", "Docker", None, ["acceso", "sì", "podman"]),
     "agenti_livello": ("amministra", "Amministra", None,

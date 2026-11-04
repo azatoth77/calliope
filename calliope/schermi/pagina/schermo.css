@@ -1356,6 +1356,11 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
    Giusta blu, sbagliata arancio (si distinguono anche per luminosità), sempre con la parola */
 .studio-m { display: flex; flex-direction: column; gap: 0.6rem; }
 .studio-m-schede { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.studio-m-parte { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+.studio-m-parte-tasto { width: 100%; text-align: left; min-height: 44px; white-space: normal; overflow-wrap: anywhere; }
+.studio-m-voce.studio-m-liv1 { margin-left: 0.6rem; }
+.studio-m-voce.studio-m-liv2 { margin-left: 1.2rem; }
+.studio-m-voce.studio-m-liv3 { margin-left: 1.8rem; }
 .studio-m-tela { width: 100%; border-radius: 0.8rem; border: 1px solid var(--accento-bordo); background: var(--pannello);
   touch-action: none; display: block; }
 .studio-m-tela .studio-m-nodo rect { fill: var(--pannello-2); stroke: var(--accento-bordo); stroke-width: 2; }

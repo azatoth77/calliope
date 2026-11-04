@@ -64,10 +64,10 @@ scritta nei documenti; «non scritta» dove nessun documento la dice.
 *Gli altri interruttori dello Studio* (31/10, tappa dell'epic #251; ricontrollati su
 `calliope/config.py`): sulla DGX non sono nel locale e valgono di serie. Accesi con lo Studio:
 `studio_lettura`, `studio_argomenti`, `studio_indicazioni`, `studio_importa`, `studio_serie`,
-`studio_stelle` (`true`), `studio_mappa_libera`, `studio_ascolta`, `studio_libreria` e, dal 04/11
-(#386, col suo banco, arriva con la prossima installazione), `studio_riassunto` (`attiva`).
+`studio_stelle` (`true`), `studio_mappa_libera`, `studio_ascolta`, `studio_libreria` (`attiva`).
 In ombra: `studio_padronanza`, `studio_carte_genera`, `studio_domande_genera`,
-`studio_mappa_consigli`, `studio_esercizi`, `studio_preparazione` (`ombra`). Spento:
+`studio_mappa_consigli`, `studio_esercizi`, `studio_preparazione` e, dal 04/11 (#386),
+`studio_riassunto` (`ombra`: «attiva» col criterio del banco, 0035 punto 57). Spento:
 `studio_duelli` (`false`). Chi ne accende uno sulla DGX lo aggiunge alla tabella; le generazioni
 si accendono solo dopo il loro banco ([studio](studio.md)).
 

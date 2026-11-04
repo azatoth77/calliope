@@ -27,7 +27,8 @@ collegamenti con i concetti propri della persona non si giudicano.
 Un concetto: {id, testo, pagine (id), argomento (id o None), autore («persona», «tutore»,
 «modello», «scheletro» per la copia), stato («tenuto», «proposto»: solo nello scheletro), avvisi,
 x, y (frazioni della mappa), da (il concetto dello scheletro da cui viene la copia), casella (vuota
-da riempire: il testo è ciò che ha messo la persona)}. Un collegamento: {id, da, a, verbo, pagine,
+da riempire: il testo è ciò che ha messo la persona), argomenti (dal 04/11, #385, solo nelle mappe
+generate: tutti gli argomenti che le triple del concetto dicono, per la copertura)}. Un collegamento: {id, da, a, verbo, pagine,
 autore, stato, avvisi, origine (il collegamento dello scheletro da cui viene la copia)}.
 """
 
@@ -44,10 +45,14 @@ MIN_CONFERMA = 3
 # L'aiuto: quante caselle vuote (progetto, Studio 11: «Tanto / Medio / Poco», 2, 3 o 6)
 AIUTI = {"tanto": 2, "medio": 3, "poco": 6}
 AIUTO_DI_SERIE = "medio"
+PARTE_PER_PAGINA = 4
 # I tipi di mappa e i loro stati. «libera» (passo 7c, #328): la mappa fatta da zero, senza copiare
 # niente dallo scheletro, confrontata con lui solo a «Ho finito»
-SCHELETRO, STUDENTE, MEMORIA, LIBERA = "scheletro", "studente", "memoria", "libera"
-TIPI = (SCHELETRO, STUDENTE, MEMORIA, LIBERA)
+# «parte» (04/11, #385): la mappa di un argomento, da leggere: la scrive solo il modello e nessuno la
+# cambia, non ha copie né controllo (`mappa_genera.py`, `mappe.proponi_parte`)
+SCHELETRO, STUDENTE, MEMORIA, LIBERA, PARTE = ("scheletro", "studente", "memoria", "libera",
+                                               "parte")
+TIPI = (SCHELETRO, STUDENTE, MEMORIA, LIBERA, PARTE)
 STATI_SCHELETRO = ("proposta", "confermata", "ombra")
 STATI_STUDENTE = ("aperta", "controllata")
 # Gli esiti di una casella
@@ -72,10 +77,32 @@ _CONTROLLO = re.compile(r"[\x00-\x1f\x7f  -‏ - ⁦-⁩]")
 
 def nodi_max(cfg) -> int:
     try:
-        n = int(getattr(cfg, "studio_mappa_nodi_max", 12) or 12)
+        n = int(getattr(cfg, "studio_mappa_nodi_max", 20) or 20)
     except (TypeError, ValueError):
-        n = 12
+        n = 20
     return max(4, min(30, n))
+
+
+def parte_nodi_max(cfg) -> int:
+    """`studio_mappa_parte_nodi_max`: il tetto dei concetti della mappa di una parte (#385)."""
+    try:
+        n = int(getattr(cfg, "studio_mappa_parte_nodi_max", 16) or 16)
+    except (TypeError, ValueError):
+        n = 16
+    return max(4, min(30, n))
+
+
+def parte_nodi(cfg, pagine: int) -> int:
+    """Il tetto dei concetti di una parte con tante pagine: il tetto vale per una pagina, ogni pagina
+    in più ne porta altri `PARTE_PER_PAGINA`, fino a 30. Un argomento di cinque pagine non sta nei
+    concetti di uno di mezza pagina, e su una pagina sola il modello arriva già al tetto."""
+    return min(30, parte_nodi_max(cfg) + PARTE_PER_PAGINA * max(0, int(pagine) - 1))
+
+
+def modo_parti(cfg) -> str:
+    """`studio_mappa_parti`: «attiva» (di serie: segue `studio_mappa_genera`) o «spenta»."""
+    m = str(getattr(cfg, "studio_mappa_parti", "attiva") or "attiva").strip().lower()
+    return m if m in ("spenta", "attiva") else "attiva"
 
 
 def modo_libera(cfg) -> str:
@@ -231,6 +258,26 @@ def gradi(nodi: list[dict], collegamenti: list[dict]) -> dict[int, int]:
     return {i: len(v) for i, v in vicini_di(nodi, collegamenti).items()}
 
 
+def livelli(nodi: list[dict], collegamenti: list[dict]) -> dict[int, int]:
+    """id → la distanza dalla radice (i versi non contano), in ampiezza nell'ordine dei concetti: la
+    lettura a schema di una mappa (#385). Chi non è raggiungibile (mai nelle mappe delle parti, che
+    hanno i deboli) viene per ultimo, dopo i più lontani."""
+    r = radice(nodi, collegamenti)
+    if r is None:
+        return {}
+    vic = vicini_di(nodi, collegamenti)
+    out = {r: 0}
+    coda = [r]
+    while coda:
+        x = coda.pop(0)
+        for y in vic[x]:
+            if y not in out:
+                out[y] = out[x] + 1
+                coda.append(y)
+    fondo = max(out.values()) + 1
+    return {int(n["id"]): out.get(int(n["id"]), fondo) for n in nodi}
+
+
 def componenti(nodi: list[dict], collegamenti: list[dict]) -> list[list[int]]:
     """Le parti connesse della mappa (i versi delle frecce non contano), nell'ordine dei concetti."""
     vic = vicini_di(nodi, collegamenti)
@@ -307,10 +354,12 @@ def disposizione(nodi: list[dict], collegamenti: list[dict]) -> dict[int, tuple[
     """id → (x, y) in frazioni della mappa (0,08–0,92): al centro il concetto con più collegamenti
     (a parità il primo), attorno quelli collegati a lui, poi gli altri su un giro più largo, in
     ordine di vicinanza (una visita in ampiezza). Deterministica: la stessa mappa ha sempre la
-    stessa disposizione."""
+    stessa disposizione. Oltre `TELA_NODI` concetti a righe (`_a_righe`, #385)."""
     ids = [int(n["id"]) for n in nodi]
     if not ids:
         return {}
+    if len(ids) > TELA_NODI:
+        return _a_righe(nodi, collegamenti)
     vicini = vicini_di(nodi, collegamenti)
     # Dal passo 7c (#328) il centro è la radice: il concetto segnato, altrimenti il più collegato
     centro = radice(nodi, collegamenti)
@@ -345,6 +394,24 @@ def disposizione(nodi: list[dict], collegamenti: list[dict]) -> dict[int, tuple[
 # I riquadri, in frazioni della mappa: sul telefono un concetto è largo un terzo della mappa e alto
 # un decimo (sul PC, in orizzontale, un sesto); due riquadri più vicini di così si sovrappongono
 _LARGO, _ALTO = 0.34, 0.17
+# Oltre tanti concetti i giri attorno al centro non stanno più sul telefono: `_a_righe`, e la pagina
+# allunga la mappa in proporzione (`telaMappa`)
+TELA_NODI = 8
+
+
+def _a_righe(nodi: list[dict], collegamenti: list[dict]) -> dict[int, tuple[float, float]]:
+    """Una mappa lunga (#385), dall'alto in basso come si legge: la radice in cima al centro, poi i
+    concetti in ordine di distanza da lei, due per riga (sul telefono ne stanno due: 210 su 600 di
+    largo). Deterministica, niente sovrapposizioni con la mappa allungata della pagina."""
+    liv = livelli(nodi, collegamenti)
+    r = radice(nodi, collegamenti)
+    resto = sorted((int(n["id"]) for n in nodi if int(n["id"]) != r), key=lambda i: liv[i])
+    righe = 1 + (len(resto) + 1) // 2
+    passo = 0.84 / max(1, righe - 1)
+    out = {r: (0.5, 0.08)}
+    for k, i in enumerate(resto):
+        out[i] = (0.25 if k % 2 == 0 else 0.75, round(0.08 + passo * (1 + k // 2), 3))
+    return out
 
 
 def _separa(pos: dict, ordine: list[int], giri: int = 80) -> dict:

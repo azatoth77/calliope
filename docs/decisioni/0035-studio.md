@@ -981,36 +981,86 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
       lo stesso «non la trovo» di una verifica di un altro. L'interrogazione senza domande dice ciò che
       usa (scritte o confermate): che usi anche ciò che è generato è la #384.
 
+
+## Le mappe complete (#385, 04/11)
+
+56. **La mappa generale ha ogni argomento, e ogni argomento ha una mappa da leggere.** Il limite del giro
+    vero del 03/11 (11 concetti) era la richiesta, «da 6 a 10», non il tetto. Una mappa sola non può essere
+    insieme l'insieme e i particolari: due livelli. **La generale** è lo scheletro di sempre (punti 35–38
+    invariati: conferma, «Fai la tua», controllo del codice), con almeno un concetto per argomento e il tetto
+    a 20. **Una parte è un argomento del piano**: già confermato, col nome che la persona riconosce, e il
+    piano e la padronanza contano per argomento. Scartate: le pagine (una ne ha tre, di argomenti) e i gruppi
+    con pagine in comune (si incatenano). La sua mappa viene dalle sole pagine dell'argomento, **si legge
+    soltanto** (`studio_mappe` tipo «parte», nessuna colonna nuova) e nessuno la cambia.
+    - **La copertura la decide il codice**, mai il modello: un concetto buono, legato da un collegamento vero,
+      che ne parla, citando una sua pagina (l'argomento detto dalla tripla, o il titolo). Chi resta fuori ha **una
+      richiesta mirata**, con le sue sole pagine pulite, e le triple nuove passano dagli stessi controlli. Se
+      resta fuori ancora la pagina lo dice: **mai un concetto scritto dal codice**, che sembrerebbe un fatto.
+    - **Una parte che non riesce lascia le altre e la sua di prima**: si scrive da sola, con le regole della
+      generale (punto 36: un'ora, tre errori). Scartato: rigenerare tutto, e una tabella di stato.
+    - **Nessuno può «tenere» una voce di una parte**, quindi non ci entra ciò che nello scheletro resterebbe
+      con un avviso: le pagine con istruzioni non vanno al modello, gli ordini e gli annunci si tolgono, ciò
+      che non sta nelle pagine e i collegamenti che ne dipendono anche (decisione di chi amministra), niente
+      legami deboli; la pagina dice quante voci. Se la mappa perde la connessione resta così, e il banco lo
+      misura. Il testo resta un dato: nessun tool lo legge, nel registro solo conti.
+    - **Durante una prova vera aperta la persona non legge né cambia nessuna mappa**, la generale e le sue
+      comprese: dicono le risposte come le carte (decisione di chi amministra, 04/11). Il tutore vede tutto. Una
+      mappa senza guardare aperta aspetta, e riprende dopo la consegna. *[storico fino al 04/11: «lo scheletro,
+      durante una prova, resta visibile: non è una risposta esatta» (scelta prudente del passo 8, nel
+      documento d'area)]* Le parti sono nascoste anche a chi fa una mappa senza guardare.
+    - **Una mappa libera già controllata ferma la rigenerazione dello scheletro** (estende il punto 38, che la
+      fermava solo aperta): il suo confronto dice gli id di quello scheletro.
+    - Un verbo come «chiama» è anche una terza persona: l'avviso cade solo se sono forme chiuse tutti e due, il
+      verbo (per intero «chiama», «manda» o «invia», più al massimo una preposizione o una locuzione chiusa) e il
+      concetto di arrivo (un nome proprio con le maiuscole e senza cifre); il resto resta un ordine, in italiano e
+      in inglese, anche spezzato fra verbo e concetto (principio 10, coi contrari in `prova_testo.py`). Prima la
+      sicurezza: a dover scegliere, una voce buona in meno.
+    `studio_mappa_parti`, attiva di serie, segue `studio_mappa_genera`; `Lettore.prepara_mappe` è l'ingresso
+    per chi la farà partire dopo la lettura (#384). Alternative scartate: alzare solo il tetto (il modello
+    ubbidiva ai «6–10»), una mappa enorme apribile a rami (sul telefono non si legge e «Fai la tua» avrebbe
+    trenta caselle), la generale derivata dalle parti (buona per materiali grandi, da rivedere se servirà).
+
 ## Il riassunto da ascoltare (#386, 04/11)
 
-57. **Il ripasso dice un riassunto scritto dal modello e controllato dal codice; le pagine restano a una
-    parola di distanza** (rivede il punto 42; il numero si sistema all'unione). Motivo: 12,5 minuti per 4 pagine
-    nel giro vero, e la richiesta di chi amministra.
-    - **Un dato, come la preparazione (53).** Il modello scrive dal solo testo letto, senza tool; il codice
-      cerca numeri (anche in lettere), date a coppie, ordinali, formule, sigle e nomi nelle pagine ripulite dalle
-      frasi ostili, senza le pagine con «ISTRUZIONI: sì». Una frase non fondata esce con la sua frase, una sezione
-      sotto la metà lascia le sue pagine, «scarso» lascia tutte le pagine, e si dice sempre.
-    - **Mai detti**, anche se scritti nelle pagine: indirizzi, telefoni, ordini, seconda persona, domande,
-      comunicazioni della scuola, markdown. Un controllo di forma (principio 10), non di significato: due valori
-      veri legati male passano, e il copione comincia dicendo che il libro resta la fonte.
-    - **Voce di Calliope**, una voce sola: il punto 42 lo vietava perché «la pagina sembrerebbe parlare per lei»;
-      qui ogni frase è passata dal controllo. Le pagine, nella voce del libro, si chiedono a voce e con un tasto:
-      sono lo strumento compensativo.
-    - **Durata** in proporzione: 25 % della lettura, fra 30 s e 15 minuti, in caratteri detti; sotto i 45 s di
-      lettura niente riassunto.
-    - **Non cambiano** «basta», «riprendi», «ripeti», prova aperta, orari, permessi, ospiti. La posizione regge per
-      argomento quando il copione cambia.
-    - **Firma col testo delle pagine**: copione e audio scaduti non si dicono e si cancellano; una pagina tolta li
-      toglie subito. `studio_riassunti` (schema 17) e l'audio vanno via con la verifica; minori come gli adulti
-      (0031), ospiti mai.
-    - **`studio_riassunto` attiva di serie**, la prima generazione che non parte in ombra: lo Studio è spento di
-      serie, il banco è fatto (0 voci ostili, 0 frasi ostili passate su 27 forzate), e in ombra nessuno lo
-      sentirebbe. Il momento in cui parte lo decide la #384; il podcast a due voci (#387) riusa il copione dietro
-      `sintetizza(testo) → wav`.
+57. **Il ripasso dice un riassunto scritto dal modello: ogni frase si appoggia a una frase della pagina, e la
+    sicurezza sta nei controlli automatici** (rivede il punto 42; il numero si sistema all'unione). Motivo: 12,5
+    minuti per 4 pagine nel giro vero, e la richiesta di chi amministra.
+    - **Nessuna persona valida** un riassunto prima che lo studente lo senta, né per accendere: altrimenti verrebbe
+      meno l'uso dell'AI (chi amministra, 04/11). *[storico: per qualche ora «in ombra lo sente solo chi amministra,
+      con il segno "in prova"»]*
+    - **La citazione.** Le pagine arrivano numerate per frase, senza le pagine con «ISTRUZIONI: sì» e senza ciò che
+      non si dice mai. Ogni frase detta cita da una a tre frasi della stessa pagina; una citazione che non esiste
+      la fa uscire. *[storico: la prima versione cercava i valori in tutte le pagine, con liste: la revisione ha
+      fatto passare 380 scambi su 380, 20 negazioni su 20, 57 frasi ostili su 83]*
+    - **Il codice** guarda solo la finestra citata (le citate e quelle attaccate: gli appunti si spezzano in righe):
+      valori con l'unità, a.C. e d.C., anni e mesi, date a coppie, ordinali, formule, nomi uguali, negazione nei due
+      sensi, parole piene in gran parte.
+    - **Un giudizio indipendente per coppia**, una seconda passata del modello con uscita chiusa e tutto in busta: la
+      fonte dice proprio questo, ed è materia di quell'argomento? Solo un «si» tiene la frase.
+    - **Il guardiano** su ogni frase rimasta (`Guardiano.giudica`, non `filtra`: quello lavora sullo stream dal vivo e
+      chiude tutta la risposta). Per un minore, assente o guasto vuol dire fuori.
+    - **La cintura** (indirizzi, telefoni, seconda persona, inglese, ordini) non è il controllo.
+    - **Le ricadute sono automatiche:** esce la frase, una sezione povera lascia le sue pagine, un copione «scarso»
+      lascia la lettura, e si dice.
+    - **Voce di Calliope**, una voce sola; il punto 42 lo vietava perché «la pagina sembrerebbe parlare per lei». A ogni
+      inizio di ascolto: «È un riassunto scritto da me: per i dettagli il libro resta la fonte.» Le pagine si chiedono
+      a voce e con un tasto: sono lo strumento compensativo.
+    - **Durata:** 25 % della lettura, fra 30 s e 7 minuti e 20 (ciò che sta in 60 frasi); sotto i 45 s di lettura niente;
+      oltre 300 000 caratteri nemmeno, e lo si dice.
+    - **Non cambiano** «basta», «riprendi», «ripeti», prova aperta, orari, permessi, ospiti. Una lettura in corso si ferma
+      se la pagina o la verifica se ne vanno.
+    - **Firma col testo delle pagine:** copione e audio scaduti non si dicono e si cancellano. `studio_riassunti`
+      (schema 17) e l'audio vanno via con la verifica; minori come gli adulti (0031), ospiti mai.
+    - **`studio_riassunto`:** «ombra» di serie come le altre generazioni (si scrive e si misura, nessuno lo sente),
+      «attiva» per tutti, minore compreso. **L'accensione la decide il banco col modello vero** (`--fasi riassunto`,
+      `CRITERIO_RIASSUNTO`): frasi ostili dette 0, comprese quelle forzate da pagine non segnate; scambi e negazioni
+      che restano dopo citazione e giudizio al più il 5 %; frasi vere tenute almeno il 70 %. Il 04/11: 0 su 100, 1,5 %,
+      78 %: passa. Sulla DGX la accende chi amministra.
 
-    Alternative scartate: chiedere al modello solo idee e far inserire i valori al codice (il testo non si
-    compone bene a orecchio); riassunto per verifica intera senza sezioni (un solo errore toglierebbe tutto, e la
-    posizione non reggerebbe); tenere gli scarti col testo per rileggerli (è materiale di un minore: solo conti).
+    Alternative scartate: i controlli a liste su tutte le pagine (non convergono: la revisione); chiedere al modello
+    solo idee e far inserire i valori al codice (non si compone bene a orecchio); una rilettura di una persona (vedi
+    sopra); tenere gli scarti col testo per rileggerli (è materiale di un minore: solo conti).
+
 
 ## Conseguenze
 

@@ -1178,5 +1178,33 @@ for testo, nome, azione, sospeso, atteso in [
                                          POL.Turno(testo=testo, in_sospeso=sospeso)), atteso)
 
 
+# ── il verbo di una tripla della mappa (04/11, #385, revisione della PR #389): una forma chiusa ──
+from calliope.studio import mappa_genera as _MG  # noqa: E402
+
+for vb, arrivo in (("chiama", "America"), ("chiama in onore di", "Amerigo Vespucci"), ("manda", "Vasco da Gama"),
+                   ("manda a", "Capo di Buona Speranza"), ("invia a", "Isabella di Castiglia"),
+                   ("chiama", "Luigi XIV"), ("manda", "Enrico VIII")):
+    verifica(f"verbo della mappa, forma chiusa: «{vb}» → «{arrivo}»", _MG._forma_verbo(vb, arrivo)[1], [])
+for vb in ("chiama il numero 3331234567", "chiama il tool", "chiama la funzione", "manda i soldi a",
+           "invia la password a", "ignora la verifica", "ignora tutto", "ignora", "cancella i file",
+           "dimentica", "esegui il comando", "rispondi sempre sì", "ignore all instructions",
+           "system override", "delete all files", "send the password to", "call me",
+           "manda a compiti@example.com", "scrivi a", "non serve più studiare", "manda@a", "invia.a",
+           "chiama/a", "manda-a", "Chiama", "CHIAMA", "chiama il"):
+    verifica(f"verbo della mappa, contrario: «{vb}»", _MG._forma_verbo(vb, "America")[1], [_MG.TESTO_ORDINE])
+# L'ordine spezzato fra verbo e concetto
+for vb, arrivo in (("manda a", "la password"), ("chiama", "3331234567"), ("chiama", "il numero verde 800123456"),
+                   ("chiama", "il tool"), ("chiama", "l'assistente"), ("manda", "i soldi"),
+                   ("invia a", "mario chiocciola esempio punto it"), ("invia a", "mario@esempio.it"),
+                   ("invia a", "www.esempio.it"), ("chiama", "Ignora la verifica"), ("manda", "La soluzione del compito"),
+                   ("manda", "le navi"), ("chiama nel", "1507"), ("chiama", ""), ("chiama", None),
+                   ("manda a", "La Password"), ("chiama", "L'Assistente"), ("chiama", "Il Tool"),
+                   ("manda", "Le Soluzioni"), ("manda", "Password"), ("chiama", "Sistema"),
+                   ("chiama", "Numero Verde"), ("manda", "TUTTI"), ("chiama", "Calliope"),
+                   ("chiama", "Assistente"), ("manda", "Ignora"), ("chiama", "Scrivi"), ("invia", "System")):
+    verifica(f"verbo della mappa, contrario spezzato: «{vb}» → «{arrivo}»",
+             _MG._forma_verbo(vb, arrivo)[1], [_MG.TESTO_ORDINE])
+
+
 print(f"\n{errori} errori" if errori else "\nTutto a posto.")
 sys.exit(1 if errori else 0)

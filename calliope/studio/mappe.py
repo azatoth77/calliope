@@ -30,6 +30,18 @@ indizio» (`indizio_libera`) e «Mostra» (`mostra_concetto`); «Ho finito» (`f
 confronto del codice (`mappa.confronta`), gli indicatori del metodo per giro (`giri`) e i tentativi
 sui concetti chiave, una volta per giro; «Parliamone» legge `consigli_mappa` (in busta, senza i
 concetti nascosti) e `misura_consigli` conta i concetti svelati.
+
+**Le mappe delle parti** (04/11, #385, decisione 0035 punto 56): una per argomento del piano, tipo
+«parte», da leggere: niente copie, niente controllo, nessuno le cambia (`_mappa` le rifiuta con
+`cambia`). Lo stato della generazione di ogni parte sta nella sua riga (`aiuto`: argomento, firma,
+esito, quando), e nessun campo nuovo nello schema: una parte che non riesce lascia le altre e la sua
+di prima, e si riprova con le regole della generale (dopo un'ora, al più tre errori di fila). Le
+vede chi vede lo scheletro; sono nascoste a chi sta facendo una mappa senza guardare o una prova
+(`vista_mappe`).
+
+**Durante una prova vera aperta** (revisione della PR #389) la persona non legge nessuna mappa coi testi
+e non ne cambia nessuna (`_mappe_in_prova`, `PROVA_APERTA`): la mappa generale dice le risposte come le carte.
+Il tutore vede tutto. *[storico fino al 04/11: lo scheletro restava visibile durante una prova]*
 """
 
 from __future__ import annotations
@@ -53,6 +65,8 @@ UNA_ALLA_VOLTA = "prima finisci l'altra mappa senza guardare («Controlla» o «
 LIBERA_APERTA = ("la tua mappa da zero è aperta: lo scheletro e le altre mappe tornano dopo «Ho "
                  "finito»")
 LIBERA_NON_FINITA = "la tua mappa da zero è ancora aperta: «Rifai» viene dopo «Ho finito»"
+# Una prova vera aperta: le mappe aspettano la consegna (revisione della PR #389)
+PROVA_APERTA = "c'è una prova aperta: le mappe tornano dopo la consegna"
 # I giri della mappa libera tenuti (gli indicatori per la «volta scorsa» e per la #248)
 GIRI_MAX = 20
 
@@ -114,7 +128,12 @@ class Mappe:
             raise NonTrovata()
         v = self._verifica(chi, m["verifica"])
         if cambia:
+            # La mappa di una parte si legge soltanto (#385)
+            if m["tipo"] == M.PARTE:
+                raise NonTrovata()
             self._scrivibile()
+            if self._mappe_in_prova(chi, v):
+                raise ValueError(PROVA_APERTA)
             if v["stato"] not in ("bozza", "aperta"):
                 raise VerificaChiusa()
             if m["tipo"] != M.SCHELETRO and self._chi_puo(chi, v["persona"]) != "proprietario":
@@ -133,6 +152,11 @@ class Mappe:
             if m["tipo"] == M.LIBERA and m["stato"] == "controllata" and not chiusa_ok:
                 raise ValueError(LIBERA_CHIUSA)
         return m, v
+
+    def _mappe_in_prova(self, chi, v) -> bool:
+        """La persona della verifica, con una sua prova aperta: niente mappe coi testi (`_nascoste`,
+        che tollera una tabella delle prove che manca)."""
+        return chi is not None and self._nascoste(v, chi)
 
     def _chiudi_scadute(self, vid, motivo: str) -> int:
         """La verifica non è più aperta («fatta» o «archiviata»): la mappa libera e quella a
@@ -189,7 +213,7 @@ class Mappe:
         """{tipo: la mappa più recente di quel tipo} di una verifica, senza quelle dell'ombra."""
         out = {}
         for r in self.dati.tutti("SELECT id, tipo FROM studio_mappe WHERE verifica = ? AND "
-                                 "stato != 'ombra' ORDER BY id", (int(vid),)):
+                                 "stato != 'ombra' AND tipo != 'parte' ORDER BY id", (int(vid),)):
             out[r["tipo"]] = r["id"]
         return {t: self._riga_mappa(i) for t, i in out.items()}
 
@@ -225,6 +249,8 @@ class Mappe:
         v = self._verifica(chi, vid)
         if v["stato"] not in ("bozza", "aperta"):
             raise VerificaChiusa()
+        if self._mappe_in_prova(chi, v):
+            raise ValueError(PROVA_APERTA)
         c = self._mappe_di(v["id"]).get(M.SCHELETRO)
         if c is not None:
             return c["id"]
@@ -515,6 +541,8 @@ class Mappe:
                 raise VerificaChiusa()
             if self._chi_puo(chi, v["persona"]) != "proprietario":
                 raise NonTrovata()
+            if self._mappe_in_prova(chi, v):
+                raise ValueError(PROVA_APERTA)
             s = self._scheletro_confermato(v["id"])
             if s is None:
                 raise ValueError("lo scheletro non è confermato")
@@ -756,6 +784,8 @@ class Mappe:
                 raise VerificaChiusa()
             if self._chi_puo(chi, v["persona"]) != "proprietario":
                 raise NonTrovata()
+            if self._mappe_in_prova(chi, v):
+                raise ValueError(PROVA_APERTA)
             mm = self._mappe_di(v["id"])
             if mm.get(M.LIBERA) is not None:
                 return mm[M.LIBERA]["id"]
@@ -906,6 +936,8 @@ class Mappe:
 
     def _libera_finita(self, chi, vid) -> tuple[dict, dict]:
         v = self._verifica(chi, vid)
+        if self._mappe_in_prova(chi, v):
+            raise ValueError(PROVA_APERTA)
         lib = self._mappe_di(v["id"]).get(M.LIBERA)
         if lib is None or lib["stato"] != "controllata" or not lib["controllo"]:
             raise ValueError("la mappa libera non è finita")
@@ -1056,10 +1088,12 @@ class Mappe:
         rifare = []
         # Con una mappa libera aperta lo scheletro è il suo riferimento: non si rigenera finché
         # non dice «Ho finito» (revisione della PR #330; un riferimento nuovo farebbe valere gli
-        # indizi e i concetti mostrati su concetti diversi). La firma resta, si riprova dopo
+        # indizi e i concetti mostrati su concetti diversi). La firma resta, si riprova dopo.
+        # Anche con una già controllata (revisione della PR #389): il suo confronto dice gli id dello
+        # scheletro di allora, e su quello nuovo «Il Portogallo» diventerebbe un altro concetto
         if db.execute("SELECT m.id FROM studio_mappe m JOIN studio_verifiche v ON v.id = "
-                      "m.verifica WHERE m.verifica = ? AND m.tipo = 'libera' AND m.stato = "
-                      "'aperta' AND v.stato IN ('bozza', 'aperta')",
+                      "m.verifica WHERE m.verifica = ? AND m.tipo = 'libera' AND (m.stato = "
+                      "'controllata' OR (m.stato = 'aperta' AND v.stato IN ('bozza', 'aperta')))",
                       (int(vid),)).fetchone() is not None:
             return False, []
         for r in db.execute("SELECT id, stato, origine, nodi, collegamenti, aiuto FROM "
@@ -1074,11 +1108,46 @@ class Mappe:
             rifare.append(r["id"])
         return True, rifare
 
-    def verifiche_per_mappa(self) -> list[dict]:
-        """Le verifiche aperte con almeno un argomento del piano che cita una pagina letta, senza
-        uno scheletro della persona e con una firma (argomenti, pagine, modo) diversa da quella
-        dell'ultima generazione, dalla più vicina. Vuoto con `studio_mappa_genera: spenta` o i dati
-        in sola lettura."""
+    def _righe_parti(self, vid, con_ombra: bool = False) -> dict[int, dict]:
+        """{id dell'argomento: la riga della sua mappa}: `aiuto` ha argomento, firma, esito e data
+        dell'ultima generazione. Senza `con_ombra`, solo quelle che possono andare alla persona."""
+        out = {}
+        for r in self.dati.tutti("SELECT id FROM studio_mappe WHERE verifica = ? AND tipo = 'parte'"
+                                 " ORDER BY id", (int(vid),)):
+            m = self._riga_mappa(r["id"])
+            if m is None:                   # il lettore l'ha appena rifatta
+                continue
+            aid = (m["aiuto"] or {}).get("argomento")
+            if aid is not None and (con_ombra or m["stato"] != "ombra"):
+                out[int(aid)] = m
+        return out
+
+    def _parti_da_fare(self, vid, args: list[dict], pagine: list[dict], modo_: str) -> list[dict]:
+        """Gli argomenti del piano con una pagina letta la cui mappa manca o ha un'altra firma, o è
+        da riprovare (un «errore», con le regole della generale: `genera.da_generare`)."""
+        from . import argomenti as A
+        from . import genera as G
+        from . import mappa_genera as MG
+        if M.modo_parti(self.cfg) == "spenta":
+            return []
+        lette = {int(p["id"]) for p in A.lette(pagine)}
+        righe = self._righe_parti(vid, con_ombra=True)
+        out = []
+        for a in args:
+            if not {int(x) for x in a["pagine"]} & lette:
+                continue
+            g = (righe.get(int(a["id"])) or {}).get("aiuto") or {}
+            if G.da_generare(g.get("firma"), g.get("esito"), g.get("del"),
+                             MG.firma_parte(a, pagine, modo_), self.adesso()):
+                out.append(a)
+        return out
+
+    def verifiche_per_mappa(self, vid=None) -> list[dict]:
+        """Le verifiche aperte (o quella `vid`) con almeno un argomento del piano che cita una
+        pagina letta e **qualcosa da fare**, dalla più vicina: `_generale` se lo scheletro non è
+        della persona e ha una firma (argomenti, pagine, modo) diversa da quella dell'ultima
+        generazione; `_parti` gli argomenti con la mappa da fare (#385), anche con uno scheletro
+        della persona. Vuoto con `studio_mappa_genera: spenta` o i dati in sola lettura."""
         from . import argomenti as A
         from . import genera as G
         from . import mappa_genera as MG
@@ -1087,20 +1156,89 @@ class Mappe:
             return []
         out = []
         for v in self.dati.tutti("SELECT * FROM studio_verifiche WHERE stato = 'aperta' AND "
-                                 "data >= ? ORDER BY data, id", (self._oggi().isoformat(),)):
+                                 "data >= ? AND (? IS NULL OR id = ?) ORDER BY data, id",
+                                 (self._oggi().isoformat(), vid, vid)):
             args = self._argomenti_per_carte(v["id"])
             pagine = self._pagine_di(v["id"])
             lette = {int(p["id"]) for p in A.lette(pagine)}
             if not any(set(a["pagine"]) & lette for a in args):
                 continue
-            if not G.da_generare(v.get("mappa_firma"), v.get("mappa_esito"), v.get("mappa_del"),
-                                 MG.firma(args, pagine, m), self.adesso()):
-                continue
-            with self.dati.lock:
-                si, _r = self._scheletro_toccabile(self.dati.db, v["id"])
-            if si:
-                out.append({**v, "_pagine": pagine, "_argomenti": args, "_modo": m})
+            generale = G.da_generare(v.get("mappa_firma"), v.get("mappa_esito"), v.get("mappa_del"),
+                                     MG.firma(args, pagine, m), self.adesso())
+            if generale:
+                with self.dati.lock:
+                    generale, _r = self._scheletro_toccabile(self.dati.db, v["id"])
+            parti = self._parti_da_fare(v["id"], args, pagine, m)
+            if generale or parti:
+                out.append({**v, "_pagine": pagine, "_argomenti": args, "_modo": m,
+                            "_generale": generale, "_parti": parti})
         return out
+
+    def proponi_parte(self, vid, aid, firma: str, nodi: list[dict], coll: list[dict], esito: str,
+                      modo_: str, esclusi: int = 0, fuori: int = 0) -> int | None:
+        """Scrive l'esito della mappa di una parte, in una transazione sua: con una mappa, al posto
+        di quella di prima («proposta» con `studio_mappa_genera: attiva`, «ombra» in ombra); con
+        «rotto» o «errore» resta quella di prima, con l'esito nuovo. Se intanto l'argomento o le sue
+        pagine sono cambiati o la verifica non è aperta, niente: None. Quanti concetti."""
+        from . import genera as G
+        from . import mappa_genera as MG
+        with self.dati.lock:
+            db = self.dati.db
+            try:
+                if db.in_transaction:
+                    db.commit()
+                db.execute("BEGIN IMMEDIATE")
+                v = db.execute("SELECT * FROM studio_verifiche WHERE id = ? AND stato = 'aperta'",
+                               (int(vid),)).fetchone()
+                a = db.execute("SELECT * FROM studio_argomenti WHERE id = ? AND verifica = ?",
+                               (int(aid), int(vid))).fetchone()
+                pagine = [dict(r) for r in db.execute(
+                    "SELECT p.* FROM studio_pagine p JOIN studio_materiali m ON m.id = p.materiale"
+                    " WHERE m.verifica = ?", (int(vid),))]
+                arg = None if a is None or a["stato"] not in D.ARGOMENTI_DEL_PIANO else {
+                    "id": a["id"], "titolo": a["titolo"],
+                    "pagine": [int(x) for x in D.da_j(a["pagine"]) if str(x).isdecimal()]}
+                if v is None or arg is None or MG.firma_parte(arg, pagine, modo_) != firma:
+                    db.rollback()
+                    return None
+                righe = [r for r in db.execute(
+                    "SELECT id, stato, aiuto, nodi FROM studio_mappe WHERE verifica = ? AND tipo = "
+                    "'parte'",
+                    (int(vid),)).fetchall() if _da_j(r["aiuto"], {}).get("argomento") == int(aid)]
+                prima = _da_j(righe[-1]["aiuto"], {}) if righe else {}
+                scritta, errori = G.firma_da_scrivere(prima.get("firma"), firma, esito)
+                adesso = self.adesso().isoformat(timespec="seconds")
+                aiuto = {"argomento": int(aid), "firma": scritta, "esito": esito, "del": adesso}
+                n = 0
+                stato = "ombra" if modo_ == MG.OMBRA else "proposta"
+                # Quella di prima resta solo se è dello stesso modo: una dell'ombra non va alla
+                # persona, e la parte direbbe «la sto preparando» per sempre
+                tieni = (esito in (MG.ROTTO, MG.ERRORE) and bool(righe)
+                         and righe[-1]["stato"] == stato)
+                if tieni:
+                    # Resta la mappa di prima, se c'era; la firma e l'esito dicono quando riprovare
+                    db.execute("UPDATE studio_mappe SET aiuto = ? WHERE id = ?",
+                               (_j({**prima, **aiuto}), righe[-1]["id"]))
+                    n = len(_da_j(righe[-1]["nodi"], []))
+                else:
+                    for r in righe:
+                        db.execute("DELETE FROM studio_mappe WHERE id = ?", (r["id"],))
+                    n = len(nodi)
+                    db.execute(
+                        "INSERT INTO studio_mappe (verifica, persona, tipo, stato, origine, aiuto, "
+                        "nodi, collegamenti, creata) VALUES (?, ?, 'parte', ?, 'modello', ?, ?, ?, "
+                        "?)", (int(vid), str(v["persona"]), stato,
+                               _j({**aiuto, "esclusi": int(esclusi), "fuori": int(fuori)}), _j(nodi),
+                               _j(coll), adesso))
+                db.commit()
+                if errori >= G.ERRORI_MAX:
+                    self._registra(f"verifica {vid}: mappa dell'argomento {aid} ferma dopo {errori} "
+                                   "errori: riparte quando cambia")
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                raise
+        return n
 
     def proponi_mappa(self, vid, firma: str, nodi: list[dict], coll: list[dict], esito: str,
                       modo_: str, isole: int = 1) -> int | None:
@@ -1169,6 +1307,7 @@ class Mappe:
         mm = self._mappe_di(v["id"])
         s, mia, mem = mm.get(M.SCHELETRO), mm.get(M.STUDENTE), mm.get(M.MEMORIA)
         lib = mm.get(M.LIBERA)
+        parti = [x for x in self._parti_mostrabili(v["id"]) if x[2] is not None and x[2]["nodi"]]
 
         def conto(m):
             if m is None:
@@ -1185,10 +1324,12 @@ class Mappe:
                                if k else None)}
         return {"scheletro": ({"stato": s["stato"], "origine": s["origine"],
                                "concetti": len(M.tenuti(s)[0]),
+                               # Anche quelli ancora proposti: per dire quanto è grande (#385)
+                               "tutti": len(s["nodi"]),
                                "da_decidere": sum(x.get("stato") == "proposto"
                                                   for x in s["nodi"] + s["collegamenti"])}
                               if s else None),
-                "mia": conto(mia), "memoria": conto(mem),
+                "mia": conto(mia), "memoria": conto(mem), "parti": len(parti),
                 # La mappa libera (passo 7c, #328): conti e indicatori, mai testi
                 "libera": ({"concetti": len(lib["nodi"]), "collegamenti": len(lib["collegamenti"]),
                             "aperta": lib["stato"] == "aperta", "controllata": lib["controllata"],
@@ -1233,7 +1374,9 @@ class Mappe:
         # La mappa libera aperta (passo 7c, #328): lo scheletro, la mia mappa e a memoria (che
         # hanno i concetti dello scheletro) arrivano senza testi, come con a memoria aperta
         a_libera = bool(ruolo == "proprietario" and viva and self._aperta(lib))
-        nascondi = a_memoria or a_libera
+        # Una prova vera aperta (revisione della PR #389): nessuna mappa coi testi a chi la fa
+        a_prova = self._mappe_in_prova(chi, v) if viva else False
+        nascondi = a_memoria or a_libera or a_prova
 
         def per_schermo(m, senza_testi=False):
             if m is None:
@@ -1294,12 +1437,25 @@ class Mappe:
             from . import mappa_genera as MG
             parti = MG.parti_fondate(sch["nodi"], sch["collegamenti"])
             vs["parti"] = len(parti) if sch["nodi"] else 0
+            # Gli argomenti che la mappa ha e quelli rimasti fuori (#385), calcolati sul momento:
+            # la persona può averla cambiata. Solo per quella del modello
+            if sch["origine"] == "modello":
+                piano = self._argomenti_per_carte(v["id"])
+                cop = MG.copertura(sch["nodi"], sch["collegamenti"], piano,
+                                   self._pagine_di(v["id"]))
+                titoli = {int(a["id"]): a["titolo"] for a in piano}
+                vs["copertura"] = {"coperti": len(cop["coperti"]),
+                                   "totale": len(cop["coperti"]) + len(cop["scoperti"]),
+                                   "fuori": [titoli[i] for i in cop["scoperti"]],
+                                   "esclusi": [titoli[i] for i in cop["esclusi"]]}
         return {"verifica": {"id": v["id"], "materia": v["materia"], "data": v["data"],
                              "stato": v["stato"], "di": nome},
                 "scheletro": vs,
+                "a_prova": a_prova,
+                "parti": self._parti_per_schermo(v, nascondi, per_schermo),
                 "mia": per_schermo(mm.get(M.STUDENTE), nascondi),
-                "memoria": per_schermo(mem, a_libera),
-                "libera": self._libera_per_schermo(lib, per_schermo, pagine, a_memoria),
+                "memoria": per_schermo(mem, a_libera or a_prova),
+                "libera": self._libera_per_schermo(lib, per_schermo, pagine, a_memoria or a_prova),
                 "a_memoria": a_memoria, "a_libera": a_libera,
                 "libera_accesa": M.modo_libera(self.cfg) != "spenta",
                 "consigli": M.modo_consigli(self.cfg) != "spenta",
@@ -1320,6 +1476,49 @@ class Mappe:
                             "collegamenti": 2 * (M.nodi_max(self.cfg) + M.SUOI_MAX),
                             "testo": M.NODO_MAX, "verbo": M.VERBO_MAX},
                 "prova": not self.per_schermi()}
+
+    def _parti_mostrabili(self, vid) -> list[tuple]:
+        """[(numero, argomento, riga o None, pagine lette dell'argomento)] di ciò che può andare alla
+        persona: niente con le parti spente o in ombra, solo gli argomenti del piano con una pagina
+        letta. Lo stesso filtro per lo schermo, la home e la voce."""
+        from . import mappa_genera as MG
+        if M.modo_parti(self.cfg) == "spenta" or MG.modo(self.cfg) != MG.ATTIVA:
+            return []
+        righe = self._righe_parti(vid)
+        lette = {int(p["id"]) for p in self._pagine_di(vid) if p.get("stato") == "letta"}
+        out = []
+        for i, a in enumerate(self._argomenti_per_carte(vid), 1):
+            sue = {int(x) for x in a["pagine"]} & lette
+            if sue:
+                out.append((i, a, righe.get(int(a["id"])), sue))
+        return out
+
+    def _parti_per_schermo(self, v, nascoste: bool, per_schermo) -> dict:
+        """Le mappe delle parti per lo schermo (#385): una voce per argomento del piano, nell'ordine
+        del piano, col titolo, l'esito e la mappa in ordine di lettura (dalla radice, con `livello`).
+        Senza testi (`nascoste`) per chi sta facendo una mappa senza guardare o una prova: una mappa
+        di una parte dice le risposte più dello scheletro, come le carte (che in prova si nascondono).
+        Una parte non pronta non ha `mappa`: l'esito lo dice."""
+        from . import mappa_genera as MG
+        accese = M.modo_parti(self.cfg) != "spenta" and MG.modo(self.cfg) == MG.ATTIVA
+        pulite = MG.pagine_pulite(self._pagine_di(v["id"]))
+        voci = []
+        for i, a, r, sue in self._parti_mostrabili(v["id"]):
+            g = (r or {}).get("aiuto") or {}
+            voce = {"argomento": int(a["id"]), "numero": i, "titolo": a["titolo"],
+                    "esito": g.get("esito"), "concetti": len(r["nodi"]) if r else 0,
+                    "esclusi": int(g.get("esclusi") or 0), "fuori": int(g.get("fuori") or 0),
+                    # Le sue pagine con un messaggio per un assistente: la mappa non le ha usate
+                    "saltate": len(sue - pulite), "mappa": None}
+            if r is not None and r["nodi"] and not nascoste:
+                liv = M.livelli(r["nodi"], r["collegamenti"])
+                ordine = sorted(r["nodi"], key=lambda n: liv.get(int(n["id"]), 0))
+                vista = per_schermo({**r, "nodi": ordine})
+                for n in vista["nodi"]:
+                    n["livello"] = liv.get(n["id"], 0)
+                voce["mappa"] = vista
+            voci.append(voce)
+        return {"voci": voci, "nascoste": nascoste, "accese": accese}
 
     def _libera_per_schermo(self, lib, per_schermo, pagine: dict, senza_testi: bool):
         """La mappa libera per lo schermo: i concetti e i collegamenti della persona (suoi), e
@@ -1405,6 +1604,8 @@ class Mappe:
         if tipo not in (M.STUDENTE, M.LIBERA):
             raise NonTrovata()
         v = self._verifica(chi, vid)
+        if self._mappe_in_prova(chi, v):
+            raise ValueError(PROVA_APERTA)
         mm = self._mappe_di(v["id"])
         mia = mm.get(tipo)
         if mia is None or not mia["nodi"]:

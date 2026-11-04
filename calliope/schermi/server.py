@@ -2288,6 +2288,10 @@ def crea_app(hub: Schermi) -> Starlette:
             return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
         except ValueError as e:
             # Le frasi dei ValueError sono del codice (mai il testo della mappa)
+            # La prova è partita da un altro schermo: la pagina ricarica la mappa, e i testi spariscono
+            from ..studio.mappe import PROVA_APERTA
+            if str(e) == PROVA_APERTA:
+                return _json({"errore": f"Non va: {e}.", "prova_aperta": True}, 400)
             return _json({"errore": f"Non va: {e}."}, 400)
         if azione is not None:
             # Nel registro solo l'azione e gli id, mai il testo dei concetti
