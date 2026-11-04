@@ -132,7 +132,7 @@ def rif_arif(st, vid):
 
 
 def dom(a, i):
-    return {"argomento": a, "tipo": "aperta", "domanda": f"Chi partì da Palos, viaggio {i}?",
+    return {"argomento": a, "tipo": "aperta", "domanda": f"Chi partì da Palos, viaggio {str(i).replace('-', ' x') if not str(i).isdecimal() else f'x{i}'}?",
             "risposta": "Colombo partì da Palos", "pagine": ["P1"]}
 
 
@@ -350,11 +350,11 @@ verifica("…anche per le carte", lt.genera_carte(vv) == "rotto"
 st.close()
 # Una seconda richiesta può solo aggiungere (terza revisione della PR #388)
 def buona(a, i):
-    return {**dom(a, f"{a}-{i}"), "domanda": f"Chi partì da Palos, {a} numero {i}?"}
+    return {**dom(a, f"{a}-{i}"), "domanda": f"Chi partì da Palos, {a} n{i}?"}
 
 
 def sporca(a, i):
-    return {**fuori(a), "domanda": f"Chi perse a Waterloo, {a} numero {i}?"}
+    return {**fuori(a), "domanda": f"Chi perse a Waterloo, {a} n{i}?"}
 
 
 def pulite_per(st_, vid_):
@@ -403,12 +403,12 @@ st, vid, args, lt = giro_domande(3, [buona("A1", 1), buona("A2", 1), sporca("A3"
                                  [buona("A1", 9), buona("A3", 1), sporca("A2", 9)])
 testi_ = {r["testo"] for r in st.dati.tutti("SELECT testo FROM studio_domande")}
 verifica("delle nuove contano solo i codici mancanti",
-         not any("A1 numero 9" in x or "A2 numero 9" in x for x in testi_)
-         and any("A3 numero 1" in x and "Palos" in x for x in testi_), testi_)
+         not any("A1 n9" in x or "A2 n9" in x for x in testi_)
+         and any("A3 n1" in x and "Palos" in x for x in testi_), testi_)
 st.close()
 st, vid, args, lt = giro_domande(3, [buona("A1", 1), buona("A2", 1), sporca("A3", 1)], [])
 verifica("contrario: se non arriva niente di nuovo la vecchia con l'avviso resta",
-         any("A3 numero 1" in r["testo"] for r in st.dati.tutti("SELECT testo FROM studio_domande")))
+         any("A3 n1" in r["testo"] for r in st.dati.tutti("SELECT testo FROM studio_domande")))
 st.close()
 x_ = L._aggiungi([{"argomento": f"A{i}", "domanda": f"A{i}"} for i in range(1, 4)],
                  [{"argomento": "A9", "domanda": "nuova A9"}], {"A9"}, lambda v_: True)

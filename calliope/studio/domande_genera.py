@@ -27,8 +27,8 @@ a 5» dava 35 domande diverse e fine dei token a 3500, due volte, e nessuna doma
 - una domanda chiusa (scelta, vero o falso, numero, parole) la cui risposta attesa, detta così
   com'è, il codice non dà «giusta» (`risposte.valuta`) → `da_controllare` (banco del 31/10, #344);
 - doppioni tolti, al più `MAX_DOMANDE`.
-- i valori della risposta attesa nelle pagine citate (`genera.valori_fuori`, #384), altrimenti
-  `da_controllare`.
+- la risposta attesa si appoggia a una frase delle pagine citate (`genera.appoggio`, #384), altrimenti
+  `da_controllare`; poi, con «attiva», il giudizio indipendente per coppia e il guardiano, come le carte.
 Mai scartata per un avviso, mai un secondo giro. Con `studio_domande_genera: attiva` **le domande
 pulite sono subito usabili** da interrogazione e verifica finta, a lettura finita (04/11, #384, 0035
 punto 57); quelle con un avviso restano «proposte», fuori dalle prove, e si tengono una per una; in
@@ -213,17 +213,19 @@ def proposte(grezzi: list[dict], rif, arif) -> list[dict]:
         # 31/10, #344): se no la domanda farebbe sbagliare chi risponde giusto
         sbagliata = d["tipo"] in RS.CHIUSE + ("parole",) and RS.valuta(d, d["attesa"])[0] \
             != RS.GIUSTO
-        # I valori della risposta: per «vero» o «falso» quelli dell'affermazione (#384)
-        fuori = G.valori_fuori(d["testo"] if d["tipo"] == "vero_falso" else d["attesa"],
-                               [testi[r] for r in esistono])
-        if not dentro or aid is None or not testo_pag or falso or sbagliata or fuori:
+        # La frase d'appoggio: per «vero» l'affermazione stessa è la risposta (#384)
+        vf = d["tipo"] == "vero_falso"
+        fonte = G.appoggio("" if vf else d["testo"], d["testo"] if vf else d["attesa"],
+                           [testi[r] for r in esistono])
+        if not dentro or aid is None or not testo_pag or falso or sbagliata or fonte is None:
             avvisi.append(DA_CONTROLLARE)
         # Anche una sola pagina con le istruzioni (#384), come le carte
         if any(r in istruzioni for r in esistono):
             avvisi.append(PAGINA_CON_ISTRUZIONI)
         visti.add(A.chiave(d["testo"]))
         out.append({**d, "argomento": aid, "pagine": [ids[r] for r in esistono],
-                    "avvisi": list(dict.fromkeys(avvisi))})
+                    "avvisi": list(dict.fromkeys(avvisi)), "fonte": fonte,
+                    "voce": G.testo_voce(d["testo"], d["attesa"], d["opzioni"])})
         if len(out) >= MAX_DOMANDE:
             break
     return out

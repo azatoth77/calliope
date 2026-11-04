@@ -1505,7 +1505,8 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
             if self.dati.scrivi("UPDATE studio_verifiche SET stato = 'aperta' WHERE id = ? AND "
                                 "stato = 'bozza'", (v["id"],)):
                 self._registra(f"verifica {v['id']}: aperta da sola a lettura finita")
-                self._ricalcola_sicuro(v["id"])
+                # Il tempo di una persona si divide fra le sue verifiche, come alla conferma
+                self.ricalcola_persona(v["persona"])
                 out.append(v["id"])
         return out
 

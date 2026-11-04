@@ -82,6 +82,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Carte generate dalle pagine lette, controllo del codice, proposte confermate dalla persona (dal 30/10 sera, passo 6, seconda parte, #246; schema «studio» alla versione 7; `studio_carte_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato; `provenienza.racchiudi`, `parole`, `vicina` | `calliope/studio/genera.py` → `corpo`, `messaggi`, `blocco_argomenti`, `argomenti_rif`, `firma`, `forma_testo`, `leggi`, `proposte`, `modo`; `calliope/studio/lettura.py` → `Lettore.genera_carte`; `calliope/studio/servizio.py` → `Studio.verifiche_per_carte`, `proponi_carte`, `conferma_carte`; `calliope/schermi/server.py` → `POST /api/studio/carte` (azione `conferma`); `prove/manuali/banco_studio.py` (fase «carte»); prova `prove/prova_studio_carte_genera.py` |
 | Mappa concettuale: lo scheletro (a mano; dal lettore con la seconda parte), la mia mappa con le caselle, a memoria, il controllo deterministico, i tentativi «mappa», il PDF (dal 30/10 sera, passo 7, #247; schema «studio» alla versione 8; `studio_mappa_nodi_max`) | SQLite (`studio_mappe`, concetti e collegamenti in JSON); fpdf2 (extra `documenti`) coi font di `documenti/render.py`; nel browser SVG scritto a mano | `calliope/studio/mappa.py` → `testo_normale`, `uguale`, `verbo_simile`, `disposizione`, `scegli_caselle`, `parole_da_mettere`, `copia`, `controlla`, `esito_tentativo`; `calliope/studio/mappe.py` → `Mappe` (in `Studio`): `scrivi_scheletro`, `nodo_mappa`, `collega`, `riempi`, `tieni_mappa`, `conferma_scheletro`, `inizia_mappa`, `rifai_mappa`, `controlla_mappa`, `carte_dagli_errori`, `riordina_mappa`, `vista_mappe`, `pdf_mappa`, `_conto_mappa`; `calliope/studio/mappa_pdf.py` → `render`; `calliope/tools/studio.py` → azione `mappa`; `calliope/schermi/server.py` → `POST /api/studio/mappa`; `calliope/schermi/pagina/studio.js` (la sezione «Mappa»); prove `prove/prova_studio_mappa.py`, `prove/prova_studio_mappa_pagina.py` |
 | Scheletro della mappa generato dalle pagine lette: le triple controllate dal codice, proposte da confermare (dal 30/10 sera, passo 7, seconda parte, #247; `studio_mappa_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato | `calliope/studio/mappa_genera.py` → `corpo`, `messaggi`, `firma`, `leggi`, `scheletro`, `modo`, `collega_isole` e `parti_fondate` (dal 31/10, #344); `prove/studio_vllm_finto.py` (le uscite del banco del 31/10); `calliope/studio/lettura.py` → `Lettore.genera_mappa`; `calliope/studio/mappe.py` → `verifiche_per_mappa`, `proponi_mappa`; `prove/manuali/banco_studio.py` (fase «mappa»); prova `prove/prova_studio_mappa_genera.py` |
+| Generazione a lettura finita: la verifica che si apre da sola, carte e domande pulite subito in uso, la parte cambiata rifatta da sola, «Cosa è pronto» sulla scheda, il banco della rilettura (dal 04/11, #384; schema «studio» alla versione 17: `studio_verifiche.firme_parti`, `studio_tentativi.generata`; `studio_carte_genera`, `studio_domande_genera` su «attiva», ombra di serie) | qwen3.6 col client e la guardia del lettore; per il banco il modello della voce come giudice | `calliope/studio/genera.py` → `valori_fuori`, `numeri_di`, `stato_iniziale`, `firma_parte`, `da_rifare`, `pagine_di_parte`; `calliope/studio/servizio.py` → `generazione_automatica`, `_nel_piano`, `apri_pronte`, `_da_rifare`, `firme_parti`, `_generata`; `calliope/studio/prove.py` → `minimo_prova`; `calliope/studio/preparazione.py` → `pronto`; `calliope/studio/lettura.py` → `_passi_materiali`, `_materiali_del_giro`; `calliope/schermi/pagina/studio.js` («Cosa è pronto», «Togli questa carta»); `prove/manuali/banco_rilettura.py`; prove `prove/prova_studio_generazione.py`, `prove/prova_studio_pronto_pagina.py` |
 | Mappa generale con ogni argomento e una mappa da leggere per ogni parte: copertura del codice, richiesta mirata, «Le parti» sugli schermi (dal 04/11, #385; `studio_mappa_parti`, `studio_mappa_parte_nodi_max`, `studio_mappa_nodi_max` a 20; tipo «parte» di `studio_mappe`, senza colonne nuove) | qwen3.6 su vLLM col client e la guardia del lettore; SQLite | `calliope/studio/mappa_genera.py` → `regole`, `regole_parte`, `copertura`, `messaggi_copertura`, `altri_sulle_pagine`, `solo_studiabili`, `rete`, `firma_parte`; `calliope/studio/lettura.py` → `Lettore.prepara_mappe`, `genera_parte`; `calliope/studio/mappe.py` → `proponi_parte`, `_parti_da_fare`, `_parti_per_schermo`; `calliope/studio/mappa.py` → `_a_righe`, `livelli`, `parte_nodi`; `calliope/schermi/pagina/studio.js` («Le parti»); prove `prove/prova_studio_mappa_parti.py`, `prove/prova_studio_mappa_parti_pagina.py` |
 | Mappa libera: da zero con lo scheletro nascosto, «Un indizio» e «Mostra», «Ho finito» col confronto del codice e i tentativi una volta per giro, gli indicatori del metodo per giro; scheletro connesso (doppioni, composti, radice, seconda passata per le isole); «Parliamone» (dal 30/10 notte, passo 7c, #328; schema «studio» alla versione 9; `studio_mappa_libera` attiva, `studio_mappa_consigli` ombra di serie) | SQLite (`studio_mappe` tipo «libera», `giri`, `visti`); per la seconda passata qwen3.6 col client e la guardia del lettore; per «Parliamone» il modello della voce, dati in busta | `calliope/studio/mappa.py` → `chiave_insieme`, `parti`, `componenti`, `radice`, `concetti_chiave`, `forma`, `voci_riferimento`, `confronta`, `indicatori`, `rispetto_a_prima`, `tentativo_libera`, `svelati`; `calliope/studio/mappa_genera.py` → `corpo_connessione`, `connetti`; `calliope/studio/mappe.py` → `inizia_libera`, `indizio_libera`, `mostra_concetto`, `finisci_libera`, `consigli_mappa`, `misura_consigli`; `calliope/tools/studio.py` → `studio_mappa_consigli`; `calliope/brain.py` → `_consigli_chiudi`, `_consigli_ombra`; prove `prove/prova_studio_mappa_libera.py`, `prove/prova_studio_mappa_libera_pagina.py` |
 | Prove: il tipo della prova vera e la finestra «dal», le domande (scelta multipla, vero o falso, numero con l'unità, parole chiave, aperta; anche le carte), la verifica finta scritta e l'interrogazione simulata a voce, l'esito del codice, «da rivedere» della persona o del tutore, la generazione delle domande dal lettore (dal 31/10, passo 8, #248; schema «studio» alla versione 10; `studio_domande_genera` ombra di serie) | SQLite (`studio_domande`, `studio_prove`); qwen3.6 col client e la guardia del lettore per la generazione; libreria standard per l'esito | `calliope/studio/risposte.py` → `prepara`, `valuta`, `attesa_detta`; `calliope/studio/unita.py` → `leggi`, `una_misura`, `confronta`; `calliope/studio/prove.py` → `Prove` (in `Studio`): `aggiungi_domanda`, `domande`, `conferma_domande`, `inizia_prova`, `rispondi_prova`, `consegna_prova`, `rivedi_voce`, `orale_inizia`, `orale_risposta`, `orale_basta`, `_chiudi_prove`, `_conto_prove`; `calliope/studio/domande_genera.py` → `corpo`, `proposte`, `firma`; `calliope/studio/lettura.py` → `Lettore.genera_domande`; `calliope/studio/servizio.py` → `conclusa`, `_fine`; `calliope/tools/studio.py` → `studio_interroga`, azioni `tipo`, `conclusa`, `prove`; `calliope/schermi/server.py` → `POST /api/studio/prova`; `calliope/schermi/pagina/studio.js` (la sezione «Prove»); prove `prove/prova_studio_prove.py`, `prove/prova_studio_domande_genera.py`, `prove/prova_studio_prove_pagina.py` |
@@ -98,7 +99,14 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 
 - Le mappe delle parti (#385, 04/11): misurate sui materiali di fantasia col banco, non ancora su una
   verifica vera nel lettore; le pagine con istruzioni restano fuori dalla mappa di una parte anche
-  quando il resto della pagina è buono (lo dice la pagina). Parte da sola dopo la lettura con la #384.
+  quando il resto della pagina è buono (lo dice la pagina). *[storico fino al 04/11: «parte da sola dopo la
+  lettura con la #384»: parte da sola con carte o domande su «attiva»]*
+- La generazione a lettura finita (#384, 04/11): non provata con un giro intero sulla DGX (niente riavvii): manca
+  il «fatto quando» della issue, foto vere → materiali senza un tocco. Sui materiali veri il banco ha contato una
+  voce «contraddetta» dal giudice per carte e domande, che nessuno ha riletto (sezione sotto). A voce una carta non
+  si toglie: si toglie sullo schermo. I risultati dei conti del modello sugli esercizi non hanno un controllo: un
+  numero uguale altrove nella pagina li fa passare. Le voci vengono dal modello, e i distrattori delle scelte
+  multiple non si controllano.
 - L'importazione (#298) è provata solo con file e archivi di fantasia: il Takeout vero di Classroom
   non è ancora stato guardato (passo manuale in `prove/manuali/studio-takeout-vero.md`), la
   condivisione dal telefono (dal 31/10 sera, share target) non è provata sul vero (passo manuale
@@ -146,6 +154,68 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   (storia, «Magellano») resta un collegamento debole «da controllare» e il criterio «una parte sola
   ≥ 90 %» non si raggiunge; il prompt nuovo della seconda passata e i codici al posto dei concetti
   sono da rimisurare col banco vero.
+
+## La generazione a lettura finita (04/11, issue #384, ramo `issue-384-generazione-automatica`)
+
+Decisione di chi amministra: dopo la scansione carte, domande e mappe si fanno da sole e chi studia le trova pronte.
+Il perché di ogni scelta è nel punto 57 della [0035](../decisioni/0035-studio.md); qui cosa fa, come si accende e le misure.
+
+**Come si accende** (la DGX la tocca chi amministra): `studio_carte_genera: attiva` e `studio_domande_genera: attiva`
+nel locale, una riga per chiave, e un riavvio. **Niente migrazioni a mano**: il modo sta nella firma, quindi al primo giro
+le righe in ombra (le 23 carte vere comprese) vanno via e si rigenerano col codice di adesso; una richiesta per tipo. Si
+torna indietro rimettendo «ombra»: le generate mai toccate vanno via, quelle toccate restano. `studio_preparazione` è a
+parte e **questo banco non la misura**: le lezioni restano com'erano misurate il 04/11 (#383), e la scelta di accenderla è
+separata. Di serie resta tutto in ombra.
+
+**Cosa cambia per chi studia.** Fotografa, e sulla scheda vede «Sto preparando» con ciò che manca, che si aggiorna da solo
+ogni 15 secondi a home ferma, poi «Cosa è pronto»: carte e domande con i conti, le mappe, quante sono da guardare. Ogni voce
+ha «Fatta da me» e la pagina, «Togli», e nel ripasso «Togli questa carta». Gli argomenti restano da correggere se vuole;
+«Conferma» c'è ancora e non rifà niente. Con «attiva» il piano parte senza conferma, sui proposti puliti.
+
+**Il banco della rilettura** (`prove/manuali/banco_rilettura.py`, DGX, 04/11, qwen3.6-35b scrive, `gemma4:26b-a4b-it-qat` giudica
+con la stessa finestra già caricata). Si guardano le sole voci **pulite**: sono quelle che arrivano a chi studia. Cosa misura chi:
+il **codice** guarda la forma contro le pagine (pagina citata, valori, metà delle parole, ordini, risposta già nella domanda): non
+sa se è la risposta giusta a quella domanda; il **giudice** è un altro modello a contesto pulito, con la sola pagina citata: è un parere;
+gli **errori iniettati** dicono quanto valgono i primi due; sui materiali di fantasia ho letto anche a mano ogni voce pulita contro le pagine
+(Claude, autore di questa issue: un terzo parere, non una verità assoluta).
+
+Materiali di fantasia (storia, matematica, scienze, chimica), una richiesta per verifica senza la seconda per gli scoperti:
+
+| | Voci | Pulite | Con un avviso (fuori) | Sospette codice | Sospette giudice | Ostili pulite |
+|---|---|---|---|---|---|---|
+| Carte | 64 | 50 | 14 | 1 | 1 | 0 |
+| Domande | 93 | 62 | 31 | 0 | 2 | 0 |
+
+Lette a mano le 112 pulite, con le opzioni delle scelte multiple: **0 risposte false**; **3 sbagliate** per altro (2,7 %): 2 citano la pagina
+degli esercizi per un fatto che sta in un'altra pagina (preso dal giudice, non dal codice), 1 domanda con una premessa inventata («le due aperture»: nessuno dei
+due l'ha presa); **4 da ritoccare**, non sbagliate: un refuso («Cristof Colombo»), una domanda sgrammaticata, «le tre sostanze» con la luce, una scelta di chimica con
+un distrattore vero anche lui. **3 domande sono conti del modello sugli esercizi**, giuste, che le pagine non riportano: il numero stava altrove nella pagina per caso, e
+il codice le ha fatte passare; il giudice ne ha segnata 1 come «non nelle pagine», un falso allarme. Su 4 sospette dei due strumenti, le 2 vere sono dentro; 1 sospetta del
+codice è solo «risposta nella domanda» (una scelta scritta nella domanda).
+
+Errori iniettati sulle pulite (un numero cambiato, o la risposta di un altro argomento): carte 40 scambi, il codice ne prende 38, il
+giudice 40; domande 26 (10 numeri e 16 scambi), il codice 19 (9 e 10), il giudice 26. **Il giudice li prende tutti, ma sono errori grossolani**: la premessa
+inventata qui sopra gli è passata, e 66 su 66 non vuol dire che non sbaglia sugli errori fini.
+
+**Sulle voci vere** (la verifica vera sulla DGX, 4 pagine lette, 11 argomenti; `--vere`, solo conti e categorie, db in sola lettura; nessuno ha riletto il testo):
+
+| | Voci | Pulite | Con un avviso | Sostenute dal giudice | Contraddette | Sospette codice |
+|---|---|---|---|---|---|---|
+| Le 23 carte in ombra, con i controlli di adesso | 23 | 22 | 1 | 21 | **1** | 1 (risposta nella domanda) |
+| Carte rigenerate col codice di adesso | 24 | 22 | 2 | 21 | **1** | 1 (risposta nella domanda) |
+| Domande rigenerate col codice di adesso | 23 | 21 | 2 | 20 | **1** | 0 |
+
+Quindi su 22 e 21 voci pulite il giudice ne contesta 1 per tipo e il codice una per le carte: **da 1 a 2 su 22 da guardare** (5–9 %). Nessuno può dire qui se la
+contraddetta sia un errore vero: sulla fantasia il giudice non ne ha contraddetta nessuna e i suoi allarmi erano 2 veri su 3, e il testo vero resta fuori da qui. Iniettati
+sulle vere: carte 12, codice 10, giudice 12; domande 12, codice 5 (4 numeri su 4, 1 scambio su 8), giudice 12: **sugli scambi il codice da solo non basta**, è il limite che dichiara.
+
+**Cosa ne viene, per chi decide.** Le risposte false misurate sono 0 su 112 di fantasia, con 3 voci sbagliate per pagina o premessa; sul vero non misurato a mano, con un contestato su 22 per tipo. Il
+rimedio dell'errore c'è (pagina visibile, «Togli», il tutore) e i premi non ne dipendono. Se il numero basta è una scelta di chi amministra. **Non misurato**: i distrattori sul vero, la
+qualità delle mappe e delle lezioni in questo banco, gli errori fini.
+
+**Quanto resta fuori.** Sulla fantasia il 22 % delle carte e il 33 % delle domande ha un avviso e non arriva a chi studia (di più che sul vero, 9 %): le pagine ostili e i controlli stretti costano voci buone. Non ho misurato quante di queste siano buone.
+
+Prove: `prova_studio_generazione.py` (nuova, a secco, ogni punto coi contrari), `prova_studio_pronto_pagina.py` (nuova, browser a 390×844 e 320×693 e il tutore), tre casi in `prova_studio_ollama.py`. Versione della pagina a v43.
 
 ## Il giro vero del 03/11 (04/11, issue #383, ramo `issue-383-giro-studio`)
 

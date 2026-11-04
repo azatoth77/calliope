@@ -874,6 +874,9 @@ class Avvio:
             return
         try:
             guardiano = s.guardiano = guardia.Guardiano(cfg)
+            # Le voci generate dello Studio passano anche da lui (#384)
+            if getattr(s, "studio", None) is not None:
+                s.studio.guardiano = guardiano
             atexit.register(guardiano.close)
 
             def scalda_guardiano():

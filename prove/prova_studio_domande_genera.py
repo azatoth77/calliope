@@ -266,10 +266,11 @@ verifica("una risposta numerica calcolata, che non sta nelle pagine: «calcolata
          "una che sta nelle pagine («1492») no",
          consecutivi["calcolata"] and DG.DA_CONTROLLARE in consecutivi["avvisi"]
          and not any(d.get("calcolata") for d in r5["storia"]["domande"]), consecutivi)
-verifica("le domande vere del 31/10: nessuna risposta attesa sbagliata, fondate ≥ 80 % sulle non "
+# Dal 04/11 (#384) la frase d'appoggio è più stretta: le fondate al 70 %, il criterio del banco
+verifica("le domande vere del 31/10: nessuna risposta attesa sbagliata, fondate ≥ 70 % sulle non "
          "calcolate, le calcolate tutte da controllare, scelte ≥ 90 %",
          all(x["auto_sbagliate"] == 0 for x in r5.values())
-         and all(x["fondate"] * 100 >= 80 * (x["n"] - x["calcolate"]) for x in r5.values())
+         and all(x["fondate"] * 100 >= 70 * (x["n"] - x["calcolate"]) for x in r5.values())
          and all(x["calcolate_da_controllare"] == x["calcolate"] for x in r5.values())
          and r5["matematica"]["calcolate"] >= 1
          and all(x["scelte_nelle_pagine"] * 100 >= 90 * x["scelte"] for x in r5.values())

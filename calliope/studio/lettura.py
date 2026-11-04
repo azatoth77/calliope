@@ -1350,6 +1350,9 @@ class Lettore:
                 lambda ar: G.corpo(self.modello, v, rif_r, ar), arif, m, vid, "carte", G.leggi,
                 G.parziale, lambda voci: _puliti(G.proposte(voci, rif, arif)) | decisi,
                 lambda x: bool(_puliti(G.proposte([x], rif, arif))))
+            proposte = None if grezzi is None else G.proposte(grezzi, rif, arif)
+            if proposte and modo == G.ATTIVA:
+                self._cancelli(proposte, m, v["persona"])
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: carte, ceduto il passo a un lavoro dell'agente")
@@ -1369,10 +1372,7 @@ class Lettore:
         # Anche il controllo del codice e la scrittura (revisione della PR #327): un'eccezione qui
         # non deve far ripartire la richiesta a ogni giro e fermare le altre verifiche
         try:
-            if grezzi is None:
-                proposte, esito = [], G.ROTTO
-            else:
-                proposte, esito = G.proposte(grezzi, rif, arif), G.PROPOSTE
+            proposte, esito = ([], G.ROTTO) if proposte is None else (proposte, G.PROPOSTE)
             n = self.studio.proponi_carte(vid, firma, proposte, esito, modo, rifatti=rifatti)
         except Exception as e:  # noqa: BLE001
             return self._errore_generazione("carte", vid, e, lambda: self.studio.proponi_carte(
@@ -1396,7 +1396,7 @@ class Lettore:
             m["ombra"] += n
         conta = {a: sum(a in c["avvisi"] for c in proposte) for a in G.DA_DECIDERE}
         for a, k in conta.items():
-            m[a] += k
+            m[a] = m.get(a, 0) + k
         if not n:
             m["vuote"] += 1
         avv = ", ".join(f"{k} {a}" for a, k in conta.items() if k)
@@ -1464,6 +1464,25 @@ class Lettore:
             finita = finita or not tagliata
         return voci, finita
 
+    def _cancelli(self, voci: list[dict], m: dict, persona) -> None:
+        """I due cancelli automatici sulle voci ancora pulite, con «attiva» (decisione di chi amministra
+        del 04/11: nessuna persona valida prima che lo studente le veda). Il **giudizio indipendente per
+        coppia**: un'altra richiesta chiusa, senza ciò che ha scritto la voce, con la sola frase d'appoggio e
+        la voce in busta; solo un «si» tiene, una risposta che non si legge è un no; il server giù risale e
+        si riprova il giro. Poi il **guardiano**. Una voce fermata resta con un avviso, fuori. Solo conti."""
+        from . import genera as G
+        for v in voci:
+            if v["avvisi"]:
+                continue
+            r = self._chiedi_corpo(G.corpo_giudizio(self.modello, v["voce"], v["fonte"]))
+            m["token_in"] += int(r.get("prompt") or 0)
+            m["token_out"] += int(r.get("eval") or 0)
+            m["giudizi"] = m.get("giudizi", 0) + 1
+            if not G.leggi_giudizio(r.get("content")):
+                v["avvisi"].append(G.GIUDIZIO_NO)
+            elif not self.studio.voce_guardia(persona, v["voce"]):
+                v["avvisi"].append(G.GUARDIANO_NO)
+
     def _fermi(self, vid: int, cosa: str, tutti: list, rifatti: set) -> set:
         """Gli argomenti non rifatti in questo giro e già coperti l'altra volta: restano coperti."""
         prima = set((self.studio.scoperti_di(vid).get(cosa) or {}).get("argomenti") or ())
@@ -1509,6 +1528,9 @@ class Lettore:
                 lambda ar: DG.corpo(self.modello, v, rif_r, ar), arif, m, vid, "domande", DG.leggi,
                 DG.parziale, lambda voci: _puliti(DG.proposte(voci, rif, arif)) | decisi,
                 lambda x: bool(_puliti(DG.proposte([x], rif, arif))))
+            proposte = None if grezzi is None else DG.proposte(grezzi, rif, arif)
+            if proposte and modo == DG.ATTIVA:
+                self._cancelli(proposte, m, v["persona"])
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: domande, ceduto il passo a un lavoro dell'agente")
@@ -1526,10 +1548,7 @@ class Lettore:
                 self.studio.proponi_domande(vid, firma, [], DG.ERRORE, modo)))
         s = time.monotonic() - t0
         try:
-            if grezzi is None:
-                proposte, esito = [], DG.ROTTO
-            else:
-                proposte, esito = DG.proposte(grezzi, rif, arif), DG.PROPOSTE
+            proposte, esito = ([], DG.ROTTO) if proposte is None else (proposte, DG.PROPOSTE)
             n = self.studio.proponi_domande(vid, firma, proposte, esito, modo, rifatti=rifatti)
         except Exception as e:  # noqa: BLE001
             return self._errore_generazione("domande", vid, e, lambda: (
@@ -1554,7 +1573,7 @@ class Lettore:
             m["ombra"] += n
         conta = {a: sum(a in d["avvisi"] for d in proposte) for a in DG.DA_DECIDERE}
         for a, k in conta.items():
-            m[a] += k
+            m[a] = m.get(a, 0) + k
         for d in proposte:
             m["tipi"][d["tipo"]] = m["tipi"].get(d["tipo"], 0) + 1
         if not n:

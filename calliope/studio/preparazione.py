@@ -504,6 +504,27 @@ class Preparazioni:
             if r["argomento"] is not None
             and not (r["origine"] == "modello" and not r["modificata"] and not r.get("ultima"))}
 
+    # ── il guardiano su una voce generata (#384): `main.py` lo mette in `guardiano` ──
+    guardiano = None
+
+    def voce_guardia(self, persona, testo: str) -> bool:
+        """Il guardiano su una voce generata, una volta quando si scrive: True se può andare. Per un
+        minore, guardiano assente o guasto vuol dire fuori, come `guardiano_se_guasto`; per un adulto
+        passa (il guardiano è per i minori e gli ospiti)."""
+        from .. import guardiano as GU
+        from .. import minori
+        minore = minori.e_minore(self._profilo(persona))
+        g = self.guardiano
+        if g is None or not getattr(g, "attivo", False):
+            return not minore
+        try:
+            r = g.giudica("Una domanda di ripasso presa da una pagina di scuola.", testo)
+        except Exception:  # noqa: BLE001 — nel dubbio, come un guasto
+            return not minore
+        if r.esito == GU.VIETATO:
+            return False
+        return not (r.guasto() and minore)
+
     # ── cosa è pronto, per la scheda della verifica e per la voce (#384) ──
     def _stato_generazione(self, v: dict, cosa: str, modulo, args, pagine) -> str | None:
         """«pronte», «in_preparazione», «ferma» o «non_riuscita» delle carte o delle domande di una
@@ -549,7 +570,10 @@ class Preparazioni:
         pagine = self._pagine_di(v["id"])
         if not [p for p in pagine if p["stato"] != "tolta"]:
             return None
-        letto = "Le preparo io: carte, domande e mappe arrivano da sole, non devi fare niente."
+        cose = [n for n, mod in (("carte", G), ("domande", DG), ("mappe", MG))
+                if mod.modo(self.cfg) == mod.ATTIVA]
+        letto = ("Preparo io " + (", ".join(cose[:-1]) + " e " + cose[-1] if len(cose) > 1 else cose[0])
+                 + ": arrivano da sole, non devi fare niente.")
         if any(p["stato"] in ("da_leggere", "in_lettura") for p in pagine):
             # Senza il lettore (la lettura spenta, il portatile da 8 GB) non si promette niente
             if getattr(self, "lettore", None) is None:

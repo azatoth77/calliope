@@ -1202,7 +1202,9 @@
   // Gli avvisi di una carta proposta (passo 6, seconda parte, #246): il perché, in parole
   const AVVISI_CARTA = { da_controllare: "non la trovo nelle pagine che cita",
     pagina_con_istruzioni: "viene da una pagina con un messaggio per un assistente",
-    testo_ordine: "sembra un ordine o un annuncio" };
+    testo_ordine: "sembra un ordine o un annuncio",
+    giudizio_no: "il controllo non l'ha trovata nella frase del libro",
+    guardiano_no: "il controllo non l'ha fatta passare" };
   function pannelloElenco() {
     const p = nodo("div", "studio-c-elenco");
     const d = carte.dati;
