@@ -1113,6 +1113,8 @@ class Lavori:
         self._salva_stato()
         if att:
             return frasi.scegli("lavori.in_coda", titolo=att[0].titolo)
+        if self.motore_in_ripresa():     # il podcast dello Studio aveva fermato vLLM (#387)
+            return frasi.scegli("lavori.avviato") + " Il motore dell'agente sta ripartendo: comincio fra circa quattro minuti."
         return frasi.scegli("lavori.avviato")     # catalogo delle frasi pronte (12/10)
 
     def stato(self, persona=None, tutti: bool = False) -> str:

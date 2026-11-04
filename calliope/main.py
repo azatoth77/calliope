@@ -1215,7 +1215,7 @@ class Avvio:
         # Il podcast dello Studio (#387): dopo una sessione la voce può essere in swap, si scalda a voce ferma
         prep = getattr(getattr(self.s, "studio", None), "podcast_preparatore", None)
         if prep is not None:
-            prep.dopo_sessione = lambda: latenza.scalda_ripresa(brain, self.registro_conv.tutte())
+            prep.dopo_sessione = lambda: latenza.scalda_ripresa(brain, self.registro_conv.tutte()) or brain.warmup()
         threading.Thread(target=latenza.scalda_ripresa, args=(brain, self.registro_conv.tutte()),
                          name="scalda-ripresa", daemon=True).start()
         avviso_latenza = latenza.avviso_recente(cfg)

@@ -232,7 +232,9 @@ def con_battute(ris: dict) -> dict:
             voce = f.get("voce") if f.get("voce") in VOCI else (_altra(prec) if prec else "A")
             if voce == prec and di_fila >= DI_FILA_MAX:
                 voce = _altra(voce)
-            prima, dopo = f.get("prima"), f.get("dopo")
+            # La forma chiusa la controlla `normalizza` all'ingresso, e di nuovo qui: da altrove non passa niente
+            prima = f.get("prima") if f.get("prima") in RACCORDI_PRIMA else None
+            dopo = f.get("dopo") if f.get("dopo") in RACCORDI_DOPO else None
             # In testa all'argomento niente «E poi?»: c'è il suo titolo. Due cenni di fila suonano finti
             if prima and i and cenni < tetto and not (battute and battute[-1]["tipo"] == "cenno"):
                 # Chiede l'altra voce, e risponde chi stava parlando: mai una voce che si fa una domanda da sola
