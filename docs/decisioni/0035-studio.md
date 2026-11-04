@@ -551,7 +551,9 @@ dell'eco della stanza.
 ## Il ripasso da ascoltare (passo 9, #249, 31/10)
 
 42. **Il ripasso da ascoltare legge ciò che la persona ha confermato, con un copione scritto dal
-    codice.** Analisi nel commento della #249; i dettagli nel documento d'area.
+    codice.** Analisi nel commento della #249; i dettagli nel documento d'area. *[storico: «nessun modello
+    scrive il testo» e «il materiale mai nella voce di Calliope» fino al 04/11: li rivede il punto 57 per il
+    riassunto; la lettura delle pagine resta così com'è qui, a richiesta e quando il riassunto non c'è]*
     - **Il testo.** Le pagine lette degli argomenti del piano (ogni pagina una volta,
       nell'ordine dell'elenco, in parti di al più `PARTE_MAX_CAR`) e le carte attive (domanda,
       4 secondi, risposta). Nessun modello scrive il testo: il riassunto del lettore (in ombra di
@@ -978,6 +980,37 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
       qualcosa non si rifà su un'altra verifica: si dice in breve o si chiede quale. Senza materia resta
       lo stesso «non la trovo» di una verifica di un altro. L'interrogazione senza domande dice ciò che
       usa (scritte o confermate): che usi anche ciò che è generato è la #384.
+
+## Il riassunto da ascoltare (#386, 04/11)
+
+57. **Il ripasso dice un riassunto scritto dal modello e controllato dal codice; le pagine restano a una
+    parola di distanza** (rivede il punto 42; il numero si sistema all'unione). Motivo: 12,5 minuti per 4 pagine
+    nel giro vero, e la richiesta di chi amministra.
+    - **Un dato, come la preparazione (53).** Il modello scrive dal solo testo letto, senza tool; il codice
+      cerca numeri (anche in lettere), date a coppie, ordinali, formule, sigle e nomi nelle pagine ripulite dalle
+      frasi ostili, senza le pagine con «ISTRUZIONI: sì». Una frase non fondata esce con la sua frase, una sezione
+      sotto la metà lascia le sue pagine, «scarso» lascia tutte le pagine, e si dice sempre.
+    - **Mai detti**, anche se scritti nelle pagine: indirizzi, telefoni, ordini, seconda persona, domande,
+      comunicazioni della scuola, markdown. Un controllo di forma (principio 10), non di significato: due valori
+      veri legati male passano, e il copione comincia dicendo che il libro resta la fonte.
+    - **Voce di Calliope**, una voce sola: il punto 42 lo vietava perché «la pagina sembrerebbe parlare per lei»;
+      qui ogni frase è passata dal controllo. Le pagine, nella voce del libro, si chiedono a voce e con un tasto:
+      sono lo strumento compensativo.
+    - **Durata** in proporzione: 25 % della lettura, fra 30 s e 15 minuti, in caratteri detti; sotto i 45 s di
+      lettura niente riassunto.
+    - **Non cambiano** «basta», «riprendi», «ripeti», prova aperta, orari, permessi, ospiti. La posizione regge per
+      argomento quando il copione cambia.
+    - **Firma col testo delle pagine**: copione e audio scaduti non si dicono e si cancellano; una pagina tolta li
+      toglie subito. `studio_riassunti` (schema 17) e l'audio vanno via con la verifica; minori come gli adulti
+      (0031), ospiti mai.
+    - **`studio_riassunto` attiva di serie**, la prima generazione che non parte in ombra: lo Studio è spento di
+      serie, il banco è fatto (0 voci ostili, 0 frasi ostili passate su 27 forzate), e in ombra nessuno lo
+      sentirebbe. Il momento in cui parte lo decide la #384; il podcast a due voci (#387) riusa il copione dietro
+      `sintetizza(testo) → wav`.
+
+    Alternative scartate: chiedere al modello solo idee e far inserire i valori al codice (il testo non si
+    compone bene a orecchio); riassunto per verifica intera senza sezioni (un solo errore toglierebbe tutto, e la
+    posizione non reggerebbe); tenere gli scarti col testo per rileggerli (è materiale di un minore: solo conti).
 
 ## Conseguenze
 

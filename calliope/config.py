@@ -2299,6 +2299,15 @@ class Config:
     studio_preparazione: str = "ombra"
     # Da quanti secondi la voce dev'essere ferma (arbitro_memoria.quiete) perché si prepari
     studio_preparazione_quiete_s: int = 120
+    # Il riassunto da ascoltare (04/11, #386, calliope/studio/riassunto.py): a pagine lette il lettore
+    # scrive un copione in proporzione al materiale, il codice cerca numeri, date, nomi e formule
+    # nelle pagine frase per frase, e il ripasso lo dice con la voce di Calliope; se il controllo
+    # perde troppo si leggono le pagine, dicendolo. «attiva» di serie, a differenza delle altre
+    # generazioni: chi amministra lo vuole nel suo giro, lo Studio è comunque spento di serie, e non
+    # c'è una conferma che lo aspetta (in ombra nessuno lo sentirebbe mai). «ombra» scrive e misura
+    # soltanto, «spenta» niente: il ripasso legge le pagine. Le pagine si chiedono sempre a voce e
+    # con un tasto
+    studio_riassunto: str = "attiva"
     # I premi dello Studio (31/10, issue #296, calliope/studio/premi.py): un rinforzo positivo e
     # al minimo, calcolato dal codice dai soli dati della pratica (sessioni misurate fra «Inizia»
     # e «Fatto», carte ripassate, prove consegnate, esiti decisi dal codice o dal tutore), mai
@@ -3644,7 +3653,7 @@ SEZIONI: dict[str, list[str]] = {
                 "studio_importa_max_mb", "studio_importa_file_max", "studio_importa_voce_max_mb",
                 "studio_importa_totale_max_mb", "studio_importa_passo_s",
                 "studio_importa_tempo_max_s", "studio_importa_coda", "studio_esercizi",
-                "studio_preparazione", "studio_preparazione_quiete_s"],
+                "studio_preparazione", "studio_preparazione_quiete_s", "studio_riassunto"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -4273,6 +4282,8 @@ _MODI_NUOVI = {
     # La preparazione dietro le quinte (31/10, #297, parte 3)
     "studio_preparazione": _modi("studio_preparazione", ("spenta", "ombra", "attiva"),
                                  falso="spenta"),
+    # Il riassunto da ascoltare (04/11, #386)
+    "studio_riassunto": _modi("studio_riassunto", ("spenta", "ombra", "attiva"), falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},

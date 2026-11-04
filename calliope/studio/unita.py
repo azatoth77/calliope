@@ -142,6 +142,28 @@ def _parole() -> dict:
     return _PAROLE
 
 
+_MIGLIAIA = re.compile(r"^(?:mille|([a-z]+)mila)([a-z]*)$")
+
+
+def parola_numero(w: str) -> int | None:
+    """Un numero in lettere, una parola sola, anche oltre le tabelle di `_parole` (04/11, #386:
+    «tremilacinquecento», «centoventimilaottocento» nel copione del riassunto). None se non lo è:
+    le migliaia e il resto devono essere numeri interi da soli, così «militare» e «familiare» non
+    lo sono."""
+    pw = _parole()
+    n = pw.get(w) if w not in ("un", "una", "mezzo", "mezza") else None
+    if n is not None:
+        return n
+    m = _MIGLIAIA.match(w)
+    if m is None:
+        return None
+    a = 1 if m.group(1) is None else pw.get(m.group(1))
+    b = 0 if not m.group(2) else pw.get(m.group(2))
+    if not isinstance(a, int) or not isinstance(b, int) or not 1 <= a < 1000 or not 0 <= b < 1000:
+        return None
+    return a * 1000 + b
+
+
 _NUM = re.compile(r"-?\d+(?:[.,]\d+)*")
 
 
@@ -162,10 +184,9 @@ def _cifre(tok: str) -> float | None:
 
 def _in_cifre(t: str) -> str:
     """I numeri in lettere diventano cifre; «X virgola Y», «X e mezzo», «meno X»."""
-    pw = _parole()
     out: list = []
     for w in t.split(" "):
-        n = pw.get(w) if w not in ("un", "una", "mezzo", "mezza") else None
+        n = parola_numero(w)
         # «mille quattrocento novantadue» detto staccato: le parole di fila, ognuna più piccola
         # della precedente tonda, si sommano (1000 + 400 + 92)
         if (n is not None and out and isinstance(out[-1], int) and n < out[-1]

@@ -2846,7 +2846,7 @@
     if (!sch() || !sch().studioAscolta) return;
     ascolta.attesa = true;
     disegnaHome();
-    const r = await sch().studioAscolta({ verifica: vid });
+    const r = await sch().studioAscolta({ verifica: vid, fonte: ascolta.fonte });
     if (!ascolta || ascolta.vid !== vid) return;
     ascolta.attesa = false;
     if (!r.ok) { ascolta.esito = String(r.dati.errore || "Non riesco a leggere il ripasso: riprova tra poco."); disegnaHome(); return; }
@@ -2872,7 +2872,7 @@
     let url = ascolta.url[n];
     if (!url) {
       clearTimeout(sondaggio);
-      const r = await sch().studioAscolta({ verifica: vid, azione: "audio", parte: n, firma: ascolta.dati && ascolta.dati.firma });
+      const r = await sch().studioAscolta({ verifica: vid, azione: "audio", parte: n, firma: ascolta.dati && ascolta.dati.firma, fonte: ascolta.fonte });
       if (!ascolta || ascolta.vid !== vid || ascolta.parte !== n) return;
       if (r.status === 202) {
         const f = Number(r.dati.fatto) || 0;
@@ -2916,6 +2916,14 @@
       return box;
     }
     if (!d.audio) box.append(nodo("p", "studio-avviso", "Qui l'audio del ripasso non si può preparare: chiedimelo a voce, «fammi ascoltare il ripasso»."));
+    // Il riassunto (04/11, #386): la frase del codice se si leggono le pagine al suo posto, e con un
+    // riassunto pronto le pagine a un tocco (lo strumento compensativo resta)
+    if (d.avviso) box.append(nodo("p", "studio-h-riga", String(d.avviso)));
+    if (d.riassunto) {
+      const tf = nodo("div", "studio-h-tasti");
+      tf.append(tastoAscolta(d.fonte === "riassunto" ? "Leggi le pagine" : "Ascolta il riassunto", "fonte", {}));
+      box.append(tf);
+    }
     const cur = parteCorrente();
     const suonando = inCorso();
     if (ascolta.parte) {
@@ -2958,7 +2966,8 @@
     if (!ascolta.parte) {
       const prima = parti.find((p) => p.oggi) || parti[0];
       const t0 = nodo("div", "studio-h-tasti");
-      t0.append(tastoAscolta(prima.oggi ? "Ascolta le pagine di oggi" : "Ascolta dall'inizio", "parte", { n: prima.n }, "studio-h-primo"));
+      t0.append(tastoAscolta(d.fonte === "riassunto" ? (prima.oggi ? "Ascolta da oggi" : "Ascolta il riassunto")
+        : prima.oggi ? "Ascolta le pagine di oggi" : "Ascolta dall'inizio", "parte", { n: prima.n }, "studio-h-primo"));
       box.append(t0);
     }
     box.append(nodo("p", "studio-h-nota", "Interrompimi quando vuoi: se mi chiami il ripasso si ferma, e dopo la risposta riparte."));
@@ -2984,7 +2993,7 @@
     sez.append(nodo("h4", "studio-h-sotto", "Ascolta"));
     const aperta = ascolta && ascolta.vid === v.id;
     if (!aperta) {
-      sez.append(nodo("p", "studio-h-riga", "Le pagine lette degli argomenti e le carte, ad alta voce."));
+      sez.append(nodo("p", "studio-h-riga", "Il riassunto delle pagine, o le pagine lette, e le carte, ad alta voce."));
     }
     const t = nodo("div", "studio-h-tasti");
     t.append(tastoAscolta(aperta ? "Chiudi il ripasso" : "Ripasso da ascoltare", aperta ? "chiudi" : "apri", {}, aperta ? "" : "studio-h-primo"));
@@ -3013,6 +3022,15 @@
     }
     if (!ascolta || ascolta.vid !== vid) return;
     if (az === "chiudi") { chiudiAscolta(); vista({ vista: "home" }); disegnaHome(); return; }
+    if (az === "fonte") {
+      if (lettore) lettore.pause();
+      buttaAudio();
+      ascolta.fonte = ascolta.dati && ascolta.dati.fonte === "riassunto" ? "pagine" : undefined;
+      ascolta.parte = 0;
+      ascolta.esito = "";
+      await caricaAscolta(vid);
+      return;
+    }
     if (az === "parte") { perVoce = 0; await suonaParte(Number(dati.n)); return; }
     if (az === "pausa") { perVoce = 0; if (lettore) lettore.pause(); return; }
     if (az === "riprendi") {

@@ -71,7 +71,9 @@ def chiamate_vietate(albero) -> list[tuple[int, str]]:
             continue
         f = n.func
         r = _ricevitore(f)
-        if f.attr in VIETATI:
+        # `motore.sintetizza` (04/11, #386, studio/ascolta.py): scrive un WAV per lo schermo in un file,
+        # niente agli altoparlanti; `speaker.sintetizza` e `voce.sintetizza` restano vietate
+        if f.attr in VIETATI and (f.attr, r) != ("sintetizza", "motore"):
             out.append((n.lineno, f"{r}.{f.attr}"))
         elif f.attr == "wait" and r in VOCI:
             out.append((n.lineno, f"{r}.wait"))

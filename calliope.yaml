@@ -1124,6 +1124,15 @@ studio:
   studio_preparazione: ombra
   # Da quanti secondi la voce dev'essere ferma (arbitro_memoria.quiete) perché si prepari
   studio_preparazione_quiete_s: 120
+  # Il riassunto da ascoltare (04/11, #386, calliope/studio/riassunto.py): a pagine lette il lettore
+  # scrive un copione in proporzione al materiale, il codice cerca numeri, date, nomi e formule
+  # nelle pagine frase per frase, e il ripasso lo dice con la voce di Calliope; se il controllo
+  # perde troppo si leggono le pagine, dicendolo. «attiva» di serie, a differenza delle altre
+  # generazioni: chi amministra lo vuole nel suo giro, lo Studio è comunque spento di serie, e non
+  # c'è una conferma che lo aspetta (in ombra nessuno lo sentirebbe mai). «ombra» scrive e misura
+  # soltanto, «spenta» niente: il ripasso legge le pagine. Le pagine si chiedono sempre a voce e
+  # con un tasto
+  studio_riassunto: attiva
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

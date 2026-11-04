@@ -811,11 +811,11 @@ verifica("…e la sua attività non la fa aspettare da sola (non è la voce dal 
          time.monotonic() - t0 < A.VOCE_FERMA_S * 2, time.monotonic() - t0)
 s3 = A.Sintesi(voci_finte.__getitem__, "cal.onnx", "manca.onnx", log=registro.append)
 c_, l_ = s3._voci()
-verifica("contrario: senza la voce del libro tutto con quella di Calliope", c_ is cal and l_ is cal)
+verifica("contrario: senza la voce del libro tutto con quella di Calliope", c_.voce is cal and l_.voce is cal)
 s4 = A.Sintesi({"cal.onnx": cal, "lib.onnx": VocePiper(16000)}.__getitem__, "cal.onnx",
                "lib.onnx", log=registro.append)
 verifica("contrario: una voce del libro con un'altra frequenza non si usa",
-         s4._voci()[1] is cal)
+         s4._voci()[1].voce is cal)
 
 # ═══════════════════════════ 9. tenuta ═══════════════════════════
 print("— tenuta dell'audio")
@@ -970,6 +970,11 @@ try:
              s == 200 and len(d["parti"]) == 2 and d["parti"][0]["titolo"] ==
              "La caduta di Costantinopoli" and d["firma"], d)
     firma = d.get("firma")
+    s_, d_ = chiedi(port, "/api/studio/ascolta", sess["leo"], corpo={"verifica": vid, "fonte": "boh"})
+    verifica("il riassunto (#386): una fonte che non c'è è una richiesta non valida", s_ == 400, d_)
+    s_, d_ = chiedi(port, "/api/studio/ascolta", sess["leo"], corpo={"verifica": vid, "fonte": "pagine"})
+    verifica("le pagine a richiesta, con la stessa firma senza un riassunto",
+             s_ == 200 and d_["fonte"] == "pagine" and d_["firma"] == firma and not d_["riassunto"], d_)
     s, d = chiedi(port, "/api/studio/ascolta", sess["leo"],
                   corpo={"verifica": vid, "azione": "audio", "parte": 1, "firma": firma})
     verifica("l'audio: 202 mentre si prepara", s == 202 and d.get("pronto") is False, f"{s} {d}")
@@ -1058,7 +1063,7 @@ tel = (QUI.parent / "calliope" / "schermi" / "pagina" / "telefono" / "telefono.j
 verifica("telefono: mentre suona il ripasso la stanza vale «Calliope parla»",
          "() => player.inCorso() || !!st.ripasso" in tel and '"calliope:voce"' in tel)
 sw = (QUI.parent / "calliope" / "schermi" / "pagina" / "telefono" / "sw.js").read_text("utf-8")
-verifica("il service worker alla v41 (la preparazione della libreria, #297, dopo la condivisione)", "calliope-telefono-pagina-v41" in sw)
+verifica("il service worker alla v42 (il riassunto da ascoltare, #386)", "calliope-telefono-pagina-v42" in sw)
 
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
 sys.exit(1 if errori else 0)

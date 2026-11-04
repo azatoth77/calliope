@@ -808,6 +808,23 @@ class Lettore:
                     return {"fatte": fatte, "aspetta": esito}
                 fatte += 1
                 continue
+            # Il riassunto da ascoltare (#386), con la stessa guardia: dopo le domande, prima delle
+            # pagine di un'altra verifica. Il momento vero lo deciderà la #384
+            per_riassunto = self.studio.verifiche_per_riassunto()
+            if per_riassunto:
+                motivo = self.guardia.motivo()
+                if motivo is not None:
+                    if motivo != self.in_attesa:
+                        self._registra(f"riassunto in attesa: {motivo}")
+                    self.in_attesa = motivo
+                    self.misure["attese"] += 1
+                    return {"fatte": fatte, "aspetta": motivo}
+                self.in_attesa = None
+                esito = self.riassumi(per_riassunto[0]["id"], per_riassunto[0])
+                if esito in ("ceduta", "giu", "errore", "errore_server"):
+                    return {"fatte": fatte, "aspetta": esito}
+                fatte += 1
+                continue
             righe = self.prossime(50)
             # Dopo una caduta si prova prima un'altra pagina: se va, la colpa è della pagina
             # caduta; se cade anche lei, è del server (seconda nota della PR #314)
@@ -1652,6 +1669,94 @@ class Lettore:
                        f"{len(val['reazioni'])} reazioni, {len(val['misure'])} misure, "
                        f"{ris['scartati']} scartati ({s:.1f} s)")
         return "proposte"
+
+    def riassumi(self, vid, v: dict | None = None) -> str:
+        """Il riassunto da ascoltare di una verifica a pagine lette (#386): il copione del modello
+        controllato dal codice (studio/riassunto.py). Si può chiamare da sola (`vid`, la #384 deciderà
+        quando): «niente» se non c'è da fare. Gli esiti delle altre generazioni, più «corto», «pronto»,
+        «scarso». Nel registro solo conti."""
+        from . import argomenti as A
+        from . import genera as G
+        from . import riassunto as R
+        v = v or self.studio.riassunto_richiesta(vid)
+        if v is None:
+            return "niente"
+        m = self.misure.setdefault("riassunto", {
+            "generazioni": 0, "pronti": 0, "scarsi": 0, "corti": 0, "rotte": 0, "cambiate": 0,
+            "cedute": 0, "frasi_proposte": 0, "frasi_tenute": 0, "non_trovati": 0, "secondi": 0.0,
+            "token_in": 0, "token_out": 0})
+        vid, firma, nomi = int(v["id"]), v["_firma"], v["_nomi"]
+        rif = A.riferimenti(v["_pagine"])
+        arif = G.argomenti_rif(v["_argomenti"])
+        piano = R.piano(v["_argomenti"], v["_pagine"], nomi)
+        if piano["corto"]:
+            m["corti"] += 1
+            self.studio.proponi_riassunto(vid, firma, None, R.CORTO)
+            self._registra(f"verifica {vid}: riassunto no, le pagine si leggono in "
+                           f"{piano['lettura_s']:.0f} s")
+            return "corto"
+        utili = R.argomenti_utili(arif, rif)
+        t0 = time.monotonic()
+        grezzi = None
+        try:
+            if utili:
+                grezzi, _finita = self._chiedi_lista(
+                    lambda ar: R.corpo(self.modello, v, rif, ar, piano), utili, m, vid, "riassunto",
+                    R.leggi, R.parziale,
+                    lambda voci: {s["argomento"] for s in
+                                  R.valida(voci, rif, arif, piano, nomi)["sezioni"]},
+                    lambda x: bool(R.valida([x], rif, arif, piano, nomi)["sezioni"]))
+            else:
+                grezzi = []
+        except Ceduta:
+            m["cedute"] += 1
+            self._registra(f"verifica {vid}: riassunto, ceduto il passo a un lavoro dell'agente")
+            return "ceduta"
+        except _Giu:
+            return "giu"
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            attesa = self._attendi_errore()
+            self._registra(f"verifica {vid}: riassunto, errore del server ({e}), riprovo fra "
+                           f"{attesa:.0f} s")
+            return "errore_server"
+        except Exception as e:  # noqa: BLE001
+            return self._errore_generazione("riassunto", vid, e, lambda: (
+                self.studio.proponi_riassunto(vid, firma, None, G.ERRORE)))
+        s = time.monotonic() - t0
+        try:
+            if grezzi is None:
+                ris, esito = None, G.ROTTO
+            else:
+                ris = R.valida(grezzi, rif, arif, piano, nomi)
+                esito = R.giudica(ris)
+            n = self.studio.proponi_riassunto(vid, firma, ris, esito)
+        except Exception as e:  # noqa: BLE001
+            return self._errore_generazione("riassunto", vid, e, lambda: (
+                self.studio.proponi_riassunto(vid, firma, None, G.ERRORE)))
+        if n is None:
+            m["cambiate"] += 1
+            self._registra(f"verifica {vid}: pagine o prova cambiate durante il riassunto")
+            return "cambiate"
+        m["generazioni"] += 1
+        m["secondi"] = round(m["secondi"] + s, 2)
+        if ris is None:
+            m["rotte"] += 1
+            self._registra(f"verifica {vid}: riassunto illeggibile ({s:.1f} s)")
+            return "rotto"
+        c = ris["conti"]
+        m["frasi_proposte"] += c["proposte"]
+        m["frasi_tenute"] += c["tenute"]
+        m["non_trovati"] += c["non_trovati"]
+        m["pronti" if esito == R.PRONTO else "scarsi"] += 1
+        motivi = ", ".join(f"{k} {x}" for k, x in sorted(c["motivi"].items()))
+        self._registra(f"verifica {vid}: riassunto {esito}{' in ombra' if self.studio.riassunto_modo() == R.OMBRA else ''}: "
+                       f"{c['tenute']} frasi su {c['proposte']}, {n} sezioni, {c['durata_s']:.0f} s "
+                       f"su {c['lettura_s']:.0f} s di pagine ({s:.1f} s"
+                       + (f"; fuori: {motivi}" if motivi else "") + ")")
+        if esito == R.PRONTO:
+            self.studio.riassunto_audio(vid)
+        return esito
 
     def _errore_generazione(self, cosa: str, vid: int, e: Exception, scrivi_errore) -> str:
         """Un errore nostro in una generazione (carte o mappa): l'esito «errore» con la firma, così

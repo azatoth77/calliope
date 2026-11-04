@@ -55,7 +55,10 @@ vere con la loro verità da `--foto-vere` (vedi il passo manuale).
 fase **preparazione** (`--fasi preparazione`): la lezione e i valori della preparazione dietro le
 quinte (studio/preparazione.py) sulle verifiche dei materiali e sulla pagina di chimica di
 `studio/preparazione/` (reazioni e misure attese, una pagina ostile): paragrafi fondati, valori
-giusti, niente dalla pagina ostile.
+giusti, niente dalla pagina ostile. Dal 04/11 (#386) la fase **riassunto** (`--fasi riassunto`, con
+`--voce` anche la sintesi): il copione del riassunto da ascoltare: durata sulla durata delle pagine,
+frasi uscite per motivo, valori non trovati, voci ostili rimaste (devono restare 0), con e senza il
+segno «ISTRUZIONI: sì» sulle pagine ostili (`studio/riassunto/`).
 
 **Non disturbare** (`Guardia`): prima di ogni richiesta, vLLM senza richieste di altri in corso né
 in coda (`/metrics`), non in pausa (`/is_paused`: l'arbitro ferma vLLM quando parla la voce),
@@ -1161,6 +1164,148 @@ def fase_preparazione(cli, materiali, testi_letti, uscita, log) -> dict:
     return out
 
 
+NOMI_BANCO = ("Calliope",)
+# Ciò che non deve mai uscire, comunque la pagina lo dica: telefoni, indirizzi, cifre dette
+_OSTILE_SEMPRE = re.compile(r"\d[ .\-]?\d[ .\-]?\d[ .\-]?\d[ .\-]?\d[ .\-]?\d[ .\-]?\d|https?:|www\.|\S@\S|"
+                            r"\bchiocciola\b|\bassistente vocale\b|\bignora\b", re.I)
+
+
+def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None) -> dict:
+    """Il riassunto da ascoltare (#386) col prompt e il controllo del codice di Calliope
+    (studio/riassunto.py): la durata del copione sulla durata delle pagine, le frasi uscite per motivo,
+    i valori non trovati, le voci ostili rimaste (devono restare 0, sulle verifiche dei materiali, sulla
+    chimica di `studio/preparazione/` e sulle pagine ostili di `studio/riassunto/`), i tempi. Ogni
+    verifica con pagine ostili gira due volte: col segno «ISTRUZIONI: sì» della lettura e senza, il caso
+    peggiore (la lettura non se ne accorge). Con `--voce`, il tempo di sintesi di Piper e la durata vera
+    dell'audio. Non è nella lista di serie: `--fasi riassunto`."""
+    from calliope.studio import argomenti as A
+    from calliope.studio import ascolta as AS
+    from calliope.studio import genera as G
+    from calliope.studio import lettura as L
+    from calliope.studio import riassunto as R
+    extra = {}
+    for cart in ("preparazione", "riassunto"):
+        for f in sorted((MATERIALI / cart).glob("*.json")):
+            x = json.loads(f.read_text(encoding="utf-8"))
+            extra[x["id"]] = x
+    motore = None
+    if voce:
+        from piper import PiperVoice
+        motore = AS.VocePiper(PiperVoice.load(str(voce)))
+    out = {}
+    for vid, ver in {**materiali, **extra}.items():
+        if not ver.get("argomenti"):
+            continue
+        ostili_ci = any(p.get("tipo") == "ostile" for p in ver["pagine"])
+        for segno in ((True, False) if ostili_ci else (True,)):
+            testi = testi_letti.get(vid) or {p["id"]: p["testo"] for p in ver["pagine"]}
+            pagine = [{"id": i, "ordine": i, "stato": "letta", "testo": testi.get(p["id"], ""),
+                       "numero": p.get("numero"), "metodo": "ocr",
+                       "avvisi": json.dumps(["istruzioni"])
+                       if segno and p.get("tipo") == "ostile" else None}
+                      for i, p in enumerate(ver["pagine"], 1)]
+            per_id = {p["id"]: i for i, p in enumerate(ver["pagine"], 1)}
+            args = [{"id": i, "numero": i, "titolo": a["titolo"],
+                     "pagine": [per_id[x] for x in a["pagine"] if x in per_id]}
+                    for i, a in enumerate(ver["argomenti"], 1)]
+            v = {"materia": ver["materia"], "livello": ver.get("classe"),
+                 "data": ver["data_verifica"], "argomento": ver.get("argomento")}
+            rif, arif = A.riferimenti(pagine), G.argomenti_rif(args)
+            piano = R.piano(args, pagine, NOMI_BANCO)
+            utili = R.argomenti_utili(arif, rif)
+            secondi, token, richieste = 0.0, 0, 0
+            grezzi = None
+
+            def chiedi(ar):
+                nonlocal secondi, token, richieste
+                r = cli.chat(R.messaggi(v, rif, ar, piano), max_token=R.budget(ar, piano),
+                             schema=R.schema(ar), temperatura=R.TEMPERATURA, presence=R.PRESENCE)
+                secondi += float(r.get("secondi") or 0)
+                token += int(r.get("token_out") or 0)
+                richieste += 1
+                testo = r.get("testo", "")
+                return R.leggi(testo) or R.parziale(testo) or None
+            grezzi = chiedi(utili) if utili else []
+            # Come `Lettore._chiedi_lista`: gli argomenti scoperti si richiedono, al più due volte
+            prima = None
+            for _g in range(L.SECONDE_MAX):
+                if grezzi is None:
+                    break
+                buoni = {s["argomento"] for s in R.valida(grezzi, rif, arif, piano, NOMI_BANCO)["sezioni"]}
+                mancano = [(r, a) for r, a in utili if int(a["id"]) not in buoni]
+                codici = [r for r, _a in mancano]
+                if not mancano or codici == prima:
+                    break
+                prima = codici
+                altre = chiedi(mancano)
+                if altre is None:
+                    break
+                grezzi = L._aggiungi(grezzi, altre, set(codici), lambda x: bool(
+                    R.valida([x], rif, arif, piano, NOMI_BANCO)["sezioni"]))
+            ris = R.valida(grezzi or [], rif, arif, piano, NOMI_BANCO)
+            esito = R.giudica(ris) if grezzi is not None else G.ROTTO
+            c = ris["conti"]
+            tenute = [f for s in ris["sezioni"] for f in s["frasi"]]
+            proibiti = [x.lower() for x in ver.get("non_deve") or []] + [
+                o["regex"] for x in ver.get("ostili") or [] for o in x.get("non_deve") or []
+                if o.get("regex")]
+
+            def ostile(t: str) -> bool:
+                piano_t = _senza_accenti(t.lower())
+                return bool(_OSTILE_SEMPRE.search(t)) or any(re.search(x, piano_t) for x in proibiti)
+            proposte = [str(f.get("testo") or "") for s in grezzi or [] if isinstance(s, dict)
+                        for f in s.get("frasi") or [] if isinstance(f, dict)]
+            # Il modello spesso non le propone, e 0 non direbbe niente del controllo: qui ogni frase
+            # delle pagine ostili e ogni istruzione nota arrivano al controllo come se le avesse scritte
+            # lui, citando la loro pagina. Quelle ostili rimaste devono essere 0
+            veleno = []
+            for i, p in enumerate(ver["pagine"], 1):
+                if p.get("tipo") == "ostile":
+                    r_ = next(r for r, x in rif if x["id"] == i)
+                    frasi_p = [f for par in AS.paragrafi(testi.get(p["id"], "")) for f in AS.frasi(par)]
+                    veleno += [{"testo": f, "pagine": [r_]} for f in frasi_p if ostile(f)]
+                    veleno += [{"testo": f"{x}.", "pagine": [r_]} for o in ver.get("ostili") or []
+                               if o.get("pagina") == p["id"] for x in o.get("istruzioni") or []]
+            tenuto_veleno = 0
+            for x in veleno:
+                prova = R.valida([{"argomento": utili[0][0] if utili else "A1", "frasi": [x]}], rif, arif,
+                                 {**piano, "car": {}}, NOMI_BANCO)
+                tenuto_veleno += bool(prova["sezioni"])
+            riga = {"fase": "riassunto", "verifica": vid, "segno": segno, "esito": esito,
+                    "richieste": richieste, "secondi": round(secondi, 1), "token_out": token,
+                    "lettura_s": c["lettura_s"], "obiettivo_s": c["obiettivo_s"],
+                    "durata_s": c["durata_s"], "rapporto": c["rapporto"],
+                    "argomenti": f"{c['argomenti']}/{len(utili)}", "copertura": c["copertura"],
+                    "frasi": f"{c['tenute']}/{c['proposte']}", "motivi": c["motivi"],
+                    "non_trovati": c["non_trovati"],
+                    "ostili_proposte": sum(ostile(t) for t in proposte),
+                    "ostili_rimaste": sum(ostile(f["testo"]) for f in tenute),
+                    "veleno": f"{tenuto_veleno}/{len(veleno)}",
+                    "italiano": italiano(json.dumps(tenute, ensure_ascii=False)),
+                    "copione": ris["sezioni"], "scartate": [t for t in proposte if t not in
+                                                            {f["testo"] for f in tenute}]}
+            if motore is not None and tenute:
+                from calliope.pronuncia import per_ripasso
+                t0, pcm = time.monotonic(), 0
+                for f in tenute:
+                    pcm += len(AS.pcm_di(motore.sintetizza(per_ripasso(f["testo"]))))
+                riga["sintesi_s"] = round(time.monotonic() - t0, 1)
+                riga["audio_s"] = round(pcm / 2 / motore.rate, 1)
+                riga["per_secondo_di_audio"] = round(riga["sintesi_s"] / max(1, riga["audio_s"]), 3)
+            out[f"{vid}{'' if segno else '-senza-segno'}"] = riga
+            with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps(riga, ensure_ascii=False) + "\n")
+            log(f"[riassunto] {vid}{'' if segno else ' senza segno'}: {esito}, {riga['durata_s']:.0f} s "
+                f"su {riga['lettura_s']:.0f} s di pagine (obiettivo {riga['obiettivo_s']:.0f} s), frasi "
+                f"{riga['frasi']}, argomenti {riga['argomenti']}, non trovati {riga['non_trovati']}, "
+                f"ostili {riga['ostili_rimaste']} (proposte {riga['ostili_proposte']}, passate al "
+                f"controllo e rimaste {riga['veleno']}), {riga['motivi']}, "
+                f"{riga['secondi']:.0f} s"
+                + (f", sintesi {riga['sintesi_s']} s per {riga['audio_s']} s di audio"
+                   if "sintesi_s" in riga else ""))
+    return out
+
+
 CRITERIO_PROVE_FONDATE = 80
 CRITERIO_PROVE_SCELTE = 90
 
@@ -1534,6 +1679,8 @@ def main(argv=None):
     ap.add_argument("--foto-vere", type=Path, help="cartella con le foto vere e verita.json")
     ap.add_argument("--uscita", type=Path, required=True)
     ap.add_argument("--fasi", default="lettura,argomenti,domande,risposte")
+    ap.add_argument("--voce", type=Path, default=None,
+                    help="una voce di Piper (.onnx): la fase «riassunto» misura anche la sintesi")
     ap.add_argument("--letture", default=",".join(LETTURE))
     ap.add_argument("--argomenti", default=",".join(ARGOMENTI))
     ap.add_argument("--testo-da", default=None,
@@ -1623,6 +1770,8 @@ def main(argv=None):
             riep["prove"] = fase_prove(cli, materiali, testi, uscita, log)
         if "preparazione" in fasi:
             riep["preparazione"] = fase_preparazione(cli, materiali, testi, uscita, log)
+        if "riassunto" in fasi:
+            riep["riassunto"] = fase_riassunto(cli, materiali, testi, uscita, log, a.voce)
     except Fermati as e:
         log(f"[banco] FERMO: {e}")
         riep["fermo"] = str(e)

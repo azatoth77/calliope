@@ -94,6 +94,8 @@ CASI = {
     "studio_esercizi": ("attiva", " Attiva ", ("spento", "spenta"), ["accesa", "sì", "esercizi"]),
     # La preparazione dietro le quinte (31/10, #297, parte 3)
     "studio_preparazione": ("attiva", " Attiva ", ("attivo", "attiva"), ["accesa", "sì", "prepara"]),
+    # Il riassunto da ascoltare (04/11, #386)
+    "studio_riassunto": ("ombra", " Ombra ", ("spento", "spenta"), ["accesa", "sì", "riassunto"]),
     "agenti_arbitro": ("mai", " MAI ", None, ["acceso", "talvolta"]),
     "agenti_sandbox_motore": ("processo", "Docker", None, ["acceso", "sì", "podman"]),
     "agenti_livello": ("amministra", "Amministra", None,
@@ -176,7 +178,7 @@ for campo, atteso in (("eventi", "spento"), ("stanza", "spenta"), ("compagnia_ri
                       ("studio_mappa_libera", "spenta"), ("studio_mappa_consigli", "spenta"),
                       ("studio_domande_genera", "spenta"), ("studio_ascolta", "spenta"),
                       ("studio_libreria", "spenta"), ("studio_esercizi", "spenta"),
-                      ("studio_preparazione", "spenta")):
+                      ("studio_preparazione", "spenta"), ("studio_riassunto", "spenta")):
     cfg, log = dal_locale(riga(campo, "no"))
     verifica(f"{campo}: il «no» di YAML vale «{atteso}»", getattr(cfg, campo) == atteso
              and "non è" not in log, f"{getattr(cfg, campo)!r} {log.strip()[-160:]}")
@@ -187,7 +189,7 @@ for campo in ("eventi", "system1_dopo_tool", "stanza_guardia", "arbitro_memoria"
               "agenti_revisore", "studio_modo", "studio_padronanza", "studio_carte_genera",
               "studio_mappa_genera", "studio_mappa_libera", "studio_mappa_consigli",
               "studio_domande_genera", "studio_ascolta", "studio_libreria", "studio_esercizi",
-              "studio_preparazione"):
+              "studio_preparazione", "studio_riassunto"):
     for scritto in ("yes", "on", "true"):
         cfg, log = dal_locale(riga(campo, scritto))
         verifica(f"contrario: {campo}: il «{scritto}» di YAML (true) è ambiguo, rifiutato",

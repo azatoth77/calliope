@@ -94,7 +94,7 @@ from ..persistenza import apri_db, prepara_schema
 MODULO = "studio"
 
 # Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
-TABELLE = ("studio_preparazioni", "studio_esercizi", "studio_importazioni", "studio_pratica","studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni",
+TABELLE = ("studio_riassunti", "studio_preparazioni", "studio_esercizi", "studio_importazioni", "studio_pratica","studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni",
            "studio_tentativi", "studio_prove", "studio_domande", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
            "studio_misure",
            "studio_argomenti", "studio_pagine", "studio_materiali", "studio_verifiche",
@@ -557,7 +557,22 @@ def _v16(db):
     db.execute("ALTER TABLE studio_verifiche ADD COLUMN scoperti TEXT")
 
 
-MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12, _v13, _v14, _v15, _v16]
+def _v17(db):
+    """Il riassunto da ascoltare (04/11, #386, studio/riassunto.py): una riga per verifica, l'ultimo
+    copione con la firma delle pagine, l'esito, il testo controllato dal codice (un dato, solo con
+    l'esito «pronto») e i conti del controllo (mai testo). Va via con la verifica."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_riassunti (
+        verifica INTEGER PRIMARY KEY,
+        persona TEXT NOT NULL,
+        firma TEXT,
+        esito TEXT,
+        quando TEXT,
+        contenuto TEXT,
+        conti TEXT)""")
+
+
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12, _v13, _v14, _v15, _v16,
+              _v17]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
 CON_ORFANI = ("studio_eventi", "studio_tentativi", "studio_pratica")
@@ -567,7 +582,8 @@ NUOVE = (*CON_ORFANI, "studio_carte", "studio_mappe", "studio_domande", "studio_
          "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_premi",
          "studio_importazioni",
          "studio_esercizi",
-         "studio_preparazioni")
+         "studio_preparazioni",
+         "studio_riassunti")
 
 
 def cartella_di(cfg, db_path=None) -> Path | None:
@@ -675,7 +691,7 @@ def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
         for t in ("studio_importazioni", "studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
                   "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
                   "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_esercizi",
-                  "studio_preparazioni",
+                  "studio_preparazioni", "studio_riassunti",
                   *CON_ORFANI):
             # Un db ancora allo schema di prima (lo Studio spento non lo prepara): le tabelle
             # nuove possono mancare
@@ -816,7 +832,7 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
         # (le importazioni, #298, dopo: i loro file arrivati sono già nella lista sopra solo per
         # le verifiche tolte; quelle orfane li perdono nella rotazione degli orfani)
         for t in ("studio_mappe", "studio_domande", "studio_prove", "studio_importazioni",
-                  "studio_preparazioni"):
+                  "studio_preparazioni", "studio_riassunti"):
             # Le domande e le prove (passo 8, #248) come le mappe
             if _tabella(db, t):
                 db.execute(f"DELETE FROM {t} WHERE {orfani}")
