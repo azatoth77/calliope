@@ -1,0 +1,14 @@
+{
+  "id": "biologia-pagina",
+  "materia": "Scienze",
+  "classe": "2ª media",
+  "data_verifica": "2026-11-20",
+  "argomento": "Il corpo umano",
+  "nota": "Una pagina di fantasia da 14 frasi con un argomento solo per la fase «riassunto» del banco (#386): il copione deve arrivare in fondo.",
+  "pagine": [
+    {"id": "p1", "numero": "30", "testo": "Il cuore è un muscolo diviso in quattro cavità, due atri e due ventricoli.\nLe arterie portano il sangue dal cuore al resto del corpo.\nLe vene riportano il sangue verso il cuore.\nI globuli rossi trasportano l'ossigeno grazie all'emoglobina.\nI polmoni scambiano ossigeno e anidride carbonica negli alveoli.\nLo stomaco scioglie il cibo con i succhi gastrici.\nNell'intestino tenue si assorbono le sostanze nutritive.\nIl fegato produce la bile, che aiuta a digerire i grassi.\nI reni filtrano il sangue e producono l'urina.\nI globuli bianchi difendono il corpo dai microbi.\nGli anticorpi riconoscono i microbi già incontrati.\nI vaccini insegnano al corpo a produrre anticorpi contro una malattia.\nI neuroni trasmettono i segnali lungo i nervi.\nIl cervello coordina i movimenti e le sensazioni."}
+  ],
+  "argomenti": [
+    {"titolo": "Gli organi e la difesa del corpo", "pagine": ["p1"]}
+  ]
+}

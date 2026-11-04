@@ -34,11 +34,17 @@ vivo, in `studio_cartella/ascolta/<verifica>/<firma>-<parte>.wav`: una cache del
 
 Durante una prova aperta della verifica il ripasso si blocca per tutti (l'audio si sente nella
 stanza). Solo libreria standard (e le voci di Piper che ha già lo Speaker).
+
+**Dal 04/11 (#386, punto 57 della 0035) il riassunto.** Con un copione pronto (`riassunto.py`, scritto
+dal lettore e controllato dal codice) le sezioni prendono il posto delle pagine, nella voce di
+Calliope; un argomento senza una sezione buona legge le sue pagine, dicendolo. `fonte` «pagine» le
+chiede sempre. Comandi, posizione, prova aperta, ospiti e cache non cambiano.
 """
 
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import queue
@@ -74,6 +80,18 @@ MESSAGGIO_SALTATO = "Qui c'è un messaggio per un assistente: lo salto."
 INDIRIZZO_SALTATO = "Qui c'è un indirizzo: non lo leggo."
 FINE = "Il ripasso è finito."
 CARTE_INTRO = ("Prima la domanda, poi qualche secondo per pensare, poi la risposta.")
+# Il riassunto (04/11, #386). Il modello ha scritto le frasi, ma il materiale resta la fonte: chi
+# ascolta lo sente una volta, in testa
+RIASSUNTO_INTRO = "È un riassunto scritto da me: per i dettagli il libro resta la fonte."
+PARTE_RIASSUNTO_S = 120.0     # le sezioni di fila fanno una parte fino a tanto: un file o una parte toccata
+#                               comincia con l'avviso, che su una sezione di 15 secondi peserebbe troppo
+SEZIONE_SENZA = "Di questo argomento non ho un riassunto sicuro: ti leggo le pagine."
+FONTI = ("riassunto", "pagine")
+# Perché si leggono le pagine al posto del riassunto, per stato del copione (`_riassunto_vivo`)
+AVVISI_FONTE = {"scarso": "Il riassunto non ha passato i miei controlli: ti leggo le pagine.",
+                "in_preparazione": "Il riassunto non è ancora pronto: intanto ti leggo le pagine.",
+                "non_pronto": "Il riassunto adesso non c'è: ti leggo le pagine.",
+                "lungo": "Queste pagine sono troppe per un riassunto solo: te le leggo."}
 
 
 def modo(cfg) -> str:
@@ -90,6 +108,7 @@ class Voce:
     parte: int
     par: int
     secondi: float = 0.0
+    argomento: int | None = None    # di quale argomento: la posizione regge se il copione cambia
 
     def per_firma(self):
         return [self.tipo, self.testo, round(self.secondi, 2)]
@@ -187,7 +206,8 @@ def frasi(paragrafo: str) -> list[str]:
     pezzi, corrente = [], ""
     for p in _TAGLIO.split(paragrafo):
         corrente = f"{corrente} {p}".strip() if corrente else p
-        if not corrente.endswith(_ABBREV):
+        # La parola intera: «la musica.» e «il paes.» non sono «ca.» ed «es.»
+        if corrente.rsplit(None, 1)[-1].lstrip("(«\"“") not in _ABBREV:
             pezzi.append(corrente)
             corrente = ""
     if corrente:
@@ -352,7 +372,14 @@ class Copione:
         self.voci: list[Voce] = []
         self.parti: list[dict] = []
         self.saltate: dict = {}
+        self.fonte = "pagine"               # «riassunto» se c'è almeno una sezione del copione
         self._par = 0
+
+    def inizio_argomento(self, argomento_id) -> int | None:
+        """La prima voce di un argomento: la posizione regge se il copione cambia (#386)."""
+        if argomento_id is None:
+            return None
+        return next((i for i, v in enumerate(self.voci) if v.argomento == argomento_id), None)
 
     def nuovo_par(self) -> int:
         self._par += 1
@@ -387,14 +414,60 @@ def _gruppi_argomenti(args: list[dict], pagine: list[dict], solo: set | None = N
     return out
 
 
+def _sezione_voci(sezione: list[dict], nomi) -> list[str]:
+    """Le frasi di una sezione del riassunto per la voce: rifatte contro le parole che svegliano di
+    adesso (in startrek cambiano), con le regole di `per_ripasso`."""
+    from ..pronuncia import per_ripasso
+    out = []
+    for x in sezione or ():
+        f = str(x.get("testo") or "") if isinstance(x, dict) else ""
+        if f and scarto(f, nomi, True) is None:
+            detta = per_ripasso(f)
+            if re.search(r"\w", detta):
+                out.append(detta)
+    return out
+
+
 def componi(args: list[dict], pagine: list[dict], carte: list[dict], cosa: str,
-            nomi=(), solo_pagine: set | None = None, con_carte: bool = True) -> Copione:
+            nomi=(), solo_pagine: set | None = None, con_carte: bool = True,
+            sezioni: dict | None = None, per_voce: bool = False) -> Copione:
     """Il copione: `args` gli argomenti del piano numerati ({id, numero, titolo, pagine}),
-    `pagine` tutte quelle della verifica (le tolte escluse), `carte` le attive del piano."""
+    `pagine` tutte quelle della verifica (le tolte escluse), `carte` le attive del piano.
+    `sezioni` {argomento: [frase]}, dal copione controllato (`riassunto.py`): al posto delle pagine di
+    quell'argomento; gli altri leggono le pagine, dicendolo. Le sezioni di fila fanno una parte fino a
+    `PARTE_RIASSUNTO_S`. **L'avviso una volta a ogni inizio di ascolto:** sullo schermo in testa a ogni parte,
+    perché una parte toccata o un file scaricato stanno da soli; a voce (`per_voce`) la lettura è una, e
+    basta quello in testa."""
     cp = Copione(cosa)
     indici = {p["id"]: i for i, p in enumerate(pagine, 1)}
     blocchi = []                   # [(tipo, argomento, [(etichetta, paragrafi)…]), …]
-    for a, mie in _gruppi_argomenti(args, pagine, solo_pagine):
+    con_sezione = {}
+    for a in args if sezioni else ():
+        if solo_pagine is not None and not set(a["pagine"]) & solo_pagine:
+            continue
+        frasi_sez = _sezione_voci(sezioni.get(a["id"]), nomi)
+        if frasi_sez:
+            con_sezione[a["id"]] = (frasi_sez, [x for s in sezioni.get(a["id"]) or ()
+                                                for x in s.get("pagine") or ()])
+    gruppi = {a["id"]: mie for a, mie in _gruppi_argomenti(
+        [a for a in args if a["id"] not in con_sezione], pagine, solo_pagine)}
+    for a in args:
+        if a["id"] in con_sezione:
+            frasi_a, citate_a = con_sezione[a["id"]]
+            car_a = sum(len(f) for f in frasi_a)
+            if blocchi and blocchi[-1][0] == "riassunto" and (
+                    blocchi[-1][2]["car"] + car_a <= PARTE_RIASSUNTO_S * CARATTERI_AL_SECONDO):
+                blocchi[-1][1].append(a)
+                blocchi[-1][2]["frasi"].append(frasi_a)
+                blocchi[-1][2]["citate"] += citate_a
+                blocchi[-1][2]["car"] += car_a
+            else:
+                blocchi.append(("riassunto", [a], {"frasi": [frasi_a], "citate": list(citate_a),
+                                                   "car": car_a}))
+            continue
+        mie = gruppi.get(a["id"])
+        if not mie:
+            continue
         corrente, car = [], 0
         for p in mie:
             et = _etichetta(p, indici[p["id"]])
@@ -417,10 +490,30 @@ def componi(args: list[dict], pagine: list[dict], carte: list[dict], cosa: str,
         blocchi.append(("carte", None, carte))
     tot = len(blocchi)
     visti: dict = {}
+    if con_sezione:
+        cp.fonte = "riassunto"
     for n, (tipo, a, cont) in enumerate(blocchi, 1):
         inizio = len(cp.voci)
         par = cp.nuovo_par()
-        if tipo == "carte":
+        if tipo == "riassunto":
+            argomenti_p = a
+            if not per_voce or not any(x.testo == RIASSUNTO_INTRO for x in cp.voci):
+                cp.voci.append(Voce(CALLIOPE, RIASSUNTO_INTRO, n, par))
+            etichette = [_etichetta(p, indici[p["id"]]) for p in pagine
+                         if p["id"] in set(cont["citate"])]
+            for arg, frasi_sez in zip(argomenti_p, cont["frasi"]):
+                par = cp.nuovo_par()
+                cp.voci.append(Voce(CALLIOPE, f"Argomento {arg['numero']}.", n, par, argomento=arg["id"]))
+                # Il titolo nella voce di Calliope, come tutto il riassunto, se passa le stesse regole
+                titolo, _s = frasi_pagina(arg.get("titolo"), nomi, True)
+                cp.voci += [Voce(CALLIOPE, f, n, par, argomento=arg["id"]) for pp in titolo for f in pp]
+                cp.voci += [Voce(CALLIOPE, f, n, par, argomento=arg["id"]) for f in frasi_sez]
+            cp.parti.append({"n": n, "tipo": "riassunto", "argomento": argomenti_p[0]["numero"],
+                             "argomento_id": argomenti_p[0]["id"],
+                             "argomenti": [x["id"] for x in argomenti_p],
+                             "titolo": argomenti_p[0].get("titolo") or "" if len(argomenti_p) == 1 else "",
+                             "pagine": etichette, "continua": False})
+        elif tipo == "carte":
             cp.voci.append(Voce(CALLIOPE, f"Parte {n} di {tot}: le carte. {CARTE_INTRO}", n, par))
             for i, c in enumerate(cont, 1):
                 par = cp.nuovo_par()
@@ -445,6 +538,8 @@ def componi(args: list[dict], pagine: list[dict], carte: list[dict], cosa: str,
             if not seguito:
                 titolo, _s = frasi_pagina(a.get("titolo"), nomi)
                 cp.voci += [Voce(LIBRO, f, n, par) for pp in titolo for f in pp]
+                if con_sezione:
+                    cp.voci.append(Voce(CALLIOPE, SEZIONE_SENZA, n, cp.nuovo_par()))
             for et, pars, salt in cont:
                 if pars is None:
                     cp.voci.append(Voce(CALLIOPE, f"La pagina {et} non l'ho ancora letta: la "
@@ -459,7 +554,10 @@ def componi(args: list[dict], pagine: list[dict], carte: list[dict], cosa: str,
                     cp.voci += [Voce(LIBRO, f, n, par) for f in pp]
             cp.parti.append({"n": n, "tipo": "argomento", "argomento": a["numero"],
                              "argomento_id": a["id"], "titolo": a.get("titolo") or "",
-                             "pagine": etichette, "continua": bool(seguito)})
+                             "argomenti": [a["id"]], "pagine": etichette,
+                             "continua": bool(seguito)})
+            for x in cp.voci[inizio:]:
+                x.argomento = a["id"]
         frasi_n = sum(1 for v in cp.voci[inizio:] if v.tipo != PAUSA)
         cp.parti[-1]["frasi"] = frasi_n
     if cp.voci:
@@ -582,6 +680,36 @@ def nome_file(firma: str, parte: int) -> str:
     return f"{re.sub(r'[^0-9a-f]', '', firma)[:16]}-{int(parte)}.wav"
 
 
+class VocePiper:
+    """L'interfaccia semplice della sintesi (04/11, #386): `in_wav(testo) → wav` (i byte di un WAV mono
+    a 16 bit), e `rate`. Chi prepara l'audio non sa altro del motore: il podcast a due voci (#387) mette
+    qui un altro motore, con lo stesso copione. `Sintesi` accetta anche una voce che ha già `in_wav`."""
+
+    def __init__(self, voce, pronuncia=None):
+        self.voce = voce
+        self.pronuncia = pronuncia
+
+    @property
+    def rate(self) -> int:
+        return int(self.voce.config.sample_rate)
+
+    def in_wav(self, testo: str) -> bytes:
+        from ..tts import sintesi_pcm
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(self.rate)
+            w.writeframes(sintesi_pcm(self.voce, testo, self.pronuncia))
+        return buf.getvalue()
+
+
+def pcm_di(wav_byte: bytes) -> bytes:
+    """I campioni di un WAV (`in_wav`), per metterlo in fila con gli altri."""
+    with wave.open(io.BytesIO(wav_byte), "rb") as w:
+        return w.readframes(w.getnframes())
+
+
 class Sintesi:
     """L'audio delle parti per lo schermo, in un thread solo, una frase alla volta, che cede alla
     voce dal vivo: aspetta che le voci (`attivita`, `tts.AttivitaVoce`) siano ferme da
@@ -653,29 +781,32 @@ class Sintesi:
                 return
             time.sleep(0.2)
 
-    def _sintetizza(self, voce, testo: str) -> bytes:
+    def _sintetizza(self, motore, testo: str) -> bytes:
         """Una frase, segnata nell'attività delle voci (revisione della PR #345): la taratura
         della voce non parte mentre la sintesi per lo schermo lavora, e la vede come una sintesi
-        vera. Prima aspetta che la voce dal vivo sia ferma."""
-        from ..tts import sintesi_pcm
+        vera. Prima aspetta che la voce dal vivo sia ferma. `motore`: `VocePiper` o un altro con
+        `in_wav(testo) → wav`; qui si tengono i campioni."""
         self._aspetta_voce()
         a = self.attivita
         if a is None:
-            return sintesi_pcm(voce, testo, self.pronuncia)
+            return pcm_di(motore.in_wav(testo))
         a.inizio()
         try:
-            return sintesi_pcm(voce, testo, self.pronuncia)
+            return pcm_di(motore.in_wav(testo))
         finally:
             a.fine()
             self._mia = getattr(a, "ultima", None)
 
+    def _motore(self, voce):
+        return voce if hasattr(voce, "in_wav") else VocePiper(voce, self.pronuncia)
+
     def _voci(self):
-        cal = self.voce_per(self.voce_calliope)
+        cal = self._motore(self.voce_per(self.voce_calliope))
         lib = cal
         if self.voce_libro and self.voce_libro != self.voce_calliope:
             try:
-                altra = self.voce_per(self.voce_libro)
-                if altra.config.sample_rate == cal.config.sample_rate:
+                altra = self._motore(self.voce_per(self.voce_libro))
+                if altra.rate == cal.rate:
                     lib = altra
             except Exception as e:  # noqa: BLE001 — tutto nella voce di Calliope
                 self.log(f"   [STUDIO] voce del libro non caricata ({type(e).__name__}): uso "
@@ -696,7 +827,7 @@ class Sintesi:
             tmp = path.with_name(path.name + ".tmp")
             try:
                 cal, lib = self._voci()
-                rate = int(cal.config.sample_rate)
+                rate = int(cal.rate)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 tot = max(1, len(voci))
                 with wave.open(str(tmp), "wb") as w:
@@ -802,16 +933,18 @@ def _firma_recente(d: Path) -> str | None:
     return max(file, key=lambda f: f.stat().st_mtime).name.split("-", 1)[0]
 
 
-def togli_firme_vecchie(d: Path | None, firma: str) -> int:
+def togli_firme_vecchie(d: Path | None, firma) -> int:
     """Nella cartella del ripasso di una verifica, i file di una firma diversa da `firma` (il
-    copione è cambiato: revisione della PR #345). I file provvisori in scrittura restano."""
+    copione è cambiato: revisione della PR #345). `firma`: una, o più (il riassunto e le pagine,
+    #386: chi passa dall'uno alle altre non rifà l'audio). I file provvisori in scrittura restano."""
     if d is None or not d.is_dir() or d.is_symlink():
         return 0
+    prefissi = tuple(x + "-" for x in ([firma] if isinstance(firma, str) else firma))
     n = 0
     for f in list(d.iterdir()):
         try:
             if (f.is_file() and not f.is_symlink() and f.suffix == ".wav"
-                    and not f.name.startswith(firma + "-")):
+                    and not f.name.startswith(prefissi)):
                 f.unlink()
                 n += 1
         except OSError:
@@ -860,9 +993,11 @@ class Ascolti:
         carte.sort(key=lambda c: (not c["da_ripassare"], c["scatola"], c["id"]))
         return carte
 
-    def _copione(self, chi, v: dict, cosa: str, numero=None) -> Copione:
+    def _copione(self, chi, v: dict, cosa: str, numero=None, fonte: str | None = None,
+                 per_voce: bool = False) -> Copione:
         """Il copione di una verifica (dentro il lock). ValueError «niente» se non c'è niente da
-        ascoltare, «argomento» se l'argomento detto non è nel piano."""
+        ascoltare, «argomento» se l'argomento detto non è nel piano. `fonte` «pagine» legge le pagine
+        anche con un riassunto pronto; di serie il riassunto, se c'è (#386)."""
         from . import piano as P
         args = self._argomenti_numerati(v["id"])
         pagine = [p for p in self.dati.tutti(
@@ -883,10 +1018,25 @@ class Ascolti:
             con_carte = False
         elif cosa == "carte":
             args = []
-        cp = componi(args, pagine, carte, cosa, self._nomi_ascolto(), solo, con_carte)
+        sezioni = None
+        if fonte != "pagine" and args:
+            sezioni, _stato = self._riassunto_vivo(v)
+        cp = componi(args, pagine, carte, cosa, self._nomi_ascolto(), solo, con_carte, sezioni,
+                     per_voce=per_voce)
         if not cp.voci:
             raise ValueError("niente")
         return cp
+
+    def _avviso_fonte(self, v: dict, cosa: str, cp: Copione, fonte: str | None) -> str | None:
+        """La frase del codice quando si leggono le pagine al posto del riassunto voluto («dicendolo»,
+        #386): detta prima della lettura e scritta sullo schermo; non sta nel copione, così la
+        posizione non si sposta se poi il riassunto arriva. None se nessuno ha chiesto le pagine per
+        un motivo da dire: chieste a voce, riassunto spento, in ombra, solo carte."""
+        if fonte == "pagine" or cp.fonte == "riassunto" or cosa == "carte" \
+                or not any(p.get("tipo") == "argomento" for p in cp.parti):
+            return None
+        _sez, stato = self._riassunto_vivo(v)
+        return AVVISI_FONTE.get(stato)
 
     def _oggi_del_piano(self, v: dict) -> dict | None:
         if v["stato"] != "aperta":
@@ -906,11 +1056,12 @@ class Ascolti:
 
     # ── a voce ──
     def ascolto_prepara(self, chi, vid=None, cosa: str = "tutto", numero=None,
-                        come: str = "inizia") -> dict:
+                        come: str = "inizia", fonte: str | None = None) -> dict:
         """La lettura da passare al ciclo: {chi, verifica, cosa, numero, firma, voci, da, intro,
-        parti, parte, secondi}. `come`: «inizia» (da capo), «riprendi» (dalla frase interrotta) o
-        «ripeti» (dall'inizio del paragrafo). LookupError «nessuno» senza un ripasso in pausa per
-        «riprendi» e «ripeti»; ValueError «niente» o «argomento»; ProvaAperta; NonTrovata."""
+        parti, parte, secondi, fonte}. `come`: «inizia» (da capo), «riprendi» (dalla frase interrotta)
+        o «ripeti» (dall'inizio del paragrafo). `fonte`: «pagine» le chiede anche con un riassunto
+        pronto. LookupError «nessuno» senza un ripasso in pausa per «riprendi» e «ripeti»; ValueError
+        «niente» o «argomento»; ProvaAperta; NonTrovata."""
         cosa = cosa if cosa in COSE else "tutto"
         m = self._misure_ascolto()
         with self.dati.lock:
@@ -920,12 +1071,19 @@ class Ascolti:
                 if s is None:
                     raise LookupError("nessuno")
                 v = self._ascoltabile(chi, s["verifica"])
-                cp = self._copione(chi, v, s["cosa"], s["numero"])
+                # Si riprende ciò che si ascoltava: chi stava sulle pagine resta sulle pagine anche
+                # se intanto il riassunto è arrivato (#386)
+                fonte = "pagine" if s.get("fonte") == "pagine" else None
+                cp = self._copione(chi, v, s["cosa"], s["numero"], fonte, per_voce=True)
                 if cp.firma == s["firma"]:
                     pos = min(s["pos"], len(cp.voci) - 1)
                 else:
+                    # Il copione è cambiato: lo stesso argomento, non lo stesso numero di parte (il
+                    # riassunto e le pagine dividono le parti in modo diverso)
                     n = min(s["parte"], len(cp.parti)) or 1
-                    pos = cp.inizio_parte(n)
+                    pos = cp.inizio_argomento(s.get("argomento_id"))
+                    pos = pos if pos is not None else cp.inizio_parte(n)
+                    n = cp.voci[pos].parte
                     intro.append(f"Il ripasso è cambiato: riparto dalla parte {n}.")
                 if come == "ripeti":
                     pos = da_ripetere(cp.voci, pos)
@@ -935,16 +1093,26 @@ class Ascolti:
                     m["riprese"] += 1
                     if not intro and pos > 0:
                         intro.append(f"Riprendo dalla parte {cp.voci[pos].parte}.")
+                # Ogni inizio di ascolto dice che può sbagliare, anche una ripresa a metà parte
+                if cp.fonte == "riassunto" and cp.voci[pos].testo != RIASSUNTO_INTRO:
+                    intro.append(RIASSUNTO_INTRO)
                 cosa, numero = s["cosa"], s["numero"]
             else:
                 v = self._ascoltabile(chi, vid)
-                cp = self._copione(chi, v, cosa, numero)
+                cp = self._copione(chi, v, cosa, numero, fonte, per_voce=True)
                 pos = 0
+                avviso = self._avviso_fonte(v, cosa, cp, fonte)
+                if avviso:
+                    intro.append(avviso)
+                    self._misure_riassunto()["pagine_al_posto"] += 1
+                elif cp.fonte == "riassunto":
+                    self._misure_riassunto()["detti"] += 1
             for k, n in cp.saltate.items():
                 m["saltate"][k] = m["saltate"].get(k, 0) + n
         resto = cp.voci[pos:]
         return {"chi": str(getattr(chi, "id", "")), "verifica": v["id"], "cosa": cosa,
                 "numero": numero, "firma": cp.firma, "voci": cp.voci, "da": pos, "intro": intro,
+                "fonte": cp.fonte,
                 "parti": len(cp.parti), "parte": cp.voci[pos].parte if resto else len(cp.parti),
                 "secondi": _durata(sum(len(x.testo) for x in resto if x.tipo != PAUSA),
                                    sum(x.secondi for x in resto if x.tipo == PAUSA))}
@@ -959,6 +1127,21 @@ class Ascolti:
                 self._misure_ascolto()["bloccate_prova"] += 1
                 return ("prova", "C'è una prova in corso: il ripasso si ferma, lo riprendiamo "
                                  "dopo la consegna.")
+            # Una lettura in corso non continua su materiale tolto (#386): la verifica c'è ancora, e il
+            # copione è ancora quello che si sta leggendo
+            v = self.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (int(lettura["verifica"]),))
+            if v is None:
+                return ("tolta", "Questa verifica non c'è più: mi fermo qui.")
+            if lettura.get("firma"):
+                try:
+                    cp = self._copione(self._profilo(lettura["chi"]), v, lettura["cosa"],
+                                       lettura.get("numero"),
+                                       "pagine" if lettura.get("fonte") == "pagine" else None,
+                                       per_voce=True)
+                except ValueError:
+                    cp = None
+                if cp is None or cp.firma != lettura["firma"]:
+                    return ("cambiato", "Il ripasso è cambiato: mi fermo qui.")
         prof = self._profilo(lettura["chi"])
         if prof is not None:
             from .. import minori
@@ -984,13 +1167,14 @@ class Ascolti:
             m["interrotte"] += 1
         voci, pos = lettura["voci"], int(esito.get("pos") or 0)
         mem = self._ascolti_mem()
-        if motivo == "finito" or pos >= len(voci):
+        if motivo in ("finito", "tolta") or pos >= len(voci):
             mem.pop(lettura["chi"], None)
         else:
             mem[lettura["chi"]] = {
                 "verifica": lettura["verifica"], "cosa": lettura["cosa"],
                 "numero": lettura["numero"], "firma": lettura["firma"], "pos": pos,
                 "parte": voci[pos].parte, "parti": lettura["parti"],
+                "fonte": lettura.get("fonte"), "argomento_id": voci[pos].argomento,
                 "fino": self.adesso() + datetime.timedelta(seconds=RIPRENDI_S)}
         self._registra(f"ripasso a voce della verifica {lettura['verifica']}: {motivo}, "
                        f"{esito.get('sentite', 0)} frasi sentite di {esito.get('frasi', 0)}")
@@ -1004,6 +1188,12 @@ class Ascolti:
             mem.pop(str(persona), None)
             return None
         return dict(s)
+
+    def ascolto_via_verifica(self, vid):
+        """La posizione a voce va via con la verifica, per chiunque stesse ascoltando."""
+        mem = self._ascolti_mem()
+        for k in [k for k, s in mem.items() if s.get("verifica") == int(vid)]:
+            mem.pop(k, None)
 
     def ascolto_chiudi(self, persona) -> bool:
         return self._ascolti_mem().pop(str(persona or ""), None) is not None
@@ -1025,21 +1215,25 @@ class Ascolti:
         voci = s.firma_voci() if s is not None else ""
         return hashlib.sha256(f"{cp.firma}|{voci}".encode()).hexdigest()[:16]
 
-    def ascolto_parti(self, chi, vid) -> dict:
+    def ascolto_parti(self, chi, vid, fonte: str | None = None) -> dict:
         """Le parti del ripasso di una verifica per lo schermo: {verifica, prova, firma, parti:
         [{n, tipo, argomento, titolo (un dato: textContent), pagine, frasi, secondi, oggi,
-        pronta, fatto, errore}], secondi, audio}. Con una prova aperta nessuna parte."""
+        pronta, fatto, errore}], secondi, audio, fonte, riassunto (ce n'è uno da scegliere), avviso
+        (la frase del codice: perché si leggono le pagine)}. Con una prova aperta nessuna parte."""
         m = self._misure_ascolto()
         vuoto = {"prova": False, "parti": [], "firma": None, "secondi": 0,
-                 "audio": self.sintesi is not None}
+                 "audio": self.sintesi is not None, "fonte": "pagine", "riassunto": False,
+                 "avviso": None}
         with self.dati.lock:
             v = self._verifica(chi, vid)
             if self._prova_aperta(v["id"]) is not None:
                 return {**vuoto, "verifica": v["id"], "prova": True}
             try:
-                cp = self._copione(chi, v, "tutto")
+                cp = self._copione(chi, v, "tutto", fonte=fonte)
             except ValueError:
                 return {**vuoto, "verifica": v["id"]}
+            _sez, stato_r = self._riassunto_vivo(v)
+            avviso = self._avviso_fonte(v, "tutto", cp, fonte)
             oggi = self._oggi_del_piano(v)
             oggi_pag = set(oggi["pagine"]) if oggi and oggi["fase"] == "studio" else set()
             ids_parte = {a["id"]: set(a["pagine"]) for a in self._argomenti_numerati(v["id"])}
@@ -1055,23 +1249,28 @@ class Ascolti:
                                        "carte", "continua")}
             durata = durata_wav(path) if pronta else None
             x["secondi"] = int(round(durata)) if durata is not None else p["secondi"]
-            x["oggi"] = bool(oggi_pag and p["tipo"] == "argomento"
-                             and ids_parte.get(p.get("argomento_id"), set()) & oggi_pag)
+            x["oggi"] = bool(oggi_pag and p["tipo"] != "carte" and any(
+                ids_parte.get(a, set()) & oggi_pag for a in p.get("argomenti") or ()))
             x["pronta"] = pronta
             x["fatto"] = stato if isinstance(stato, float) else None
             x["errore"] = stato == "errore"
             parti.append(x)
         m["parti_schermo"] += 1
         return {"verifica": v["id"], "prova": False, "firma": firma, "parti": parti,
-                "secondi": sum(x["secondi"] for x in parti), "audio": self.sintesi is not None}
+                "secondi": sum(x["secondi"] for x in parti), "audio": self.sintesi is not None,
+                "fonte": cp.fonte, "riassunto": stato_r == "pronto", "avviso": avviso}
 
-    def ascolto_audio(self, chi, vid, parte: int, firma: str | None) -> dict:
+    def ascolto_audio(self, chi, vid, parte: int, firma: str | None,
+                      fonte: str | None = None) -> dict:
         """Il file di una parte: {"file": Path} se è pronto; {"pronto": False, "fatto": x} se si
         prepara adesso (e intanto la parte dopo); {"cambiato": True} se il copione è cambiato;
         {"senza_voce": True} senza la sintesi. ProvaAperta, NonTrovata, ValueError «parte»."""
         with self.dati.lock:
             v = self._ascoltabile(chi, vid)
-            cp = self._copione(chi, v, "tutto")
+            cp = self._copione(chi, v, "tutto", fonte=fonte)
+            # L'audio del riassunto e quello delle pagine vivono insieme: chi passa dall'uno alle
+            # altre non li rifà; ogni altra firma è di un materiale che non c'è più
+            altro = self._copione(chi, v, "tutto", fonte=None if fonte == "pagine" else "pagine")
         fa = self._firma_audio(cp)
         if firma and firma != fa:
             return {"cambiato": True, "firma": fa}
@@ -1082,7 +1281,7 @@ class Ascolti:
         if cartella is None:
             return {"senza_voce": True}
         path = cartella / nome_file(fa, parte)
-        togli_firme_vecchie(cartella, fa)
+        togli_firme_vecchie(cartella, (fa, self._firma_audio(altro)))
         if path.exists():
             try:
                 os.utime(path)              # l'ultimo ascolto: la cache scade da qui
@@ -1093,18 +1292,10 @@ class Ascolti:
             dopo = [x for x in cp.voci if x.parte == int(parte) + 1]
             nxt = cartella / nome_file(fa, int(parte) + 1)
             if dopo and self.sintesi is not None and not nxt.exists():
-                self.sintesi.chiedi(nxt, dopo, self._ancora(v["id"]))
+                self.sintesi.chiedi(nxt, dopo, self._ancora_firma(v["id"], chi, fa, fonte))
             return {"file": path, "firma": fa}
         if self.sintesi is None:
             return {"senza_voce": True}
-        return {"pronto": False, "fatto": self.sintesi.chiedi(path, voci, self._ancora(v["id"])),
+        return {"pronto": False,
+                "fatto": self.sintesi.chiedi(path, voci, self._ancora_firma(v["id"], chi, fa, fonte)),
                 "firma": fa}
-
-    def _ancora(self, vid):
-        def ancora() -> bool:
-            try:
-                return self.dati.uno("SELECT id FROM studio_verifiche WHERE id = ?",
-                                     (int(vid),)) is not None
-            except Exception:  # noqa: BLE001 — nel dubbio il file non si tiene
-                return False
-        return ancora

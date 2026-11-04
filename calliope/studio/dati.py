@@ -94,7 +94,7 @@ from ..persistenza import apri_db, prepara_schema
 MODULO = "studio"
 
 # Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
-TABELLE = ("studio_preparazioni", "studio_esercizi", "studio_importazioni", "studio_pratica","studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni",
+TABELLE = ("studio_riassunti", "studio_preparazioni", "studio_esercizi", "studio_importazioni", "studio_pratica","studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni",
            "studio_tentativi", "studio_prove", "studio_domande", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
            "studio_misure",
            "studio_argomenti", "studio_pagine", "studio_materiali", "studio_verifiche",
@@ -558,16 +558,30 @@ def _v16(db):
 
 
 def _v17(db):
+    """Il riassunto da ascoltare (04/11, #386, studio/riassunto.py): una riga per verifica, l'ultimo
+    copione con la firma delle pagine, l'esito, il testo controllato dal codice (un dato, solo con
+    l'esito «pronto») e i conti del controllo (mai testo). Va via con la verifica."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_riassunti (
+        verifica INTEGER PRIMARY KEY,
+        persona TEXT NOT NULL,
+        firma TEXT,
+        esito TEXT,
+        quando TEXT,
+        contenuto TEXT,
+        conti TEXT)""")
+
+
+def _v18(db):
     """La generazione a lettura finita (04/11, #384): `firme_parti` è la firma di ogni argomento
     all'ultima generazione, {"carte"|"domande": {id: firma}}, per rifare solo la parte cambiata;
     `generata` dice che un tentativo viene da una carta o una domanda scritta dal modello e non
-    corretta da nessuno (pesa meno e non dà stelle, punto 57 della 0035)."""
+    corretta da nessuno (pesa meno e non dà stelle, punto 58 della 0035)."""
     db.execute("ALTER TABLE studio_verifiche ADD COLUMN firme_parti TEXT")
     db.execute("ALTER TABLE studio_tentativi ADD COLUMN generata INTEGER NOT NULL DEFAULT 0")
 
 
 MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12, _v13, _v14, _v15, _v16,
-              _v17]
+              _v17, _v18]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
 CON_ORFANI = ("studio_eventi", "studio_tentativi", "studio_pratica")
@@ -577,7 +591,8 @@ NUOVE = (*CON_ORFANI, "studio_carte", "studio_mappe", "studio_domande", "studio_
          "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_premi",
          "studio_importazioni",
          "studio_esercizi",
-         "studio_preparazioni")
+         "studio_preparazioni",
+         "studio_riassunti")
 
 
 def cartella_di(cfg, db_path=None) -> Path | None:
@@ -685,7 +700,7 @@ def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
         for t in ("studio_importazioni", "studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
                   "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
                   "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_esercizi",
-                  "studio_preparazioni",
+                  "studio_preparazioni", "studio_riassunti",
                   *CON_ORFANI):
             # Un db ancora allo schema di prima (lo Studio spento non lo prepara): le tabelle
             # nuove possono mancare
@@ -826,7 +841,7 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
         # (le importazioni, #298, dopo: i loro file arrivati sono già nella lista sopra solo per
         # le verifiche tolte; quelle orfane li perdono nella rotazione degli orfani)
         for t in ("studio_mappe", "studio_domande", "studio_prove", "studio_importazioni",
-                  "studio_preparazioni"):
+                  "studio_preparazioni", "studio_riassunti"):
             # Le domande e le prove (passo 8, #248) come le mappe
             if _tabella(db, t):
                 db.execute(f"DELETE FROM {t} WHERE {orfani}")

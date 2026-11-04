@@ -66,11 +66,12 @@ scritta nei documenti; «non scritta» dove nessun documento la dice.
 `studio_lettura`, `studio_argomenti`, `studio_indicazioni`, `studio_importa`, `studio_serie`,
 `studio_stelle` (`true`), `studio_mappa_libera`, `studio_ascolta`, `studio_libreria` (`attiva`).
 In ombra: `studio_padronanza`, `studio_carte_genera`, `studio_domande_genera`,
-`studio_mappa_consigli`, `studio_esercizi`, `studio_preparazione` (`ombra`). Spento:
+`studio_mappa_consigli`, `studio_esercizi`, `studio_preparazione` e, dal 04/11 (#386),
+`studio_riassunto` (`ombra`: «attiva» col criterio del banco, 0035 punto 57). Spento:
 `studio_duelli` (`false`). Chi ne accende uno sulla DGX lo aggiunge alla tabella; le generazioni
 si accendono solo dopo il loro banco ([studio](studio.md)). Dal 04/11 (#384) `studio_carte_genera` e
 `studio_domande_genera` su «attiva» vogliono dire «subito a chi studia, senza conferma»: le righe in
-ombra si rigenerano da sole; come accenderle e i conti del banco in [studio](studio.md).
+ombra si rigenerano da sole; come accenderle, il criterio e i conti del banco in [studio](studio.md).
 
 Una chiave «accesa senza criterio scritto» è accesa nell'uso senza la soglia che la issue chiede
 prima dell'accensione: la misura resta da fare (le issue tra parentesi), non è già fatta. Per una lettura

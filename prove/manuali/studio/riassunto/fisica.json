@@ -1,0 +1,16 @@
+{
+  "id": "fisica-pagina",
+  "materia": "Fisica",
+  "classe": "2ª superiore",
+  "data_verifica": "2026-11-20",
+  "argomento": "Forze, energia, elettricità",
+  "nota": "Una pagina di fantasia da 15 frasi su tre temi per la fase «riassunto» del banco (#386): il copione deve arrivare in fondo, non fermarsi alla prima parte.",
+  "pagine": [
+    {"id": "p1", "numero": "10", "testo": "La prima legge di Newton dice che un corpo resta fermo o in moto rettilineo uniforme se la somma delle forze è nulla.\nLa seconda legge di Newton lega la forza alla massa e all'accelerazione.\nLa terza legge dice che a ogni azione corrisponde una reazione uguale e contraria.\nIl peso è la forza con cui la Terra attira un corpo.\nL'attrito è una forza che si oppone al moto e trasforma l'energia in calore.\nL'energia cinetica dipende dalla massa e dal quadrato della velocità.\nL'energia potenziale gravitazionale cresce con l'altezza del corpo.\nIn un sistema isolato l'energia meccanica totale si conserva.\nIl lavoro è il prodotto della forza per lo spostamento e si misura in joule.\nLa potenza è il lavoro fatto nell'unità di tempo e si misura in watt.\nLa corrente elettrica è un flusso ordinato di cariche in un conduttore.\nLa legge di Ohm lega la tensione, la corrente e la resistenza di un conduttore.\nLa resistenza di un filo cresce con la lunghezza e cala con la sezione.\nIn un circuito in serie la corrente è la stessa in ogni elemento.\nIn un circuito in parallelo la tensione è la stessa su ogni ramo."}
+  ],
+  "argomenti": [
+    {"titolo": "Forze e leggi di Newton", "pagine": ["p1"]},
+    {"titolo": "Energia e lavoro", "pagine": ["p1"]},
+    {"titolo": "Corrente e circuiti", "pagine": ["p1"]}
+  ]
+}

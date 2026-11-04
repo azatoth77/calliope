@@ -1,4 +1,4 @@
-"""Il banco della rilettura (04/11/2026, issue #384, epic #251, decisione 0035 punto 57): misura il
+"""Il banco della rilettura (04/11/2026, issue #384, epic #251, decisione 0035 punto 58): misura il
 meccanismo che manda carte e domande generate a chi studia, contro un **criterio numerico scritto**.
 Decisione di chi amministra del 04/11: nessuna persona valida le voci prima che lo studente le veda, e
 nemmeno l'accensione dipende da una rilettura. La sicurezza sta nei controlli automatici, e una voce
@@ -66,9 +66,10 @@ def materiali() -> dict:
     return mat
 
 
-def pagine_di(ver: dict) -> list[dict]:
-    return [{"id": i, "ordine": i, "stato": "letta", "testo": p["testo"], "numero": p.get("numero"),
-             "metodo": "ocr", "avvisi": json.dumps(["istruzioni"]) if p.get("tipo") == "ostile" else None}
+def pagine_di(ver: dict, segnate: bool = True) -> list[dict]:
+    """Con `segnate` falso le pagine ostili non hanno l'avviso: il lettore può non vederle."""
+    return [{"id": i, "ordine": i, "stato": "letta", "testo": p["testo"], "numero": p.get("numero"), "metodo": "ocr",
+             "avvisi": json.dumps(["istruzioni"]) if segnate and p.get("tipo") == "ostile" else None}
             for i, p in enumerate(ver["pagine"], 1)]
 
 
@@ -114,7 +115,11 @@ def altera(vere: list[dict], testi_di) -> list[dict]:
         if v["tipo"] in ("carta", "aperta", "parole", "numero"):
             risposte.setdefault((v["verifica"], tuple(v["pagine"])), []).append(v)
     for v in vere:
-        if v["tipo"] in ("scelta", "vero_falso"):
+        if v["tipo"] == "vero_falso":
+            # Il vero o falso girato: il modello dà per vero ciò che è falso, e viceversa
+            out.append({**v, "risposta": "falso" if v["risposta"] == "vero" else "vero", "errore": "vero_falso_girato"})
+            continue
+        if v["tipo"] == "scelta":
             continue
         r = str(v["risposta"])
         m = None
@@ -168,25 +173,41 @@ def misura_criterio(voci: list[dict], mat: dict, giudice, guardiano, log=print) 
         return [testi.get(int(x), "") for x in v["pagine"]]
     vere = [v for v in voci if v["verita"] == "vera"]
     fatte = altera(vere, testi_di)
+    rif_ciechi = {vid: A.riferimenti(pagine_di(ver, segnate=False)) for vid, ver in mat.items()}
     out = {"vere": conti_vuoti(), "sbagliate": conti_vuoti(), "ostili": conti_vuoti(),
-           "fuori_pagina": conti_vuoti(), "per_errore": {}, "sfuggite": []}
+           "fuori_pagina": conti_vuoti(), "per_errore": {}, "sfuggite": [],
+           "per_tipo": {t: {k: conti_vuoti() for k in ("vere", "sbagliate", "ostili", "fuori_pagina")}
+                        for t in ("carte", "domande")}}
     for v in [*voci, *[{**x, "verita": "sbagliata"} for x in fatte]]:
         e = cancelli(v, rif_di[v["verifica"]], giudice, guardiano)
         chi = {"vera": "vere", "sbagliata": "sbagliate", "ostile": "ostili",
                "fuori_pagina": "fuori_pagina"}[v["verita"]]
         conta(out[chi], e)
+        conta(out["per_tipo"]["carte" if v["tipo"] == "carta" else "domande"][chi], e)
         if v["verita"] == "sbagliata":
             conta(out["per_errore"].setdefault(v.get("errore") or "della_verita", conti_vuoti()), e)
         if v["verita"] in ("sbagliata", "ostile") and e == "tenuta":
             out["sfuggite"].append({k: v.get(k) for k in ("verifica", "tipo", "domanda", "risposta", "errore")})
+    # Le ostili anche con la pagina che il lettore non ha segnato: lì non aiuta l'avviso della pagina
+    for v in [x for x in voci if x["verita"] == "ostile"]:
+        e = cancelli(v, rif_ciechi[v["verifica"]], giudice, guardiano)
+        conta(out["ostili"], e)
+        conta(out["per_tipo"]["carte" if v["tipo"] == "carta" else "domande"]["ostili"], e)
+        if e == "tenuta":
+            out["sfuggite"].append({k: v.get(k) for k in ("verifica", "tipo", "domanda", "risposta")}
+                                   | {"errore": "ostile_pagina_non_segnata"})
     out["criterio"] = {"ostili_tenute": out["ostili"]["tenute"], "sbagliate_tenute_pct": pct(out["sbagliate"]),
                        "vere_tenute_pct": pct(out["vere"]),
                        "vere_e_fuori_pagina_tenute_pct": round(100.0 * (
                            out["vere"]["tenute"] + out["fuori_pagina"]["tenute"]) / max(
                            1, out["vere"]["n"] + out["fuori_pagina"]["n"]), 1), **CRITERIO}
-    out["rispettato"] = (out["ostili"]["tenute"] <= CRITERIO["ostili_tenute_max"]
-                         and pct(out["sbagliate"]) <= CRITERIO["sbagliate_tenute_pct_max"]
-                         and pct(out["vere"]) >= CRITERIO["vere_tenute_pct_min"])
+    # Il criterio vale per ognuno dei due: una media non deve nascondere un tipo che non lo rispetta
+    for t, x in out["per_tipo"].items():
+        x["sbagliate_tenute_pct"], x["vere_tenute_pct"] = pct(x["sbagliate"]), pct(x["vere"])
+        x["rispettato"] = (x["ostili"]["tenute"] <= CRITERIO["ostili_tenute_max"]
+                           and pct(x["sbagliate"]) <= CRITERIO["sbagliate_tenute_pct_max"]
+                           and pct(x["vere"]) >= CRITERIO["vere_tenute_pct_min"])
+    out["rispettato"] = all(x["rispettato"] for x in out["per_tipo"].values())
     return out
 
 
@@ -270,6 +291,14 @@ def vere(percorso: Path, giudice, guardiano, cli) -> dict:
                 conta(m, e)
                 if e == "tenuta":
                     tenute.append(c)
+                elif e == "codice:" + G.DA_CONTROLLARE:
+                    # Perché, solo la categoria
+                    tt = {int(p["id"]): p.get("testo") or "" for p in x["pagine"]}
+                    cat = ("falso" if c.get("attesa") == "falso" else G.motivo_appoggio(
+                        "" if c.get("tipo") == "vero_falso" else (c.get("domanda") or c.get("testo")),
+                        c.get("testo") if c.get("tipo") == "vero_falso" else (c.get("risposta") or c.get("attesa")),
+                        [tt.get(int(k), "") for k in c["pagine"]]) if c.get("fonte") is None else "altro")
+                    m.setdefault("perche", {})[cat] = m.setdefault("perche", {}).get(cat, 0) + 1
             # Gli errori iniettati sulle tenute: quanti ne passano, sul testo vero
             pos = {int(p["id"]): i for i, p in enumerate(x["pagine"], 1)}
             voci = [{"verifica": x["id"], "tipo": c.get("tipo", "carta"),
@@ -335,6 +364,7 @@ def main(argv=None):
     giudice = giudice_di(cli)
     guardiano = None if a.senza_guardiano else guardiano_vero(uso)
     if a.vere:
+        print("JSON")
         print(json.dumps(vere(a.vere.expanduser(), giudice, guardiano, cli), indent=1))
         return 0
     if not a.uscita:

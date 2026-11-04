@@ -1,7 +1,7 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-"""La generazione a lettura finita a secco (04/11, issue #384, epic #251, decisione 0035 punto 57;
+"""La generazione a lettura finita a secco (04/11, issue #384, epic #251, decisione 0035 punto 58;
 studio/genera.py, studio/domande_genera.py, studio/servizio.py, studio/prove.py, studio/lettura.py).
 Con il vLLM finto e i materiali di fantasia di `prova_studio_argomenti.py` (Leo, il tutore Andrea).
 
@@ -540,13 +540,21 @@ verifica("la verità: vere, sbagliate e ostili, tutte su materiali che ci sono e
          and all(0 < x <= len(mat_b[v["verifica"]]["pagine"]) for v in voci_b for x in v["pagine"]))
 tutte_si = lambda voce, fonte: True  # noqa: E731
 r_b = BR.misura_criterio(voci_b, mat_b, tutte_si, None)
-verifica("col giudizio che dice sempre sì (il solo codice): nessuna ostile tenuta",
-         r_b["ostili"]["tenute"] == 0, r_b["sfuggite"][:3])
+rif_s = {k: BR.A.riferimenti(BR.pagine_di(x)) for k, x in mat_b.items()}
+ost_b = [v for v in voci_b if v["verita"] == "ostile"]
+verifica("col giudizio che dice sempre sì (il solo codice), con le pagine ostili segnate: nessuna ostile tenuta",
+         all(BR.cancelli(v, rif_s[v["verifica"]], tutte_si, None) != "tenuta" for v in ost_b))
+verifica("le ostili si misurano due volte: anche con la pagina che il lettore non ha segnato",
+         r_b["ostili"]["n"] == 2 * len(ost_b))
 tutto_no = BR.misura_criterio(voci_b, mat_b, lambda v, f: False, None)
 verifica("col giudizio che dice sempre no: niente è tenuto, e il criterio non è rispettato",
          tutto_no["vere"]["tenute"] == 0 and not tutto_no["rispettato"])
-verifica("il banco fa i quattro tipi di errore sulle voci vere",
-         {"numero", "scambio_stessa_pagina", "soggetto", "negazione"} <= set(r_b["per_errore"]),
+verifica("il criterio per carte e domande, separati: uno che non lo rispetta non si nasconde nella media",
+         set(r_b["per_tipo"]) == {"carte", "domande"} and all(
+             x["ostili"]["n"] >= 10 and x["vere"]["n"] >= 30 for x in r_b["per_tipo"].values())
+         and not any(x["rispettato"] for x in tutto_no["per_tipo"].values()), r_b["per_tipo"])
+verifica("il banco fa i cinque tipi di errore sulle voci vere",
+         {"numero", "scambio_stessa_pagina", "soggetto", "negazione", "vero_falso_girato"} <= set(r_b["per_errore"]),
          sorted(r_b["per_errore"]))
 ss = BR.altera([{"verifica": "x", "tipo": "carta", "domanda": "D1 anno?", "risposta": "Nel 1492", "pagine": [1]},
                 {"verifica": "x", "tipo": "carta", "domanda": "D2 chi?", "risposta": "Colombo era genovese", "pagine": [1]}],
@@ -561,6 +569,15 @@ verifica("il giudizio: la fonte e la voce in busta, niente altro; solo un «si»
          "la fonte" in m_g[1]["content"] and "mai" not in m_g[1]["content"].split("<")[0][:0]
          and G.leggi_giudizio('{"risposta": "si"}') and not G.leggi_giudizio('{"risposta": "no"}')
          and not G.leggi_giudizio("si") and not G.leggi_giudizio(""))
+# Il riassunto parte da solo anche su una verifica aperta da sola (#386, #384): i proposti puliti valgono
+PA.azzera()
+st, vid, ids, lett = prepara("riass", studio_riassunto="ombra")
+giro(lett, ARGOMENTI, CARTE, DOMANDE)
+verifica("il riassunto vede la verifica aperta da sola: col suo interruttore, a voce ferma",
+         st.verifica(LEO, vid)["stato"] == "aperta" and (
+             [x["id"] for x in st.verifiche_per_riassunto()] == [vid]
+             or st.dati.uno("SELECT verifica FROM studio_riassunti WHERE verifica = ?", (vid,)) is not None))
+st.close()
 # Le voci vere: solo conti. Un db di fantasia, generando col finto
 PA.azzera()
 st, vid, ids, lett = prepara("vere", carte="ombra", domande="ombra", argomenti=False)
@@ -599,8 +616,14 @@ PG_ = ["Nel 1453 i Turchi conquistarono Costantinopoli.\nColombo partì da Palos
 verifica("la risposta giusta si appoggia alla sua frase",
          G.appoggio("In che anno Colombo partì da Palos?", "Nel 1492", PG_) is not None
          and G.appoggio("Chi cercò la strada per l'India?", "Il Portogallo", PG_) is not None)
-verifica("lo scambio con un valore della stessa pagina non si appoggia",
+verifica("lo scambio con un valore della frase accanto non si appoggia",
          G.appoggio("In che anno Colombo partì da Palos?", "Nel 1453", PG_) is None)
+verifica("la pagina che va a capo: la domanda nella riga accanto, senza un altro valore, si appoggia",
+         G.appoggio("Quale metallo si usa per i fili elettrici?", "Il rame",
+                     ["Per i fili elettrici si usa un metallo.\nIl rame conduce bene."]) is not None)
+verifica("un «falso»: la frase di cui parla, se c'è; lo decide poi il giudizio",
+         G.appoggio_falso("Colombo partì da Lisbona nel 1500", PG_) is not None
+         and G.appoggio_falso("Le balene volano sopra il mare", PG_) is None)
 verifica("il soggetto scambiato con un nome di un'altra frase no",
          G.appoggio("Quale regno cercò la strada per l'India?", "I Turchi", PG_) is None)
 verifica("una negazione tolta no",
@@ -609,7 +632,7 @@ verifica("una negazione tolta no",
 verifica("una negazione messa no", G.appoggio("", "Colombo non partì da Palos nel 1492", PG_) is None)
 verifica("un conto sugli esercizi: un numero uguale altrove non basta",
          G.appoggio("Esercizio 3: risolvi x/4 - 1 = 2, quanto vale x?", "12",
-                    ["3. Risolvi: x/4 - 1 = 2\n2. Risolvi: 4(x + 1) = 2x + 12"]) is None)
+                    ["3. Risolvi: x/4 - 1 = 2\nAltre cose.\nAncora altre cose.\n2. Risolvi: 4(x + 1) = 2x + 12"]) is None)
 verifica("il numero di un elenco non spezza la frase", G.frasi_di("1. Si eliminano le parentesi.\n5.3 Come fare")
          == ["1. Si eliminano le parentesi.", "5.3 Come fare"])
 PA.azzera()
@@ -623,9 +646,9 @@ verifica("il giudizio dice no: fuori, con l'avviso", G.GIUDIZIO_NO in per[C1["do
 verifica("il guardiano dice no: fuori, con l'avviso", G.GUARDIANO_NO in per[C2["domanda"]]["avvisi"]
          and per[C2["domanda"]]["stato"] == "proposta", per[C2["domanda"]])
 verifica("la terza passa", per[C4["domanda"]]["stato"] == "attiva" and not per[C4["domanda"]]["avvisi"])
-verifica("il giudizio solo sulle voci pulite, con la sola fonte: mai l'intera pagina",
-         PA.F.giudizi and all("Bartolomeu" not in x["messages"][1]["content"] for x in PA.F.giudizi)
-         and not any(C_OSTILE["domanda"] in x["messages"][1]["content"] for x in PA.F.giudizi))
+verifica("il giudizio solo sulle voci pulite, mai su quelle che il codice ha già fermato",
+         PA.F.giudizi and not any(C_OSTILE["domanda"] in x["messages"][1]["content"] for x in PA.F.giudizi)
+         and not any(C_INVENTATA["domanda"] in x["messages"][1]["content"] for x in PA.F.giudizi))
 st.close()
 PA.azzera()
 st, vid, ids, lett = prepara("senza_g")

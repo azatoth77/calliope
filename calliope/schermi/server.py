@@ -2390,6 +2390,10 @@ def crea_app(hub: Schermi) -> Starlette:
         if not _intero(vid) or vid < 1 or azione not in (None, "audio", "suona"):
             return _json({"errore": "richiesta non valida"}, 400)
         parte, firma = dati.get("parte"), dati.get("firma")
+        fonte = dati.get("fonte")
+        if fonte not in (None, "riassunto", "pagine"):
+            return _json({"errore": "richiesta non valida"}, 400)
+        fonte = "pagine" if fonte == "pagine" else None
         if azione == "audio" and (not _intero(parte) or not 1 <= parte <= 500 or (
                 firma is not None and (not isinstance(firma, str) or len(firma) > 32))):
             return _json({"errore": "richiesta non valida"}, 400)
@@ -2411,8 +2415,8 @@ def crea_app(hub: Schermi) -> Starlette:
                 pausa = stanza_del_ripasso(schermo, suona and not prova)
                 return {"prova": prova, "stanza_in_pausa": pausa}
             if azione == "audio":
-                return st.ascolto_audio(prof, vid, parte, firma)
-            return st.ascolto_parti(prof, vid)
+                return st.ascolto_audio(prof, vid, parte, firma, fonte)
+            return st.ascolto_parti(prof, vid, fonte)
         try:
             out = await asyncio.to_thread(fai)
         except (NonTrovata, NonPermesso):

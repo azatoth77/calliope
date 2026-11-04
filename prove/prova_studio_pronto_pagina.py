@@ -3,7 +3,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 """La generazione a lettura finita nella pagina vera (04/11, issue #384, epic #251, decisione 0035
-punto 57; schermi/pagina/studio.js).
+punto 58; schermi/pagina/studio.js).
 
 Nel browser vero (Edge o Chromium senza finestra; senza si salta), il server degli schermi vero su
 127.0.0.1, Leo (di fantasia) con una verifica di storia in bozza, pagine ancora da leggere, sul telefono:

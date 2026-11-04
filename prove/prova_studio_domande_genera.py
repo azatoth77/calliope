@@ -133,8 +133,8 @@ verifica("un ordine in un'opzione: testo_ordine",
 verifica("scelta senza la giusta o con 2 opzioni, vero o falso malformato: scartati; un valore "
          "non stringa pure", "Chi finanziò Colombo?" not in per and "Colombo partì nel 1492."
          not in per and "Quante caravelle?" not in per and len(pr) == 11, sorted(per))
-verifica("un «falso» generato resta da controllare (il codice non vede che è falso)",
-         DG.DA_CONTROLLARE in per["Colombo partì da Lisbona."]["avvisi"]
+verifica("un «falso» generato ha la frase di cui parla, per il giudizio; lui non la dà per pulita da solo",
+         per["Colombo partì da Lisbona."]["fonte"] is not None and "Colombo" in per["Colombo partì da Lisbona."]["fonte"]
          and per[V1["domanda"]]["avvisi"] == [])
 verifica("un numero illeggibile diventa una domanda aperta",
          per["Quante navi aveva Colombo?"]["tipo"] == "aperta")

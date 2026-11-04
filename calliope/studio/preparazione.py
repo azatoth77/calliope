@@ -504,26 +504,12 @@ class Preparazioni:
             if r["argomento"] is not None
             and not (r["origine"] == "modello" and not r["modificata"] and not r.get("ultima"))}
 
-    # ── il guardiano su una voce generata (#384): `main.py` lo mette in `guardiano` ──
-    guardiano = None
-
+    # ── il guardiano su una voce generata (#384): lo stesso cancello del riassunto ──
     def voce_guardia(self, persona, testo: str) -> bool:
-        """Il guardiano su una voce generata, una volta quando si scrive: True se può andare. Per un
-        minore, guardiano assente o guasto vuol dire fuori, come `guardiano_se_guasto`; per un adulto
-        passa (il guardiano è per i minori e gli ospiti)."""
-        from .. import guardiano as GU
-        from .. import minori
-        minore = minori.e_minore(self._profilo(persona))
-        g = self.guardiano
-        if g is None or not getattr(g, "attivo", False):
-            return not minore
-        try:
-            r = g.giudica("Una domanda di ripasso presa da una pagina di scuola.", testo)
-        except Exception:  # noqa: BLE001 — nel dubbio, come un guasto
-            return not minore
-        if r.esito == GU.VIETATO:
-            return False
-        return not (r.guasto() and minore)
+        """Il guardiano su una voce generata, una volta quando si scrive: True se può andare. Stesse
+        regole del riassunto (`Riassunti.riassunto_guardia`): per un minore, guardiano assente o guasto
+        vuol dire fuori."""
+        return self.riassunto_guardia(persona, testo) is None
 
     # ── cosa è pronto, per la scheda della verifica e per la voce (#384) ──
     def _stato_generazione(self, v: dict, cosa: str, modulo, args, pagine) -> str | None:
@@ -560,8 +546,9 @@ class Preparazioni:
         """Cosa è pronto dei materiali generati di una verifica: {in_corso, righe, generate,
         da_guardare}. Le righe le scrive il codice con i soli conti, mai il testo (si possono dire a
         voce e mostrare sullo schermo). None senza la generazione a lettura finita, a verifica chiusa
-        o con una prova aperta, che nasconde tutto. Un riassunto o altro materiale generato (#386)
-        aggiunge qui la sua riga, e in `Lettore._passi_materiali` il suo passo."""
+        o con una prova aperta, che nasconde tutto. Altro materiale generato aggiunge qui la sua riga, e in
+        `Lettore._passi_materiali` il suo passo. Il riassunto (#386) ha il suo passo a fine giro, con la sua
+        quiete e il suo interruttore (`Lettore._passo_riassunto`)."""
         from . import domande_genera as DG
         from . import mappa_genera as MG
         if (not self.generazione_automatica() or v["stato"] not in ("bozza", "aperta")

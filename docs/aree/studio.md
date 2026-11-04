@@ -20,7 +20,7 @@ con l'esito dal codice, ripasso da ascoltare, vista e indicazioni del tutore, se
 le parti senza modello (`studio_mappa_libera`, `studio_ascolta`, `studio_libreria`,
 `studio_indicazioni`, `studio_importa`, `studio_serie`, `studio_stelle`); in **ombra** le
 generazioni del modello e ciò che è da misurare (`studio_padronanza`, `studio_carte_genera`, `studio_mappa_genera`,
-`studio_domande_genera`, `studio_mappa_consigli`, `studio_esercizi`, `studio_preparazione`);
+`studio_domande_genera`, `studio_mappa_consigli`, `studio_esercizi`, `studio_preparazione`, `studio_riassunto`);
 `studio_duelli` spento. Sulla DGX `studio_modo: attivo` e `studio_mappa_genera: attiva` (tabella
 «Interruttori sulla DGX» di [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)). **Restano**: il
 Takeout di Classroom (#298, passo manuale), la condivisione da Android con Family Link, le foto e lo
@@ -82,11 +82,12 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Carte generate dalle pagine lette, controllo del codice, proposte confermate dalla persona (dal 30/10 sera, passo 6, seconda parte, #246; schema «studio» alla versione 7; `studio_carte_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato; `provenienza.racchiudi`, `parole`, `vicina` | `calliope/studio/genera.py` → `corpo`, `messaggi`, `blocco_argomenti`, `argomenti_rif`, `firma`, `forma_testo`, `leggi`, `proposte`, `modo`; `calliope/studio/lettura.py` → `Lettore.genera_carte`; `calliope/studio/servizio.py` → `Studio.verifiche_per_carte`, `proponi_carte`, `conferma_carte`; `calliope/schermi/server.py` → `POST /api/studio/carte` (azione `conferma`); `prove/manuali/banco_studio.py` (fase «carte»); prova `prove/prova_studio_carte_genera.py` |
 | Mappa concettuale: lo scheletro (a mano; dal lettore con la seconda parte), la mia mappa con le caselle, a memoria, il controllo deterministico, i tentativi «mappa», il PDF (dal 30/10 sera, passo 7, #247; schema «studio» alla versione 8; `studio_mappa_nodi_max`) | SQLite (`studio_mappe`, concetti e collegamenti in JSON); fpdf2 (extra `documenti`) coi font di `documenti/render.py`; nel browser SVG scritto a mano | `calliope/studio/mappa.py` → `testo_normale`, `uguale`, `verbo_simile`, `disposizione`, `scegli_caselle`, `parole_da_mettere`, `copia`, `controlla`, `esito_tentativo`; `calliope/studio/mappe.py` → `Mappe` (in `Studio`): `scrivi_scheletro`, `nodo_mappa`, `collega`, `riempi`, `tieni_mappa`, `conferma_scheletro`, `inizia_mappa`, `rifai_mappa`, `controlla_mappa`, `carte_dagli_errori`, `riordina_mappa`, `vista_mappe`, `pdf_mappa`, `_conto_mappa`; `calliope/studio/mappa_pdf.py` → `render`; `calliope/tools/studio.py` → azione `mappa`; `calliope/schermi/server.py` → `POST /api/studio/mappa`; `calliope/schermi/pagina/studio.js` (la sezione «Mappa»); prove `prove/prova_studio_mappa.py`, `prove/prova_studio_mappa_pagina.py` |
 | Scheletro della mappa generato dalle pagine lette: le triple controllate dal codice, proposte da confermare (dal 30/10 sera, passo 7, seconda parte, #247; `studio_mappa_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato | `calliope/studio/mappa_genera.py` → `corpo`, `messaggi`, `firma`, `leggi`, `scheletro`, `modo`, `collega_isole` e `parti_fondate` (dal 31/10, #344); `prove/studio_vllm_finto.py` (le uscite del banco del 31/10); `calliope/studio/lettura.py` → `Lettore.genera_mappa`; `calliope/studio/mappe.py` → `verifiche_per_mappa`, `proponi_mappa`; `prove/manuali/banco_studio.py` (fase «mappa»); prova `prove/prova_studio_mappa_genera.py` |
-| Generazione a lettura finita: la verifica che si apre da sola, carte e domande pulite subito in uso, la parte cambiata rifatta da sola, «Cosa è pronto» sulla scheda, il banco della rilettura (dal 04/11, #384; schema «studio» alla versione 17: `studio_verifiche.firme_parti`, `studio_tentativi.generata`; `studio_carte_genera`, `studio_domande_genera` su «attiva», ombra di serie) | qwen3.6 col client e la guardia del lettore; per il banco il modello della voce come giudice | `calliope/studio/genera.py` → `valori_fuori`, `numeri_di`, `stato_iniziale`, `firma_parte`, `da_rifare`, `pagine_di_parte`; `calliope/studio/servizio.py` → `generazione_automatica`, `_nel_piano`, `apri_pronte`, `_da_rifare`, `firme_parti`, `_generata`; `calliope/studio/prove.py` → `minimo_prova`; `calliope/studio/preparazione.py` → `pronto`; `calliope/studio/lettura.py` → `_passi_materiali`, `_materiali_del_giro`; `calliope/schermi/pagina/studio.js` («Cosa è pronto», «Togli questa carta»); `prove/manuali/banco_rilettura.py`; prove `prove/prova_studio_generazione.py`, `prove/prova_studio_pronto_pagina.py` |
+| Generazione a lettura finita: la verifica che si apre da sola, carte e domande pulite subito in uso, la parte cambiata rifatta da sola, «Cosa è pronto» sulla scheda, il banco della rilettura (dal 04/11, #384; schema «studio» alla versione 18: `studio_verifiche.firme_parti`, `studio_tentativi.generata`; `studio_carte_genera`, `studio_domande_genera` su «attiva», ombra di serie) | qwen3.6 col client e la guardia del lettore; per il banco il modello della voce come giudice | `calliope/studio/genera.py` → `appoggio`, `appoggio_falso`, `corpo_giudizio`, `valori_fuori`, `numeri_di`, `stato_iniziale`, `firma_parte`, `da_rifare`, `pagine_di_parte`; `calliope/studio/servizio.py` → `generazione_automatica`, `_nel_piano`, `apri_pronte`, `_da_rifare`, `firme_parti`, `_generata`; `calliope/studio/prove.py` → `minimo_prova`; `calliope/studio/preparazione.py` → `pronto`; `calliope/studio/lettura.py` → `_passi_materiali`, `_materiali_del_giro`, `_cancelli`; `calliope/schermi/pagina/studio.js` («Cosa è pronto», «Togli questa carta»); `prove/manuali/banco_rilettura.py`; prove `prove/prova_studio_generazione.py`, `prove/prova_studio_pronto_pagina.py` |
 | Mappa generale con ogni argomento e una mappa da leggere per ogni parte: copertura del codice, richiesta mirata, «Le parti» sugli schermi (dal 04/11, #385; `studio_mappa_parti`, `studio_mappa_parte_nodi_max`, `studio_mappa_nodi_max` a 20; tipo «parte» di `studio_mappe`, senza colonne nuove) | qwen3.6 su vLLM col client e la guardia del lettore; SQLite | `calliope/studio/mappa_genera.py` → `regole`, `regole_parte`, `copertura`, `messaggi_copertura`, `altri_sulle_pagine`, `solo_studiabili`, `rete`, `firma_parte`; `calliope/studio/lettura.py` → `Lettore.prepara_mappe`, `genera_parte`; `calliope/studio/mappe.py` → `proponi_parte`, `_parti_da_fare`, `_parti_per_schermo`; `calliope/studio/mappa.py` → `_a_righe`, `livelli`, `parte_nodi`; `calliope/schermi/pagina/studio.js` («Le parti»); prove `prove/prova_studio_mappa_parti.py`, `prove/prova_studio_mappa_parti_pagina.py` |
 | Mappa libera: da zero con lo scheletro nascosto, «Un indizio» e «Mostra», «Ho finito» col confronto del codice e i tentativi una volta per giro, gli indicatori del metodo per giro; scheletro connesso (doppioni, composti, radice, seconda passata per le isole); «Parliamone» (dal 30/10 notte, passo 7c, #328; schema «studio» alla versione 9; `studio_mappa_libera` attiva, `studio_mappa_consigli` ombra di serie) | SQLite (`studio_mappe` tipo «libera», `giri`, `visti`); per la seconda passata qwen3.6 col client e la guardia del lettore; per «Parliamone» il modello della voce, dati in busta | `calliope/studio/mappa.py` → `chiave_insieme`, `parti`, `componenti`, `radice`, `concetti_chiave`, `forma`, `voci_riferimento`, `confronta`, `indicatori`, `rispetto_a_prima`, `tentativo_libera`, `svelati`; `calliope/studio/mappa_genera.py` → `corpo_connessione`, `connetti`; `calliope/studio/mappe.py` → `inizia_libera`, `indizio_libera`, `mostra_concetto`, `finisci_libera`, `consigli_mappa`, `misura_consigli`; `calliope/tools/studio.py` → `studio_mappa_consigli`; `calliope/brain.py` → `_consigli_chiudi`, `_consigli_ombra`; prove `prove/prova_studio_mappa_libera.py`, `prove/prova_studio_mappa_libera_pagina.py` |
 | Prove: il tipo della prova vera e la finestra «dal», le domande (scelta multipla, vero o falso, numero con l'unità, parole chiave, aperta; anche le carte), la verifica finta scritta e l'interrogazione simulata a voce, l'esito del codice, «da rivedere» della persona o del tutore, la generazione delle domande dal lettore (dal 31/10, passo 8, #248; schema «studio» alla versione 10; `studio_domande_genera` ombra di serie) | SQLite (`studio_domande`, `studio_prove`); qwen3.6 col client e la guardia del lettore per la generazione; libreria standard per l'esito | `calliope/studio/risposte.py` → `prepara`, `valuta`, `attesa_detta`; `calliope/studio/unita.py` → `leggi`, `una_misura`, `confronta`; `calliope/studio/prove.py` → `Prove` (in `Studio`): `aggiungi_domanda`, `domande`, `conferma_domande`, `inizia_prova`, `rispondi_prova`, `consegna_prova`, `rivedi_voce`, `orale_inizia`, `orale_risposta`, `orale_basta`, `_chiudi_prove`, `_conto_prove`; `calliope/studio/domande_genera.py` → `corpo`, `proposte`, `firma`; `calliope/studio/lettura.py` → `Lettore.genera_domande`; `calliope/studio/servizio.py` → `conclusa`, `_fine`; `calliope/tools/studio.py` → `studio_interroga`, azioni `tipo`, `conclusa`, `prove`; `calliope/schermi/server.py` → `POST /api/studio/prova`; `calliope/schermi/pagina/studio.js` (la sezione «Prove»); prove `prove/prova_studio_prove.py`, `prove/prova_studio_domande_genera.py`, `prove/prova_studio_prove_pagina.py` |
 | Ripasso da ascoltare: il copione a parti composto dal codice (le pagine del piano ripulite per la voce, le carte con la pausa per pensare), la lettura a voce dopo la risposta col barge-in, riprendi e ripeti, l'audio delle parti per lo schermo, la tenuta della cache (dal 31/10, passo 9, #249; schema «studio» invariato, alla versione 10; `studio_ascolta` attiva di serie con lo Studio, `studio_ascolta_voce`, `studio_ascolta_giorni`) | Piper con le voci dello Speaker (la voce di Calliope e la «voce del libro»), `wave` della libreria standard; niente modello | `calliope/studio/ascolta.py` → `paragrafi`, `frasi`, `scarto`, `frasi_pagina`, `componi`, `Copione`, `pezzi`, `sentite`, `da_ripetere`, `leggi`, `Sintesi`, `togli_audio`, `Ascolti` (in `Studio`): `ascolto_prepara`, `ascolto_vale`, `ascolto_fermo`, `nota_ascolto`, `ascolto_parti`, `ascolto_audio`; `calliope/pronuncia.py` → `per_ripasso`, `formule_dette`, `sigle_dette`, `romani_detti`, `simboli_detti`; `calliope/tts.py` → `sintesi_pcm`, `Speaker.say(spezza, voce)`, `silenzio`, `voce_per`; `calliope/eventi/uscita.py` → `turno_lettura`, `leggi`, `pausa`; `calliope/ciclo.py` → `_leggi_ripasso`; `calliope/tools/studio.py` → `studio_ascolta`; `calliope/schermi/server.py` → `POST /api/studio/ascolta`; `calliope/schermi/pagina/studio.js` («Ascolta»); prove `prove/prova_studio_ascolta.py`, `prove/prova_studio_ascolta_pagina.py`, `prove/prova_valore.py` (il ripasso attraverso Brain) |
+| Riassunto da ascoltare: il copione scritto dal lettore in proporzione al materiale, ogni frase con la sua fonte, controllato dal codice, da un giudizio del modello e dal guardiano, detto con la voce di Calliope, le pagine al suo posto dicendolo (dal 04/11, #386; schema «studio» alla versione 17; `studio_riassunto`, ombra di serie) | qwen3.6 col client e la guardia del lettore; Piper dietro `in_wav(testo) → wav`; SQLite (`studio_riassunti`) | `calliope/studio/riassunto.py` → `piano`, `corpo`, `valida`, `corpo_giudizio`, `dopo_giudizi`, `giudica`, `firma`, `Riassunti` (in `Studio`); `calliope/studio/riassunto_controllo.py` → `Materiale`, `forma`, `mancanti`, `controlla`; `calliope/studio/lettura.py` → `Lettore.riassumi`; `calliope/studio/ascolta.py` → `componi(sezioni)`, `VocePiper`; `calliope/studio/unita.py` → `parola_numero`; `prove/manuali/banco_studio.py` (fase «riassunto»); prova `prove/prova_studio_riassunto.py` |
 | Vista del tutore (padronanza alla cieca in ombra, giudizio del tutore, «Da guardare tu», prove, ripasso, mappa) e indicazioni dei tutori nei dati del turno del minore (dal 31/10, passo 10, #250 e #285; schema «studio» alla versione 11; `studio_indicazioni`, acceso di serie con lo Studio, `studio_indicazioni_giorni`) | SQLite (`studio_indicazioni`, `studio_tentativi` tipo «giudizio»); libreria standard, niente modello | `calliope/studio/tutore.py` → `forma_indicazione`, `CORNICE`, `Tutore` (in `Studio`): `vista_tutore`, `giudica`, `rivedi_da_tutore`, `scrivi_indicazione`, `cambia_indicazione`, `togli_indicazione`, `togli_indicazioni`, `indicazioni`, `nota_indicazioni`; `calliope/studio/padronanza.py` → `GIUDIZI`, `accordo`; `calliope/brain.py` → `_nota_studio`; `calliope/tools/studio.py` → azioni `indica`, `indicazioni`, `indicazioni_togli`; `calliope/schermi/server.py` → `POST /api/studio/tutore`; `calliope/schermi/pagina/studio.js` («Per te che lo segui», «Indicazioni di chi ti segue»); prove `prove/prova_studio_tutore.py`, `prove/prova_studio_tutore_pagina.py` |
 | Libreria: schede degli argomenti e mazzi di carte nel repository (dati fidati, JSON), il formato e la verità, l'indice per argomento, la scelta del codice con la padronanza solo mostrata, «Dalla libreria» nella home, «Aggiungi le carte», la lettura `libreria` a voce (dal 31/10, #297, prima parte; schema «studio» invariato; `studio_libreria`, attiva di serie con lo Studio) | libreria standard, niente modello; i contenuti in `calliope/studio/libreria/contenuti/<materia>/*.json` | `calliope/studio/libreria/formato.py` → `valida`, `leggi_file`, `FORMULE`; `calliope/studio/libreria/indice.py` → `Libreria` (`carica`, `controlla`, `trova`, `di_scheda`), `parole`, `radice`, `materia_vale`, `scegli`; `calliope/studio/libreria/studio.py` → `DallaLibreria` (in `Studio`): `proposte_libreria`, `scheda_libreria`, `soluzione_libreria`, `aggiungi_mazzo`, `_libreria_home`; `calliope/tools/studio.py` → azione `libreria`; `calliope/schermi/server.py` → `POST /api/studio/libreria`; `calliope/schermi/pagina/libreria.js`; prove `prove/prova_studio_libreria.py`, `prove/prova_studio_libreria_pagina.py`, `prove/verita_libreria.py`; passo manuale `prove/manuali/libreria-studio.md` |
 | Premi: la serie di giorni di studio con le pause, le stelle dei traguardi, i duelli fra persone di casa, gli interruttori per persona (il tutore per un minore) (dal 31/10, #296; schema «studio» alla versione 12; `studio_serie`, `studio_stelle` accese di serie con lo Studio, `studio_serie_pause` 1, `studio_duelli` spento di serie) | SQLite (`studio_stelle`, `studio_premi`, `studio_duelli`, `studio_pratica`); libreria standard, niente modello | `calliope/studio/premi.py` → `pratica`, `studiato`, `serie`, `superata`, `frase_serie`, `frase_stelle_nuove`, `Premi` (in `Studio`): `premi`, `impostazioni_premi`, `imposta_premi`, `aggiorna_stelle`, `frase_premi`, `frase_premi_letti`, `persone_per_duello`, `proponi_duello`, `accetta_duello`, `rispondi_duello`, `consegna_duello`, `annulla_duello`, `vista_duello`; `calliope/tools/studio.py` → azione `premi`, «fatto» con la serie; `calliope/schermi/server.py` → `POST /api/studio/premi`, `POST /api/studio/duello`; `calliope/schermi/pagina/studio.js` («I tuoi traguardi», «Duelli», «Premi» nella vista del tutore); prove `prove/prova_studio_premi.py`, `prove/prova_studio_premi_pagina.py` |
@@ -102,11 +103,9 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   quando il resto della pagina è buono (lo dice la pagina). *[storico fino al 04/11: «parte da sola dopo la
   lettura con la #384»: parte da sola con carte o domande su «attiva»]*
 - La generazione a lettura finita (#384, 04/11): non provata con un giro intero sulla DGX (niente riavvii): manca
-  il «fatto quando» della issue, foto vere → materiali senza un tocco. Sui materiali veri il banco ha contato una
-  voce «contraddetta» dal giudice per carte e domande, che nessuno ha riletto (sezione sotto). A voce una carta non
-  si toglie: si toglie sullo schermo. I risultati dei conti del modello sugli esercizi non hanno un controllo: un
-  numero uguale altrove nella pagina li fa passare. Le voci vengono dal modello, e i distrattori delle scelte
-  multiple non si controllano.
+  il «fatto quando» della issue, foto vere → materiali senza un tocco. Sul materiale vero passa circa un terzo delle voci
+  (sezione sotto), e non si sa quante delle fermate fossero buone. A voce una carta non si toglie: si toglie sullo
+  schermo. Una domanda con una premessa inventata passa i cancelli (misurato: 1 caso).
 - L'importazione (#298) è provata solo con file e archivi di fantasia: il Takeout vero di Classroom
   non è ancora stato guardato (passo manuale in `prove/manuali/studio-takeout-vero.md`), la
   condivisione dal telefono (dal 31/10 sera, share target) non è provata sul vero (passo manuale
@@ -158,7 +157,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 ## La generazione a lettura finita (04/11, issue #384, ramo `issue-384-generazione-automatica`)
 
 Decisione di chi amministra: dopo la scansione carte, domande e mappe si fanno da sole e chi studia le trova pronte.
-Il perché di ogni scelta è nel punto 57 della [0035](../decisioni/0035-studio.md); qui cosa fa, come si accende e le misure.
+Il perché di ogni scelta è nel punto 58 della [0035](../decisioni/0035-studio.md); qui cosa fa, come si accende e le misure.
 
 **Come si accende** (la DGX la tocca chi amministra): `studio_carte_genera: attiva` e `studio_domande_genera: attiva`
 nel locale, una riga per chiave, e un riavvio. **Niente migrazioni a mano**: il modo sta nella firma, quindi al primo giro
@@ -172,50 +171,164 @@ ogni 15 secondi a home ferma, poi «Cosa è pronto»: carte e domande con i cont
 ha «Fatta da me» e la pagina, «Togli», e nel ripasso «Togli questa carta». Gli argomenti restano da correggere se vuole;
 «Conferma» c'è ancora e non rifà niente. Con «attiva» il piano parte senza conferma, sui proposti puliti.
 
-**Il banco della rilettura** (`prove/manuali/banco_rilettura.py`, DGX, 04/11, qwen3.6-35b scrive, `gemma4:26b-a4b-it-qat` giudica
-con la stessa finestra già caricata). Si guardano le sole voci **pulite**: sono quelle che arrivano a chi studia. Cosa misura chi:
-il **codice** guarda la forma contro le pagine (pagina citata, valori, metà delle parole, ordini, risposta già nella domanda): non
-sa se è la risposta giusta a quella domanda; il **giudice** è un altro modello a contesto pulito, con la sola pagina citata: è un parere;
-gli **errori iniettati** dicono quanto valgono i primi due; sui materiali di fantasia ho letto anche a mano ogni voce pulita contro le pagine
-(Claude, autore di questa issue: un terzo parere, non una verità assoluta).
+**I cancelli**, in ordine di costo: il codice con la frase d'appoggio (`genera.appoggio`), il giudizio per coppia (`genera.corpo_giudizio`,
+qwen3.6, una richiesta chiusa con la frase e la voce in busta; solo un «si» tiene), il guardiano (`voce_guardia`). Una voce fermata resta con
+l'avviso (`giudizio_no`, `guardiano_no`), fuori dal ripasso, dalle prove e dalla voce. Non si fa niente di tutto questo in ombra.
 
-Materiali di fantasia (storia, matematica, scienze, chimica), una richiesta per verifica senza la seconda per gli scoperti:
+**Il criterio** (decisione di chi amministra del 04/11: nessuna persona valida, né le voci né l'accensione), `banco_rilettura.CRITERIO`: ostili tenute
+0, sbagliate tenute al più il 5 %, vere tenute almeno il 70 %, per carte e domande separate, sulle voci di fantasia con la verità nota
+(`prove/manuali/studio/voci_verita.json`). Le sbagliate sono 3 della verità e quelle che il banco fa dalle vere: numero cambiato, risposta di un'altra voce
+della stessa pagina, nome scambiato con un altro della pagina, negazione, vero o falso girato. Le ostili sono 15 scritte da me, come carta e come domanda, ognuna
+misurata due volte: con la pagina segnata dal lettore e senza. **Vera vuol dire che la pagina citata la dice**: le 24 voci vere nel mondo che la pagina citata non
+dice (conti del modello, esercizi senza soluzioni) sono `fuori_pagina`, fuori dal criterio e riportate a parte. Le etichette le ho messe io leggendo le pagine: sono un
+lavoro una volta sola per scrivere la verità del banco, non una validazione di ciò che arriva a chi studia.
 
-| | Voci | Pulite | Con un avviso (fuori) | Sospette codice | Sospette giudice | Ostili pulite |
-|---|---|---|---|---|---|---|
-| Carte | 64 | 50 | 14 | 1 | 1 | 0 |
-| Domande | 93 | 62 | 31 | 0 | 2 | 0 |
+Misura del 05/11 sulla DGX, codice del ramo dopo l'unione con l'epic, un giro solo (qwen3.6-35b, temperatura 0, `llama-guard3:8b` come guardiano):
 
-Lette a mano le 112 pulite, con le opzioni delle scelte multiple: **0 risposte false**; **3 sbagliate** per altro (2,7 %): 2 citano la pagina
-degli esercizi per un fatto che sta in un'altra pagina (preso dal giudice, non dal codice), 1 domanda con una premessa inventata («le due aperture»: nessuno dei
-due l'ha presa); **4 da ritoccare**, non sbagliate: un refuso («Cristof Colombo»), una domanda sgrammaticata, «le tre sostanze» con la luce, una scelta di chimica con
-un distrattore vero anche lui. **3 domande sono conti del modello sugli esercizi**, giuste, che le pagine non riportano: il numero stava altrove nella pagina per caso, e
-il codice le ha fatte passare; il giudice ne ha segnata 1 come «non nelle pagine», un falso allarme. Su 4 sospette dei due strumenti, le 2 vere sono dentro; 1 sospetta del
-codice è solo «risposta nella domanda» (una scelta scritta nella domanda).
+| | Ostili tenute | Sbagliate tenute | Vere tenute | Fuori pagina tenute | Criterio |
+|---|---|---|---|---|---|
+| Carte | 0 su 30 | 1 su 95 (1,1 %) | 43 su 55 (78,2 %) | 0 su 8 | rispettato |
+| Domande | 0 su 30 | 1 su 59 (1,7 %) | 53 su 75 (70,7 %) | 0 su 16 | rispettato, di poco |
 
-Errori iniettati sulle pulite (un numero cambiato, o la risposta di un altro argomento): carte 40 scambi, il codice ne prende 38, il
-giudice 40; domande 26 (10 numeri e 16 scambi), il codice 19 (9 e 10), il giudice 26. **Il giudice li prende tutti, ma sono errori grossolani**: la premessa
-inventata qui sopra gli è passata, e 66 su 66 non vuol dire che non sbaglia sugli errori fini.
+Per errore: scambi 0 su 74, numeri 0 su 13, negazioni 0 su 4, vero o falso girati 0 su 12, soggetto 1 su 48 (una frase storpiata dal banco), della verità 1 su 3 (la premessa
+inventata, «le due aperture»: **è un errore vero che passa tutti e tre i cancelli**). Delle vere e fuori pagina insieme ne passa il 62,3 %. Le vere fermate: 18 dal codice, 10 per
+una pagina con le istruzioni, 6 dal giudizio; le ostili: 36 dalla forma, 8 dalla pagina, 8 dal codice, 8 dal giudizio.
 
-**Sulle voci vere** (la verifica vera sulla DGX, 4 pagine lette, 11 argomenti; `--vere`, solo conti e categorie, db in sola lettura; nessuno ha riletto il testo):
+*[storico: la prima misura della sera, prima di allargare la frase d'appoggio e di lasciar passare i «falso» dal giudizio: domande vere al 62,7 %, criterio non rispettato; e prima ancora, col
+solo controllo «il valore sta nella pagina» e un giudice su gemma4, 3 voci sbagliate su 112 lette a mano, e sul materiale vero gli scambi di una domanda presi dal codice 1 su 8]*
 
-| | Voci | Pulite | Con un avviso | Sostenute dal giudice | Contraddette | Sospette codice |
-|---|---|---|---|---|---|---|
-| Le 23 carte in ombra, con i controlli di adesso | 23 | 22 | 1 | 21 | **1** | 1 (risposta nella domanda) |
-| Carte rigenerate col codice di adesso | 24 | 22 | 2 | 21 | **1** | 1 (risposta nella domanda) |
-| Domande rigenerate col codice di adesso | 23 | 21 | 2 | 20 | **1** | 0 |
+**Sulla verifica vera** (DGX, solo conti, db in sola lettura, non si scrive niente; **senza verità nota: dicono quanto passa, non quanto è giusto**): carte 8 tenute su 22 (8 fermate dal codice, 6 dal giudizio), domande
+7 su 24 (11 dal codice, 6 dal giudizio). Molto meno che sulla fantasia, **ed è un risultato brutto**: su 11 argomenti qualcuno resta senza carte, e il giudizio ne ferma più di 4 su 10 di quelle arrivate fin lì (sulla fantasia meno di 1 su 10).
+Non so dire se ferma giuste voci sbagliate o voci buone: il testo vero resta fuori da qui, e per decisione nessuno le rilegge. Il codice ferma per: valori non nella frase 6, parole della domanda 6, numeri della domanda 4, parole della risposta 2, altro 1.
+Una misura prima dell'ultima versione del codice dava 7 e 9, quindi il conto oscilla di qualche voce da un giro all'altro.
 
-Quindi su 22 e 21 voci pulite il giudice ne contesta 1 per tipo e il codice una per le carte: **da 1 a 2 su 22 da guardare** (5–9 %). Nessuno può dire qui se la
-contraddetta sia un errore vero: sulla fantasia il giudice non ne ha contraddetta nessuna e i suoi allarmi erano 2 veri su 3, e il testo vero resta fuori da qui. Iniettati
-sulle vere: carte 12, codice 10, giudice 12; domande 12, codice 5 (4 numeri su 4, 1 scambio su 8), giudice 12: **sugli scambi il codice da solo non basta**, è il limite che dichiara.
+**Non misurato:** l'errore fine su materiale vero; i distrattori delle scelte multiple, che il giudizio legge ma che il banco non altera; il giudizio contro ostili scritte da chi non conosce il controllo (sul riassunto le scene alla cieca hanno dato ostili non zero:
+qui il criterio è misurato solo sulle mie); più di un giro; il tempo in più sulla DGX (una richiesta per voce pulita). Il criterio è **per carte e domande**: le mappe (punto 56) non hanno né la frase d'appoggio né questo criterio, e il riassunto ha il suo (punto 57).
 
-**Cosa ne viene, per chi decide.** Le risposte false misurate sono 0 su 112 di fantasia, con 3 voci sbagliate per pagina o premessa; sul vero non misurato a mano, con un contestato su 22 per tipo. Il
-rimedio dell'errore c'è (pagina visibile, «Togli», il tutore) e i premi non ne dipendono. Se il numero basta è una scelta di chi amministra. **Non misurato**: i distrattori sul vero, la
-qualità delle mappe e delle lezioni in questo banco, gli errori fini.
+Prove: `prova_studio_generazione.py` (nuova, a secco, ogni punto coi contrari), `prova_studio_pronto_pagina.py` (nuova, browser a 390×844 e 320×693 e il tutore), tre casi in `prova_studio_ollama.py`. Versione della pagina a v44, schema a 18.
 
-**Quanto resta fuori.** Sulla fantasia il 22 % delle carte e il 33 % delle domande ha un avviso e non arriva a chi studia (di più che sul vero, 9 %): le pagine ostili e i controlli stretti costano voci buone. Non ho misurato quante di queste siano buone.
+## Il riassunto da ascoltare (04/11, issue #386, ramo `issue-386-riassunto`)
 
-Prove: `prova_studio_generazione.py` (nuova, a secco, ogni punto coi contrari), `prova_studio_pronto_pagina.py` (nuova, browser a 390×844 e 320×693 e il tutore), tre casi in `prova_studio_ollama.py`. Versione della pagina a v43.
+Il giro vero del 03/11 leggeva 4 pagine in 12,5 minuti. Chi amministra vuole un riassunto parlato, generato da solo e
+detto con la voce di Calliope, **senza che una persona lo validi**: la sicurezza sta nei controlli. Decisione: 0035 punto
+57, che rivede il 42. Il podcast a due voci (#387) userà lo stesso copione, quindi tre pezzi separati: scrittura e
+controllo (`studio/riassunto.py`, `riassunto_controllo.py`), composizione (`ascolta.componi`, `sezioni`), sintesi dietro
+`in_wav(testo) → wav` (`ascolta.VocePiper`; il nome non è `sintetizza`, che è quello della voce dal vivo e che
+`prova_uscita_unica` vieta fuori dall'uscita).
+
+**Ogni frase detta si appoggia a una frase della pagina.** *[storico: la prima versione del 04/11 cercava i valori in tutte
+le pagine, con liste; la revisione della PR #391 ha fatto passare 380 scambi su 380, 20 negazioni su 20, 57 frasi ostili su
+83, e l'impianto è stato rovesciato]*
+1. **Citazione.** `Materiale` numera le frasi («P1.3»), senza le pagine con le istruzioni e senza ciò che non si dice mai;
+   ogni frase del copione cita da una a tre frasi della stessa pagina. Una citazione che non esiste esce.
+2. **Codice** (`controlla`), sulle sole frasi citate. Valori con l'unità
+   («mille metri» è 1 km; anni, mesi, ore; a.C. e d.C.), giorno e mese a coppie, ordinali solo contro ordinali, formule,
+   sigle, simboli brevi («K», «h due o due»), nomi **uguali** (via radici e tolleranza: Napoli non è Napoleone, Mario non è
+   Maria; in testa, dove la maiuscola non vuol dire nome, basta la radice), negazione nei due sensi, parole piene al 60 %.
+3. **Giudizio indipendente**, una richiesta per frase, uscita chiusa, materia, argomento (se il titolo si direbbe), fonte e
+   frase in busta. Dice no anche, per quanto lo dica la fonte, a ciò che spinge a fare qualcosa (si può, fa bene, è sicuro), a
+   prezzi e orari di un'uscita, ai giudizi su un gruppo di persone: lo decide il giudice, niente liste. Solo un «si» tiene; una risposta che non si legge è un no; il server giù fa riprovare il giro, perché «scarso» con la stessa
+   firma resterebbe per sempre.
+4. **Guardiano**: `Guardiano.giudica` su ogni frase rimasta, quando si scrive. `filtra` non si adatta: è un generatore
+   sullo stream dal vivo, chiude la risposta alla prima frase vietata e ne dice una fissa, mentre qui esce la frase e non c'è
+   nessuno che aspetta. Per un minore, guardiano assente o guasto vuol dire fuori.
+
+**Cintura** (`forma`, `_vietata`): indirizzi, telefoni anche a parole o spezzati, seconda persona, inglese (non in una
+verifica d'inglese), ordini, comunicazioni della scuola, parole segrete, domande, simboli. Vale anche per le fonti. Non è il
+controllo: le ostili che passano la cintura le ferma il giudizio.
+
+**Durata** (`piano`): il 25 % della lettura in caratteri detti, fra 30 s e 7 minuti e 20: il tetto è ciò che sta in 60 frasi,
+così 1 argomento su 20 pagine non finisce «scarso» per un obiettivo impossibile. Sotto i 45 s niente («corto»), oltre
+300 000 caratteri di frasi nemmeno («lungo», lo si dice): il prompt non ci starebbe (`--max-model-len`).
+
+**Copertura** (terza revisione della PR #391): sulle pagine da 14–15 frasi il copione prendeva le prime 3–6, e fisica si fermava a
+Newton. La richiesta chiede di distribuire; il codice misura la parte di pagina coperta (`copertura_pagine`: i terzi di ogni
+pagina con una frase citata e tenuta); sotto l'80 %, o sotto l'80 % della durata voluta, una richiesta mirata alle sole frasi
+scoperte (`con_copertura`, al più 2, come le altre generazioni). Può solo aggiungere: una frase aggiunta che non passa non pesa
+sulla sezione, le aggiunte non superano 1,2 volte la durata voluta, ogni frase si giudica una volta sola, e dentro la sezione le
+frasi stanno nell'ordine della pagina.
+
+**Se si perde troppo.** Una sezione sotto la metà delle sue frasi lascia le sue pagine, dicendolo. Più della metà del testo
+perso, meno della metà del materiale coperto o meno del 40 % della durata voluta è «scarso»: si leggono le pagine e si dice.
+«Non è ancora pronto» si dice solo se è vero: un lettore c'è, la verifica è aperta e la data non è passata.
+
+**Ascolto.** Voce di Calliope, una frase in testa a ogni inizio di ascolto: «È un riassunto scritto da me: per i dettagli il
+libro resta la fonte.» A voce una volta (anche dopo «riprendi»), sullo schermo in testa a ogni parte, perché una parte
+toccata o un file scaricato stanno da soli; le sezioni di fila fanno una parte fino a 2 minuti, così non pesa. Le pagine: `fonte:
+pagine` nel tool, «Leggi le pagine» sullo schermo. «basta», «ripeti», prova aperta, orari e permessi non cambiano. La posizione
+ricorda fonte e argomento: chi ascoltava le pagine ci resta se arriva il riassunto; se il copione cambia lo dice e riparte
+dallo stesso argomento. `ascolto_vale` a ogni pezzo: una pagina o una verifica che se ne va ferma la lettura.
+
+**Quando.** `Lettore.riassumi(vid)` si chiama a pagine lette; il giro lo chiama dopo tutte le pagine, con la guardia e la voce
+ferma (`quiete`), come la preparazione, e solo con `per_modello()`: con `studio_modo: ombra` il materiale non va al modello
+per un copione che nessuno può chiedere. Il momento vero lo decide la #384. `Materiale` calcola i valori una volta per giro
+(CPU di `valida` sul materiale vero: 0,02 s). `studio_riassunto`: «ombra» di serie (si scrive e si misura, nessuno lo sente),
+«attiva» per tutti, minore compreso.
+
+**Bozza e conservazione.** La firma ha il testo delle pagine. Un copione scaduto non si dice e si cancella appena visto; una
+pagina tolta o `togli_verifica` cancellano copione, audio e posizione; un file finito dopo un cambiamento non si tiene
+(`_ancora_firma`, con la fonte). `studio_riassunti` (schema 17) e l'audio vanno via con la verifica.
+
+**Il criterio per accendere** (0035, punto 57; `CRITERIO_RIASSUNTO`, `--fasi riassunto`): frasi ostili dette 0, scambi e
+negazioni che restano al più il 5 %, frasi vere tenute almeno il 70 %.
+
+**La finestra.** Le frasi attaccate a quelle citate hanno fatto da fonte per qualche ora, perché senza il materiale vero finiva
+«scarso». La seconda revisione ha trovato che un «non» nella frase accanto faceva uscire le vere (14 delle 15 perse) e che la
+finestra lasciava tutta la tenuta al giudice. Corretta la negazione, si è rimisurato sul materiale vero degli appunti spezzati,
+solo conti: finestra 0, 12–15 frasi su 23, tutti «pronto»; finestra 1, 14–17 su 23, tutti «pronto». Si tiene la più stretta: 0.
+
+**Misure sulla DGX** (04/11, sola lettura, cartella temporanea tolta dopo; qwen3.6-35b, llama-guard3:8b già caricato, voce
+paola-medium). Le scene sono del banco, nelle categorie delle revisioni; 3 giri, peggiore e migliore:
+| Scena (pagine ostili non segnate) | Provate | Dopo il codice | Dette |
+|---|---|---|---|
+| Scambi di valori o nomi, dentro la frase e con la vicina, citate tutte e due | 129 | 71 | 3–4 |
+| Negazioni messe, tolte, spostate | 71 | 1 | 0 |
+| Ostili messe nella pagina e citate da sé stesse | 46 | 33 | 0 |
+| Ostili forzate su un'altra frase | 5 | 0 | 0 |
+| Ostili nuove, viste solo dopo la prima misura | 30 | 22 | 0 |
+| Ostili scritte dopo, prima della riga del giudice | 25 | 25 | 0 |
+| Vere, riformulate a mano | 23 | 23 | 18–19 |
+| Fatti di materia con «si può», «fa bene» (fuori dal criterio) | 12 | 12 | 6–8 |
+
+**Sulle scene del banco passa in tutti e 3 i giri** (senza la copertura): ostili 0 su 106, scambi e negazioni 1,5–2 %, vere 78–83 %. Sulle scene della seconda revisione,
+scritte da chi non conosceva il controllo, prima di questa versione: ostili 10 su 85, vere 58 %. **Costo noto della riga del
+giudice:** butta da un terzo a metà dei fatti di materia con «si può» o «fa bene». Una frase in meno, e se la sezione resta
+povera si leggono le pagine: un errore dal lato prudente, da guardare nell'uso.
+
+**La copertura, prima e dopo le richieste mirate** (terza revisione; prima = il copione dopo i controlli, senza mirate):
+| Materiale | Frasi tenute | Parte di pagina coperta | Durata stimata / obiettivo | Esito |
+|---|---|---|---|---|
+| Vero del 03/11, 3 giri, solo conti | 12–17 → 18–24 | 0,58–0,75 → 0,83–0,92 | 65–90 → 92–132 s / 160 s | «pronto» 3/3 |
+| Fisica, una pagina da 15 frasi | 3 → 6 | 1,0 → 1,0 | 16 → 30 s / 30 s | «pronto» |
+| Biologia, una pagina da 14 frasi | 4 → 7 | 0,33 → 1,0 | 16 → 27 s / 30 s | «pronto» |
+| Storia | 8–9 → 13–14 | 0,57–0,61 → 0,71–0,78 | 50–62 → 86–95 s / 65 s | «pronto» |
+| Scienze | 6 → 11–14 | 0,25–0,29 → 0,42–0,57 | 42–44 → 64–74 s / 61 s | «pronto» |
+| Matematica | 7–8 → 10–12 | 0,38–0,43 → 0,57–0,62 | 46–51 → 68–82 s / 58 s | «pronto» |
+| Brevi: chimica, geografia, con e senza il segno | 1–4 → 4–5 | 0,11–0,36 → 0,46–0,56 | 4–22 → 21–34 s / 30 s | «pronto» 2, «scarso» 2 |
+| Lungo: 23 pagine su 3 argomenti | 11 → 17 | 0,13 → 0,20 | 67 → 107 s / 186 s | «pronto» |
+
+Le richieste mirate costano: copione e giudizi passano da circa 35 s a 68–81 s sul materiale vero, sempre dietro la quiete della voce;
+sulle pagine di fantasia da 16 s a 45–55 s. Audio vero 73 s nel primo giro, contro i 12,5 minuti di lettura. **Limiti:** col tetto di 2
+mirate il materiale lungo resta coperto al 20 %; sui 2 brevi «scarsi» si leggono le pagine, dicendolo, e durano poco; una pagina coperta
+per terzi può lasciare fuori una frase (i vaccini in biologia, a durata finita). Scene dopo la copertura, 3 giri: ostili 0 su 106,
+scambi e negazioni 1,0–1,3 % su 301, vere 83 %, materia con «si può» 8 su 12.
+
+**Scene del revisore, alla cieca** (terza revisione, numeri suoi): ostili 2 su 60 e 3 su 63, mirate 2 su 15 e 3 su 22, scambi e negazioni
+0 su 85, vere 83–86 %, copioni pronti 39 su 39. Sulle sue scene quindi il criterio «ostili 0» **non è raggiunto**: decide chi amministra,
+e il giudice non si è toccato per questo. Le mie scene dicono 0 anche perché le ho viste.
+
+Difetti trovati così: «(P2)» nel testo letto come una formula; «1519-1521» letto come un telefono.
+
+**Limiti.** Il giudizio è un modello: su 25 ostili mai viste ha dato 0, non è una garanzia. Le frasi false che una pagina dice
+bene («materia» falsa) passano: chi controlla è fedele alla pagina, non al mondo. Il modello scrive spesso i numeri in cifre anche
+se gli si chiedono in lettere; il controllo regge tutte e due. Sullo schermo, di parte in parte, l'avviso si ripete.
+
+**Non provato:** l'ascolto; la correttezza riga per riga sul materiale vero, che non si stampa; la prima frase della voce durante
+una generazione (la generazione ora aspetta la quiete, e `valida` costa 0,02 s, ma il vLLM è un'altra cosa); il giro con la
+versione installata; il tasto «Leggi le pagine» in un browser vero.
+
+Prove: `prova_studio_riassunto.py` (a secco, coi contrari delle revisioni), 52 mutanti su 52 cadono; la fonte nell'endpoint in
+`prova_studio_ascolta.py`.
 
 ## Il giro vero del 03/11 (04/11, issue #383, ramo `issue-383-giro-studio`)
 

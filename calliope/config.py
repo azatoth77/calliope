@@ -2202,8 +2202,8 @@ class Config:
     # #384, 0035 punto 57; *[storico: «le dà proposte, da confermare» fino al 04/11]*) lavora a
     # lettura finita senza aspettare la conferma degli argomenti (con questa o con
     # `studio_domande_genera` la verifica si apre da sola): le carte pulite vanno subito nel ripasso,
-    # quelle con un avviso restano fuori. «spenta» niente. Si passa ad «attiva» guardando quante sono
-    # sbagliate col banco della rilettura (prove/manuali/banco_rilettura.py): i conti in docs/aree/studio.md
+    # quelle con un avviso o fermate dai cancelli restano fuori. «spenta» niente. Il criterio per passare
+    # ad «attiva» è numerico (prove/manuali/banco_rilettura.py, i conti in docs/aree/studio.md)
     studio_carte_genera: str = "ombra"
     # La mappa concettuale (30/10, passo 7, #247, calliope/studio/mappa.py): al più tanti concetti
     # nello scheletro; nella mappa dello studente e a memoria la persona ne aggiunge al più 6 suoi
@@ -2259,7 +2259,7 @@ class Config:
     # pagine). «ombra» le genera e le misura soltanto: nessuna va alla persona. «attiva» (dal 04/11,
     # #384; *[storico: «proposte, da confermare» fino al 04/11]*) come le carte: a lettura finita, le
     # pulite subito in interrogazione e verifica finta, anche una sola. «spenta» niente. Si passa ad
-    # «attiva» col banco della rilettura (prove/manuali/banco_rilettura.py)
+    # «attiva» col criterio del banco della rilettura (prove/manuali/banco_rilettura.py)
     studio_domande_genera: str = "ombra"
     # Il ripasso da ascoltare (31/10, passo 9, #249, calliope/studio/ascolta.py): le pagine lette
     # degli argomenti del piano e le carte, lette da Piper, a voce («fammi ascoltare il ripasso»,
@@ -2311,6 +2311,15 @@ class Config:
     studio_preparazione: str = "ombra"
     # Da quanti secondi la voce dev'essere ferma (arbitro_memoria.quiete) perché si prepari
     studio_preparazione_quiete_s: int = 120
+    # Il riassunto da ascoltare (04/11, #386, calliope/studio/riassunto.py): a pagine lette il lettore
+    # scrive un copione in proporzione al materiale, dove ogni frase cita le frasi della pagina da cui
+    # viene; il codice le confronta con quelle, un giudizio del modello e il guardiano fanno il resto, e
+    # il ripasso lo dice con la voce di Calliope. Se si perde troppo si leggono le pagine, dicendolo.
+    # Nessuna persona lo valida prima che lo studente lo senta: la sicurezza sta nei controlli. «ombra»
+    # di serie, come le altre generazioni: si scrive e si misura, nessuno lo sente. «attiva» lo sentono
+    # tutti, minore compreso: si accende quando il banco passa il criterio della decisione 0035, punto
+    # 57. «spenta» niente. Le pagine si chiedono sempre a voce e con un tasto
+    studio_riassunto: str = "ombra"
     # I premi dello Studio (31/10, issue #296, calliope/studio/premi.py): un rinforzo positivo e
     # al minimo, calcolato dal codice dai soli dati della pratica (sessioni misurate fra «Inizia»
     # e «Fatto», carte ripassate, prove consegnate, esiti decisi dal codice o dal tutore), mai
@@ -3657,7 +3666,7 @@ SEZIONI: dict[str, list[str]] = {
                 "studio_importa_max_mb", "studio_importa_file_max", "studio_importa_voce_max_mb",
                 "studio_importa_totale_max_mb", "studio_importa_passo_s",
                 "studio_importa_tempo_max_s", "studio_importa_coda", "studio_esercizi",
-                "studio_preparazione", "studio_preparazione_quiete_s"],
+                "studio_preparazione", "studio_preparazione_quiete_s", "studio_riassunto"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -4288,6 +4297,8 @@ _MODI_NUOVI = {
     # La preparazione dietro le quinte (31/10, #297, parte 3)
     "studio_preparazione": _modi("studio_preparazione", ("spenta", "ombra", "attiva"),
                                  falso="spenta"),
+    # Il riassunto da ascoltare (04/11, #386)
+    "studio_riassunto": _modi("studio_riassunto", ("spenta", "ombra", "attiva"), falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},

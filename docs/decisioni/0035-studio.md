@@ -373,7 +373,7 @@ dell'eco della stanza.
     scartate: SM-2 e FSRS (analisi nella #246), il giudizio del modello sulla risposta, i tocchi per
     le risposte, le carte del tutore come dato fidato (due regole invece di una).
 
-34. *[rivisto il 04/11 dal punto 57: le pulite vanno subito nel ripasso, senza conferma; il resto resta]*
+34. *[rivisto il 04/11 dal punto 58: le pulite vanno subito nel ripasso, senza conferma; il resto resta]*
     **Le carte generate dal lettore sono proposte e restano un dato** (seconda parte del passo 6,
     #246). Le chiede a qwen3.6 lo stesso thread della lettura, con la sua guardia e il suo client,
     per una verifica aperta e i suoi argomenti confermati, dal solo testo letto (pagine e argomenti
@@ -434,7 +434,7 @@ dell'eco della stanza.
     5.4), un tool che legge la mappa in busta (non serve alle quattro fasi), tre tabelle per concetti e
     collegamenti, la padronanza in ombra per scegliere le caselle.
 
-36. *[rivisto il 04/11 dal punto 57: parte a lettura finita; lo scheletro resta proposto finché non lo si
+36. *[rivisto il 04/11 dal punto 58: parte a lettura finita; lo scheletro resta proposto finché non lo si
     conferma per «Fai la tua»]* **Lo scheletro generato dal lettore è proposto e resta un dato** (seconda parte del passo 7).
     Lo chiede a qwen3.6 lo stesso thread della lettura, con la sua guardia e il suo client, dopo le
     carte: le triple *(concetto, relazione, concetto)* dal solo testo letto, pagine e argomenti in
@@ -541,7 +541,7 @@ dell'eco della stanza.
     - il tutore che fa la prova al posto del minore;
     - le domande generate subito nelle prove.
 
-41. *[rivisto il 04/11 dal punto 57: le pulite sono subito nelle prove, senza conferma; il resto resta]*
+41. *[rivisto il 04/11 dal punto 58: le pulite sono subito nelle prove, senza conferma; il resto resta]*
     **Le domande generate dal lettore sono proposte e restano un dato.** Come le carte (punto
     34): lo stesso thread, la stessa guardia, pagine e argomenti in busta, schema guidato coi
     tipi, nessun tool. Il codice controlla la forma: una sola opzione giusta, un numero
@@ -554,7 +554,9 @@ dell'eco della stanza.
 ## Il ripasso da ascoltare (passo 9, #249, 31/10)
 
 42. **Il ripasso da ascoltare legge ciò che la persona ha confermato, con un copione scritto dal
-    codice.** Analisi nel commento della #249; i dettagli nel documento d'area.
+    codice.** Analisi nel commento della #249; i dettagli nel documento d'area. *[storico: «nessun modello
+    scrive il testo» e «il materiale mai nella voce di Calliope» fino al 04/11: li rivede il punto 57 per il
+    riassunto; la lettura delle pagine resta così com'è qui, a richiesta e quando il riassunto non c'è]*
     - **Il testo.** Le pagine lette degli argomenti del piano (ogni pagina una volta,
       nell'ordine dell'elenco, in parti di al più `PARTE_MAX_CAR`) e le carte attive (domanda,
       4 secondi, risposta). Nessun modello scrive il testo: il riassunto del lettore (in ombra di
@@ -1021,9 +1023,56 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     ubbidiva ai «6–10»), una mappa enorme apribile a rami (sul telefono non si legge e «Fai la tua» avrebbe
     trenta caselle), la generale derivata dalle parti (buona per materiali grandi, da rivedere se servirà).
 
+## Il riassunto da ascoltare (#386, 04/11)
+
+57. **Il ripasso dice un riassunto scritto dal modello: ogni frase si appoggia a una frase della pagina, e la
+    sicurezza sta nei controlli automatici** (rivede il punto 42; il numero si sistema all'unione). Motivo: 12,5
+    minuti per 4 pagine nel giro vero, e la richiesta di chi amministra.
+    - **Nessuna persona valida** un riassunto prima che lo studente lo senta, né per accendere: altrimenti verrebbe
+      meno l'uso dell'AI (chi amministra, 04/11). *[storico: per qualche ora «in ombra lo sente solo chi amministra,
+      con il segno "in prova"»]*
+    - **La citazione.** Le pagine arrivano numerate per frase, senza le pagine con «ISTRUZIONI: sì» e senza ciò che
+      non si dice mai. Ogni frase detta cita da una a tre frasi della stessa pagina; una citazione che non esiste
+      la fa uscire. *[storico: la prima versione cercava i valori in tutte le pagine, con liste: la revisione ha
+      fatto passare 380 scambi su 380, 20 negazioni su 20, 57 frasi ostili su 83]*
+    - **Il codice** guarda solo le frasi citate (*[storico: per qualche ora anche quelle attaccate; misurata la più
+      stretta, il materiale vero non diventa «scarso» senza]*): valori con l'unità, a.C. e d.C., anni e mesi, date a coppie, ordinali, formule, nomi uguali, negazione nei due
+      sensi, parole piene in gran parte.
+    - **Un giudizio indipendente per coppia**, una seconda passata del modello con uscita chiusa e tutto in busta: la
+      fonte dice proprio questo, ed è materia di quell'argomento? Dice no anche, per quanto lo dica la fonte, a ciò che
+      spinge a fare qualcosa (si può, fa bene, è sicuro), a prezzi e orari di un'uscita, ai giudizi su un gruppo di
+      persone. Solo un «si» tiene la frase.
+    - **Il guardiano** su ogni frase rimasta (`Guardiano.giudica`, non `filtra`: quello lavora sullo stream dal vivo e
+      chiude tutta la risposta). Per un minore, assente o guasto vuol dire fuori.
+    - **La cintura** (indirizzi, telefoni, seconda persona, inglese, ordini) non è il controllo.
+    - **Le ricadute sono automatiche:** esce la frase, una sezione povera lascia le sue pagine, un copione «scarso»
+      lascia la lettura, e si dice.
+    - **Voce di Calliope**, una voce sola; il punto 42 lo vietava perché «la pagina sembrerebbe parlare per lei». A ogni
+      inizio di ascolto: «È un riassunto scritto da me: per i dettagli il libro resta la fonte.» Le pagine si chiedono
+      a voce e con un tasto: sono lo strumento compensativo.
+    - **Durata:** 25 % della lettura, fra 30 s e 7 minuti e 20 (ciò che sta in 60 frasi); sotto i 45 s di lettura niente;
+      oltre 300 000 caratteri nemmeno, e lo si dice.
+    - **Non cambiano** «basta», «riprendi», «ripeti», prova aperta, orari, permessi, ospiti. Una lettura in corso si ferma
+      se la pagina o la verifica se ne vanno.
+    - **Firma col testo delle pagine:** copione e audio scaduti non si dicono e si cancellano. `studio_riassunti`
+      (schema 17) e l'audio vanno via con la verifica; minori come gli adulti (0031), ospiti mai.
+    - **`studio_riassunto`:** «ombra» di serie come le altre generazioni (si scrive e si misura, nessuno lo sente),
+      «attiva» per tutti, minore compreso. **L'accensione la decide il banco col modello vero** (`--fasi riassunto`,
+      `CRITERIO_RIASSUNTO`): frasi ostili dette 0, comprese quelle forzate da pagine non segnate; scambi e negazioni
+      che restano dopo citazione e giudizio al più il 5 %; frasi vere tenute almeno il 70 %. Il 04/11, sulle scene del banco, 3 giri su 3: 0 su 106, 1,0–1,3 %, 83 %: passa. **Sulle
+      scene della terza revisione, scritte alla cieca, no:** ostili 2 su 60 e 3 su 63, mirate 2 su 15 e 3 su 22; scambi e negazioni 0 su 85,
+      vere 83–86 %. Decide chi amministra.
+    - **Copertura:** il copione deve arrivare in fondo alle pagine: il codice misura i terzi di pagina coperti, e sotto l'80 %, o sotto
+      l'80 % della durata voluta, fa al più 2 richieste mirate alle frasi scoperte, che possono solo aggiungere. Sulla DGX la accende chi amministra.
+
+    Alternative scartate: i controlli a liste su tutte le pagine (non convergono: la revisione); chiedere al modello
+    solo idee e far inserire i valori al codice (non si compone bene a orecchio); una rilettura di una persona (vedi
+    sopra); tenere gli scarti col testo per rileggerli (è materiale di un minore: solo conti).
+
+
 ## La generazione a lettura finita (#384, 04/11)
 
-57. **Dopo la scansione lo Studio prepara da solo, e chi studia trova pronto** (decisione di chi amministra del
+58. **Dopo la scansione lo Studio prepara da solo, e chi studia trova pronto** (decisione di chi amministra del
     04/11; rivede i punti 34, 36 e 41). Le regole di fondo non cambiano: il testo generato è un dato in busta,
     l'esito lo decide il codice, ogni voce ha la sua pagina.
     - **Nessuna chiave nuova.** `studio_carte_genera` e `studio_domande_genera`
@@ -1040,10 +1089,20 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
       non potrebbe più sostituirli, «Rifai gli argomenti» non varrebbe più).
     - **Pulite subito in uso, le altre fuori.** Carte e domande senza avvisi sono «attive», con la loro pagina visibile e
       «Togli» (`genera.stato_iniziale`). Quelle con un avviso restano «proposte»: non nel ripasso, non a voce, non
-      nelle prove, «Tieni» una per una. Due controlli diventano più stretti, perché manca la persona: i **valori**
-      della risposta contro le pagine (`genera.valori_fuori`: numeri, nomi propri, ogni parola di una risposta corta)
-      e **una sola** pagina citata con le istruzioni basta per l'avviso (prima tutte). A dover scegliere, una voce
-      buona in meno, come le mappe (punto 56).
+      nelle prove, «Tieni» una per una.
+    - **Nessuna persona valida prima: tre cancelli automatici** (decisione di chi amministra del 04/11, come il
+      punto 57). **Il codice** vuole una **frase** su cui la risposta si regge (`genera.appoggio`): i valori tutti lì,
+      la stessa negazione, le parole e i numeri della domanda lì o accanto, e non uno scambio con un valore della
+      frase accanto. «Il valore sta da qualche parte nella pagina» lasciava passare scambi e negazioni, come ha mostrato
+      la revisione del riassunto. **Una sola** pagina citata con le istruzioni basta per l'avviso (prima tutte). Il
+      **giudizio indipendente per coppia** (`genera.corpo_giudizio`, `Lettore._cancelli`): un'altra richiesta chiusa, senza
+      ciò che ha scritto la voce, con la frase e la voce in busta; solo un «si» tiene. Il **guardiano**, con le regole del
+      riassunto (`voce_guardia`, `riassunto_guardia`): per un minore senza guardiano o con un guasto, fuori. Un «falso» di un
+      vero o falso ora può passare: il codice trova la frase di cui parla, il giudizio dice se è il contrario. A dover
+      scegliere, una voce buona in meno, come le mappe (punto 56).
+    - **L'accensione dipende da un criterio numerico scritto**, non da una rilettura (`banco_rilettura.CRITERIO`): sulle
+      voci di fantasia con la verità nota, per carte e per domande separate, ostili tenute 0, sbagliate tenute al più
+      il 5 %, vere tenute almeno il 70 %. Una voce sbagliata che passa è un difetto del meccanismo.
     - **Si rifà solo la parte cambiata.** Ogni argomento ha la sua firma (`genera.firma_parte`, scritta in
       `studio_verifiche.firme_parti`, schema 17): si chiedono i soli argomenti con la firma diversa, con le sole loro
       pagine. **Non si perde ciò che la persona ha toccato**: una voce ripassata, corretta, tenuta, rimessa o usata in
@@ -1066,15 +1125,15 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
       Scartate: toglierle dalla serie (la pratica è vera), pesarle come le altre.
     - **Voce e agenti hanno la precedenza, come prima**: la guardia del lettore prima di ogni passo. Domande prima
       delle mappe, che sono tante richieste. **Il tutore** vede cosa è stato generato e lo toglie; orari e permessi dei
-      minori non cambiano. **Il posto dichiarato** per altro materiale (il riassunto, #386) è
-      `Lettore._passi_materiali`, con una riga in `Studio.pronto`.
-    - **Un modello non conferma se stesso.** Il banco (`prove/manuali/banco_rilettura.py`) tiene separati ciò che misura il
-      codice, ciò che misura un giudizio indipendente (un altro modello, contesto pulito, solo la pagina citata) e gli
-      errori iniettati, che misurano i primi due. I conti nel documento d'area. Sui dati veri solo conti e categorie.
+      minori non cambiano. **Il posto dichiarato** per altro materiale è `Lettore._passi_materiali`, con una riga in
+      `Studio.pronto`; il riassunto (punto 57) e la preparazione partono da soli a fine giro, con la voce ferma e il loro interruttore.
+    - **Lo stesso modello scrive e giudica**, in richieste separate: è un limite. Il banco lo misura con gli errori che fa
+      da solo e con una verità scritta prima. Sui dati veri solo conti e categorie.
 
-    Alternative scartate: un controllo del modello dentro il prodotto prima di mandare una voce (sarebbe una seconda
-    richiesta per voce sul modello della voce, e il banco non lo chiede ancora); le carte fuori dal ripasso finché non
-    le guarda un adulto (è ciò che la decisione rivede).
+    Alternative scartate: il giudizio sul modello della voce (più indipendente, ma contende la voce: qwen cede a voce e
+    agenti); le carte fuori dal ripasso finché non le guarda un adulto (è ciò che la decisione rivede); il controllo
+    delle frasi citate dal modello, come il riassunto (un prompt e uno schema nuovi per carte e domande: la frase la
+    trova il codice, e la funzione comune si può fare dopo).
 
 ## Conseguenze
 

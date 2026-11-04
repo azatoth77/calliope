@@ -42,7 +42,7 @@ solo in casa, accesi dal tutore; il tutore vede tutto nella sua vista e spegne s
 duelli, tutti o in parte, per ciascun minore. Per un adulto le stesse meccaniche, e gli
 interruttori li decide lui. Lo stato d'animo non entra mai.
 
-**Il materiale generato** (04/11, #384, decisione 0035 punto 57): generare costa zero, e un traguardo
+**Il materiale generato** (04/11, #384, decisione 0035 punto 58): generare costa zero, e un traguardo
 non può venire da ciò che nessuno ha scritto né riletto. Conta per la **pratica** (la serie, la stella
 del ripasso: una carta ripassata in due giorni è fatica vera, e con più carte quella stella è più
 lontana, mai più vicina), mai per la **riuscita**: nella stella di una prova le risposte alle voci
