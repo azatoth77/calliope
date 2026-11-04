@@ -950,6 +950,27 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     - **La conversazione è quella del proprietario**, se è l'ultima di quel satellite: senza, un «sì» non
       saprebbe a cosa risponde. Per quella frase i ricordi e gli avvisi del proprietario non arrivano al
       modello; la storia della conversazione sì.
+    - **Effetto 3** (04/11, #383; *[storico: «due effetti» fino al 04/11]*): vedi il punto 55.
+
+## Dal giro vero del 03/11 (#383, 04/11)
+
+55. **Una generazione tagliata tiene ciò che è intero, e chi studia non sente lo sviluppo.**
+    - **Una lista si salva a voci, una pagina no.** `finish_reason: length` su carte, domande e lezioni
+      non vuol dire «giro in tondo»: le voci intere passano dallo stesso controllo del codice (che toglie
+      anche i doppioni di un giro vero), e a temperatura 0 rifare la stessa richiesta dà lo stesso
+      taglio. Si richiede solo senza una voce intera. La pagina letta resta com'era: un pezzo di pagina
+      non è una pagina, e si rifà (punto del 30/10, #282).
+    - **La richiesta ci sta nel suo tetto.** Quante voci per argomento le dice il numero degli
+      argomenti, lo schema ha il tetto, e il budget di token basta per il tetto.
+    - **I codici degli argomenti li impone lo schema** (`enum`), e il codice legge anche «A1: titolo».
+    - **Effetto 3 della modalità studio:** su quel satellite niente promemoria degli sviluppi sospesi né
+      riga dello sviluppo aperto, a meno che si parli dello sviluppo. Il promemoria non si consuma.
+      È lo stato giusto perché dice già che su quel dispositivo si sta studiando, si chiude da solo e
+      non cambia permessi né configurazione.
+    - **Mai un vicolo cieco per una verifica che manca:** con una materia detta il modello riceve la
+      strada verso «crea» e le verifiche che ci sono, senza frase pronta. Senza materia resta lo stesso
+      «non la trovo» di una verifica di un altro. L'interrogazione senza domande dice ciò che usa
+      (scritte o confermate): che usi anche ciò che è generato è la #384.
 
 ## Conseguenze
 
