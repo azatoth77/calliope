@@ -1618,14 +1618,15 @@ def crea_app(hub: Schermi) -> Starlette:
                            "argomento_numero": c["argomento_numero"],
                            "argomento_titolo": titoli.get(c["argomento"]),
                            "pagine": [x for x in (nome(p) for p in c["pagine"]) if x],
+                           # Generata dalle pagine e mai toccata: la pagina lo dice (#384)
+                           "generata": st._generata(c),
                            "scatola": c["scatola"], "fra": c["fra"],
                            "da_ripassare": c["da_ripassare"], "nel_piano": c["nel_piano"],
                            **({"tasti": tasti(c)} if c["da_ripassare"] else {})}
                           for c in carte],
                 "da_ripassare": due,
                 "argomenti": [{"id": a["id"], "numero": i, "titolo": a["titolo"]}
-                              for i, a in enumerate(args, 1)
-                              if a["stato"] in ("tenuto", "aggiunto")],
+                              for i, a in enumerate(args, 1) if st._nel_piano(a)],
                 "massimi": {"domanda": C.DOMANDA_MAX, "risposta": C.RISPOSTA_MAX},
                 "prova": not st.per_schermi()}
 
@@ -2011,6 +2012,15 @@ def crea_app(hub: Schermi) -> Starlette:
         from ..studio import risposte as RS
         args = st.argomenti(prof, vid)
         d = st.domande(prof, vid)
+        pagine = {p["id"]: p for p in st.pagine(prof, vid)}
+
+        def nome_pagina(pid):
+            from ..studio import piano as P
+            p = pagine.get(pid)
+            if p is None:
+                return None
+            n = P.numero_leggibile(p["numero"])
+            return f"p. {n}" if n else f"foto {p['ordine']}"
         return {**st.prove(prof, vid),
                 "domande": [{"id": x["id"], "numero": x["numero"], "tipo": x["tipo"],
                              "testo": x["testo"], "opzioni": x["opzioni"],
@@ -2019,13 +2029,15 @@ def crea_app(hub: Schermi) -> Starlette:
                              "attesa": (RS.attesa_detta(x) if x.get("attesa") is not None
                                         else None), "chiave": x["chiave"],
                              "stato": x["stato"], "origine": x["origine"], "avvisi": x["avvisi"],
+                             # La pagina d'origine e se è generata e mai toccata (#384)
+                             "pagine": [y for y in (nome_pagina(p) for p in x["pagine"]) if y],
+                             "generata": st._generata(x),
                              "argomento_numero": x["argomento_numero"]}
                             for x in d["domande"]],
                 "domande_nascoste": d["nascoste"],
                 "risposte_nascoste": bool(d.get("risposte_nascoste")),
                 "argomenti": [{"id": a["id"], "numero": i, "titolo": a["titolo"]}
-                              for i, a in enumerate(args, 1)
-                              if a["stato"] in ("tenuto", "aggiunto")],
+                              for i, a in enumerate(args, 1) if st._nel_piano(a)],
                 "tipi": list(RS.TIPI),
                 "massimi": {"testo": RS.TESTO_MAX, "opzione": RS.OPZIONE_MAX,
                             "attesa": RS.ATTESA_MAX, "risposta": RS.RISPOSTA_MAX},

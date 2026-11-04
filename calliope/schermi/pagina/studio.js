@@ -574,6 +574,7 @@
     return b;
   }
 
+  const PRONTO_MS = 15000;
   async function caricaHome() {
     if (!sch() || !sch().studioHome) return;
     home.carica = true;
@@ -622,8 +623,17 @@
     else if (Number(l.totali)) righe.push("Pagine lette " + (Number(l.lette) || 0) + " di " + Number(l.totali) +
       ((Number(l.da_leggere) || 0) + (Number(l.in_lettura) || 0) ? (l.in_attesa ? ": leggo le altre quando la DGX è libera." : ": leggo le altre.") : "."));
     else righe.push("Nessuna pagina: fotografale da «Pagine».");
-    if (v.stato === "bozza" && v.argomenti && v.argomenti.proposti) righe.push("Gli argomenti aspettano la tua conferma.");
+    if (v.stato === "bozza" && v.argomenti && v.argomenti.proposti && !v.pronto) righe.push("Gli argomenti aspettano la tua conferma.");
     for (const x of righe) art.append(nodo("p", "studio-h-riga", x));
+    // Cosa è pronto dei materiali generati (#384): righe del server, solo conti; si aggiornano da
+    // sole mentre lavora, senza toccare niente
+    if (v.pronto && (v.pronto.righe || []).length) {
+      const pr = nodo("section", "studio-h-gruppo studio-h-pronto");
+      pr.setAttribute("role", "status");
+      pr.append(nodo("h4", "studio-h-sotto", v.pronto.in_corso ? "Sto preparando" : "Cosa è pronto"));
+      for (const x of v.pronto.righe) pr.append(nodo("p", "studio-h-riga", String(x)));
+      art.append(pr);
+    }
     // Oggi
     if (v.oggi) {
       const o = nodo("div", "studio-h-oggi");
@@ -854,6 +864,11 @@
     const sez = nodo("section", "studio-h-gruppo studio-t");
     sez.dataset.verifica = String(v.id);
     sez.append(nodo("h4", "studio-h-sotto", "Per te che lo segui"));
+    // Il tutore vede cosa è stato generato e può toglierlo (#384), da «Le carte» e «Le domande»
+    if (v.pronto && (Number(v.pronto.generate) || 0)) {
+      sez.append(nodo("p", "studio-h-riga", "Fra carte e domande ne ho preparate " + Number(v.pronto.generate) +
+        " dalle pagine: le vedi in «Le carte» e «Le domande» qui sotto, e puoi togliere quelle che non vanno."));
+    }
     const aperta = tut && tut.vid === v.id;
     const t = nodo("div", "studio-h-tasti");
     t.append(tastoTutore(aperta ? "Chiudi la vista del tutore" : "Vista del tutore", aperta ? "chiudi" : "apri",
@@ -1126,7 +1141,7 @@
     sez.append(nodo("h4", "studio-h-sotto", "Carte"));
     const c = v.carte || {};
     const n = Number(c.da_ripassare) || 0, tot = Number(c.totali) || 0;
-    sez.append(nodo("p", "studio-h-riga", !tot ? "Nessuna carta: scrivi le domande che vuoi ripassare." :
+    sez.append(nodo("p", "studio-h-riga", !tot ? (v.pronto && v.pronto.in_corso ? "Le carte le sto preparando dalle pagine." : "Nessuna carta: scrivi le domande che vuoi ripassare.") :
       n ? (n === 1 ? "Una carta da ripassare adesso." : n + " carte da ripassare adesso.") :
       "Nessuna carta da ripassare adesso" + (c.prossima ? ": la prossima " + String(c.prossima) + "." : ".")));
     const t = nodo("div", "studio-h-tasti");
@@ -1163,10 +1178,12 @@
     carta.append(nodo("span", "studio-h-etichetta", "Carta · " + coda.length + " da ripassare"),
       nodo("p", "studio-c-domanda", String(c.domanda || "")));
     if (c.argomento_titolo) carta.append(nodo("span", "studio-nota", String(c.argomento_titolo)));
-    if (carte.mostra) {
-      carta.append(nodo("p", "studio-c-risposta", String(c.risposta || "")));
-      if (Array.isArray(c.pagine) && c.pagine.length) carta.append(nodo("span", "studio-nota", c.pagine.map(String).join(", ")));
+    // La pagina d'origine sempre visibile, e chi l'ha fatta (#384)
+    if ((Array.isArray(c.pagine) && c.pagine.length) || c.generata) {
+      carta.append(nodo("span", "studio-nota studio-c-origine", (c.generata ? "Fatta da me: " : "") +
+        (Array.isArray(c.pagine) ? c.pagine.map(String).join(", ") : "")));
     }
+    if (carte.mostra) carta.append(nodo("p", "studio-c-risposta", String(c.risposta || "")));
     p.append(carta);
     const t = nodo("div", "studio-h-tasti studio-c-esiti");
     if (!carte.mostra) {
@@ -1177,7 +1194,7 @@
         tastoCarte("Quasi · " + String(k.quasi || ""), "esito", { carta: c.id, esito: "quasi" }),
         tastoCarte("La sapevo · " + String(k.sapevo || ""), "esito", { carta: c.id, esito: "sapevo" }, "studio-h-primo"));
     }
-    t.append(tastoCarte("Basta così", "chiudi", {}));
+    t.append(tastoCarte("Togli questa carta", "togli", { carta: c.id }), tastoCarte("Basta così", "chiudi", {}));
     p.append(t);
     return p;
   }
@@ -1193,13 +1210,15 @@
     const m = carte.modulo;
     if (m) p.append(moduloCarta(m, d));
     else p.append(tastoCarte("Scrivi una carta", "scrivi", {}, "studio-h-primo"));
-    // Le carte proposte dal modello: nessuna entra nel ripasso senza la persona o il tutore
+    // Le carte proposte dal modello: quelle pulite sono già nel ripasso con la generazione a lettura
+    // finita (#384), qui restano quelle con un avviso, che si tengono una per una
     const prop = (Array.isArray(d.carte) ? d.carte : []).filter((c) => c.stato === "proposta");
     if (prop.length) {
       const pulite = prop.filter((c) => !(c.avvisi || []).length).length;
-      p.append(nodo("p", "studio-h-riga", (prop.length === 1 ? "Una carta proposta" : prop.length + " carte proposte") +
-        " dalle pagine: entrano nel ripasso quando le confermi." +
-        (pulite < prop.length ? " Quelle con un avviso le tieni una per una." : "")));
+      p.append(nodo("p", "studio-h-riga", pulite
+        ? (prop.length === 1 ? "Una carta proposta" : prop.length + " carte proposte") + " dalle pagine: entrano nel ripasso quando le confermi." +
+          (pulite < prop.length ? " Quelle con un avviso le tieni una per una." : "")
+        : (prop.length === 1 ? "Una carta da guardare" : prop.length + " carte da guardare") + ": restano fuori dal ripasso, se vuoi le tieni una per una."));
       if (pulite) p.append(tastoCarte("Conferma le carte proposte", "conferma", {}, "studio-h-primo"));
     }
     const ul = nodo("ul", "studio-h-elenco");
@@ -1209,7 +1228,7 @@
       tx.append(nodo("b", null, String(c.domanda || "")), nodo("span", "studio-c-risp", c.risposta === null || c.risposta === undefined
         ? "La risposta si vede dopo la consegna della prova aperta." : String(c.risposta || "")));
       const info = [c.argomento_numero ? "argomento " + c.argomento_numero : "",
-        STATI_CARTA[c.stato] || "", c.stato === "attiva" && !c.nel_piano ? "argomento fuori dal piano" : "",
+        STATI_CARTA[c.stato] || "", c.stato === "attiva" && c.generata ? "fatta da me dalle pagine" : "", c.stato === "attiva" && !c.nel_piano ? "argomento fuori dal piano" : "",
         c.stato === "attiva" && c.nel_piano ? (c.da_ripassare ? "da ripassare" : c.fra ? "di nuovo " + c.fra : "") : "",
         (Array.isArray(c.pagine) && c.pagine.length) ? c.pagine.map(String).join(", ") : ""].filter(Boolean).join(" · ");
       if (info) tx.append(nodo("span", "studio-nota", info));
@@ -1377,8 +1396,9 @@
     const ap = c.aperta;
     if (ap && ap.modalita === "orale") sez.append(nodo("p", "studio-h-riga", "C'è un'interrogazione a voce in corso."));
     if (!ap && (Number(c.pronte) || 0) < (Number(c.minimo) || 3)) {
-      sez.append(nodo("p", "studio-h-riga", "Per una prova servono almeno " + (Number(c.minimo) || 3) +
-        " domande sugli argomenti del piano: scrivile qui o fai le carte."));
+      sez.append(nodo("p", "studio-h-riga", v.pronto
+        ? (v.pronto.in_corso ? "Le domande le sto preparando dalle pagine: appena ci sono puoi fare una prova." : "Per una prova non ho domande pronte: puoi scriverle qui.")
+        : "Per una prova servono almeno " + (Number(c.minimo) || 3) + " domande sugli argomenti del piano: scrivile qui o fai le carte."));
     }
     const t = nodo("div", "studio-h-tasti");
     const aperta = prove && prove.vid === v.id;
@@ -1510,8 +1530,9 @@
     const prop = (Array.isArray(d.domande) ? d.domande : []).filter((x) => x.stato === "proposta");
     if (prop.length) {
       const pulite = prop.filter((x) => !(x.avvisi || []).length).length;
-      p.append(nodo("p", "studio-h-riga", (prop.length === 1 ? "Una domanda proposta" : prop.length + " domande proposte") +
-        " dalle pagine: entrano nelle prove quando le confermi."));
+      p.append(nodo("p", "studio-h-riga", pulite
+        ? (prop.length === 1 ? "Una domanda proposta" : prop.length + " domande proposte") + " dalle pagine: entrano nelle prove quando le confermi."
+        : (prop.length === 1 ? "Una domanda da guardare" : prop.length + " domande da guardare") + ": restano fuori dalle prove, se vuoi le tieni una per una."));
       if (pulite) p.append(tastoProve("Conferma le domande proposte", "conferma_domande", {}, "studio-h-primo"));
     }
     const ul = nodo("ul", "studio-h-elenco");
@@ -1523,7 +1544,8 @@
       tx.append(nodo("span", "studio-c-risp", x.attesa === null || x.attesa === undefined
         ? "La risposta si vede dopo la consegna della prova aperta." : "Risposta: " + String(x.attesa || "")));
       const info = [TIPI_D[x.tipo] || String(x.tipo), x.argomento_numero ? "argomento " + x.argomento_numero : "",
-        x.stato === "proposta" ? "proposta da me dalle pagine: controllala" : x.stato === "tolta" ? "tolta" : ""].filter(Boolean).join(" · ");
+        x.stato === "proposta" ? "proposta da me dalle pagine: controllala" : x.stato === "tolta" ? "tolta" : x.generata ? "fatta da me dalle pagine" : "",
+        (Array.isArray(x.pagine) && x.pagine.length) ? x.pagine.map(String).join(", ") : ""].filter(Boolean).join(" · ");
       tx.append(nodo("span", "studio-nota", info));
       for (const a of Array.isArray(x.avvisi) ? x.avvisi : []) tx.append(nodo("span", "studio-avviso", AVVISI_D[a] || String(a)));
       const nome = "«" + String(x.testo || "").slice(0, 60) + "»";
@@ -3288,6 +3310,16 @@
     // Le prove (passo 8, #248): le risposte e «Scrivi una domanda»; il tempo che resta
     $("studio-home").addEventListener("input", suCampoProve);
     $("studio-home").addEventListener("change", suCampoProve);
+    // Mentre lo Studio prepara i materiali la scheda si aggiorna da sola (#384), solo con la home a
+    // riposo: mai sotto una carta, una prova, una mappa o un campo aperti
+    setInterval(() => {
+      if (!st.aperta || home.carica || carte || prove || document.hidden) return;
+      const vv = (home.dati && home.dati.verifiche) || [];
+      if (!vv.some((v) => v.pronto && v.pronto.in_corso)) return;
+      const box = $("studio-home");
+      if (!box || box.querySelector("input, textarea, select, svg.studio-m-tela")) return;
+      caricaHome();
+    }, PRONTO_MS);
     setInterval(() => {
       const el = document.querySelector(".studio-p-tempo");
       if (el && prove && prove.dati && prove.dati.aperta) metti(el, restano(prove.dati.aperta));

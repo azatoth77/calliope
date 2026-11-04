@@ -762,59 +762,14 @@ class Lettore:
                     return {"fatte": fatte, "aspetta": esito}
                 fatte += 1
                 continue
-            # Le carte di una verifica aperta con gli argomenti confermati (passo 6, #246), con
-            # la stessa guardia: dopo gli argomenti, prima delle pagine di un'altra verifica
-            per_carte = self.studio.verifiche_per_carte()
-            if per_carte:
-                motivo = self.guardia.motivo()
-                if motivo is not None:
-                    if motivo != self.in_attesa:
-                        self._registra(f"carte in attesa: {motivo}")
-                    self.in_attesa = motivo
-                    self.misure["attese"] += 1
-                    return {"fatte": fatte, "aspetta": motivo}
-                self.in_attesa = None
-                esito = self.genera_carte(per_carte[0])
-                if esito in ("ceduta", "giu", "errore", "errore_server"):
-                    return {"fatte": fatte, "aspetta": esito}
+            # A lettura finita la verifica si apre da sola, senza la conferma (#384); poi i materiali
+            self.studio.apri_pronte()
+            esito = self._materiali_del_giro()
+            if esito == "fatto":
                 fatte += 1
                 continue
-            # Lo scheletro della mappa (passo 7, seconda parte, #247), con la stessa guardia: dopo
-            # le carte, prima delle pagine di un'altra verifica
-            per_mappa = self.studio.verifiche_per_mappa()
-            if per_mappa:
-                motivo = self.guardia.motivo()
-                if motivo is not None:
-                    if motivo != self.in_attesa:
-                        self._registra(f"mappa in attesa: {motivo}")
-                    self.in_attesa = motivo
-                    self.misure["attese"] += 1
-                    return {"fatte": fatte, "aspetta": motivo}
-                self.in_attesa = None
-                # Un passo alla volta (la generale o una parte): fra un passo e l'altro passano
-                # prima gli argomenti e le carte di una verifica nuova (#385)
-                esito = self.prepara_mappe(per_mappa[0], passi=1)
-                if esito in ("ceduta", "giu", "errore", "errore_server"):
-                    return {"fatte": fatte, "aspetta": esito}
-                fatte += 1
-                continue
-            # Le domande delle prove (passo 8, #248), con la stessa guardia: dopo lo scheletro,
-            # prima delle pagine di un'altra verifica
-            per_domande = self.studio.verifiche_per_domande()
-            if per_domande:
-                motivo = self.guardia.motivo()
-                if motivo is not None:
-                    if motivo != self.in_attesa:
-                        self._registra(f"domande in attesa: {motivo}")
-                    self.in_attesa = motivo
-                    self.misure["attese"] += 1
-                    return {"fatte": fatte, "aspetta": motivo}
-                self.in_attesa = None
-                esito = self.genera_domande(per_domande[0])
-                if esito in ("ceduta", "giu", "errore", "errore_server"):
-                    return {"fatte": fatte, "aspetta": esito}
-                fatte += 1
-                continue
+            if esito is not None:
+                return {"fatte": fatte, "aspetta": esito}
             righe = self.prossime(50)
             # Dopo una caduta si prova prima un'altra pagina: se va, la colpa è della pagina
             # caduta; se cade anche lei, è del server (seconda nota della PR #314)
@@ -848,6 +803,39 @@ class Lettore:
                 return {"fatte": fatte, "aspetta": esito}
             fatte += 1
         return {"fatte": fatte}
+
+    # ── i materiali generati ──
+    def _passi_materiali(self) -> list[tuple]:
+        """**Il posto dichiarato di ciò che si genera a lettura finita** (#384): (nome, le verifiche
+        da fare, chi fa un passo). Un materiale nuovo (il riassunto, #386) è una riga qui, con la sua
+        lista e il suo ingresso, e una riga in `Studio.pronto`. Dopo gli argomenti e prima delle pagine
+        di un'altra verifica. Le domande prima delle mappe (#384): «mi interroghi?» arriva subito dopo
+        la scansione, e le mappe sono tante richieste."""
+        return [("carte", self.studio.verifiche_per_carte, self.genera_carte),
+                ("domande", self.studio.verifiche_per_domande, self.genera_domande),
+                # Un passo alla volta (la generale o una parte): fra un passo e l'altro passano
+                # prima gli argomenti e le carte di una verifica nuova (#385)
+                ("mappa", self.studio.verifiche_per_mappa,
+                 lambda v: self.prepara_mappe(v, passi=1))]
+
+    def _materiali_del_giro(self) -> str | None:
+        """Un passo sui materiali, con la guardia del lettore (voce e agenti hanno la precedenza):
+        «fatto», None (niente da fare), o il motivo per cui aspettare."""
+        for cosa, verifiche, fai in self._passi_materiali():
+            da_fare = verifiche()
+            if not da_fare:
+                continue
+            motivo = self.guardia.motivo()
+            if motivo is not None:
+                if motivo != self.in_attesa:
+                    self._registra(f"{cosa} in attesa: {motivo}")
+                self.in_attesa = motivo
+                self.misure["attese"] += 1
+                return motivo
+            self.in_attesa = None
+            esito = fai(da_fare[0])
+            return esito if esito in ("ceduta", "giu", "errore", "errore_server") else "fatto"
+        return None
 
     # ── gli esercizi guidati (31/10, issue #278, studio/esercizi.py) ──
     def _esercizi_del_giro(self) -> str | None:
@@ -1345,14 +1333,21 @@ class Lettore:
         modo = v["_modo"]
         firma = G.firma(v["_argomenti"], v["_pagine"], modo)
         rif = A.riferimenti(v["_pagine"])
-        arif = G.argomenti_rif(v["_argomenti"])
+        tutti = G.argomenti_rif(v["_argomenti"])
+        # Solo la parte cambiata (#384): con gli argomenti di prima non si chiede niente
+        arif = G.da_rifare(tutti, v["_pagine"], modo, self.studio.firme_parti(vid, "carte"))
+        rifatti = {int(a["id"]) for _r, a in arif}
+        if not arif:
+            n = self.studio.proponi_carte(vid, firma, [], G.PROPOSTE, modo, rifatti=rifatti)
+            return "cambiate" if n is None else "proposte"
+        rif_r = rif if len(arif) == len(tutti) else G.pagine_di_parte(rif, arif)
         t0 = time.monotonic()
         grezzi = None
         try:
             # Un argomento con una carta già decisa è coperto (#388): non si richiede
             decisi = self.studio.argomenti_decisi(vid, "studio_carte")
             grezzi, _finita = self._chiedi_lista(
-                lambda ar: G.corpo(self.modello, v, rif, ar), arif, m, vid, "carte", G.leggi,
+                lambda ar: G.corpo(self.modello, v, rif_r, ar), arif, m, vid, "carte", G.leggi,
                 G.parziale, lambda voci: _puliti(G.proposte(voci, rif, arif)) | decisi,
                 lambda x: bool(_puliti(G.proposte([x], rif, arif))))
         except Ceduta:
@@ -1378,7 +1373,7 @@ class Lettore:
                 proposte, esito = [], G.ROTTO
             else:
                 proposte, esito = G.proposte(grezzi, rif, arif), G.PROPOSTE
-            n = self.studio.proponi_carte(vid, firma, proposte, esito, modo)
+            n = self.studio.proponi_carte(vid, firma, proposte, esito, modo, rifatti=rifatti)
         except Exception as e:  # noqa: BLE001
             return self._errore_generazione("carte", vid, e, lambda: self.studio.proponi_carte(
                 vid, firma, [], G.ERRORE, modo))
@@ -1392,9 +1387,10 @@ class Lettore:
         if esito == G.ROTTO:
             m["rotte"] += 1
             self._registra(f"verifica {vid}: carte illeggibili ({s:.1f} s)")
-            self._copertura(vid, "carte", arif, decisi)
+            self._copertura(vid, "carte", tutti, decisi | self._fermi(vid, "carte", tutti, rifatti))
             return "rotto"
-        self._copertura(vid, "carte", arif, _puliti(proposte) | decisi)
+        self._copertura(vid, "carte", tutti,
+                        _puliti(proposte) | decisi | self._fermi(vid, "carte", tutti, rifatti))
         m["carte"] += n
         if modo == G.OMBRA:
             m["ombra"] += n
@@ -1404,7 +1400,7 @@ class Lettore:
         if not n:
             m["vuote"] += 1
         avv = ", ".join(f"{k} {a}" for a, k in conta.items() if k)
-        self._registra(f"verifica {vid}: {n} carte {'in ombra' if modo == G.OMBRA else 'proposte'}"
+        self._registra(f"verifica {vid}: {n} carte {'in ombra' if modo == G.OMBRA else 'nuove'}"
                        f" da {len(arif)} argomenti ({s:.1f} s" + (f", avvisi {avv}" if avv else "")
                        + ")")
         return "proposte"
@@ -1468,6 +1464,12 @@ class Lettore:
             finita = finita or not tagliata
         return voci, finita
 
+    def _fermi(self, vid: int, cosa: str, tutti: list, rifatti: set) -> set:
+        """Gli argomenti non rifatti in questo giro e già coperti l'altra volta: restano coperti."""
+        prima = set((self.studio.scoperti_di(vid).get(cosa) or {}).get("argomenti") or ())
+        return {int(a["id"]) for _r, a in tutti if int(a["id"]) not in rifatti
+                and int(a["id"]) not in prima}
+
     def _copertura(self, vid: int, cosa: str, arif: list, coperti, finita: bool = True):
         """Scrive cosa è rimasto scoperto dopo il controllo del codice (`Studio.segna_scoperti`:
         gli argomenti fuori da `coperti`, quelli con una voce senza avvisi, e `valori` se reazioni e
@@ -1491,13 +1493,20 @@ class Lettore:
         modo = v["_modo"]
         firma = DG.firma(v["_argomenti"], v["_pagine"], modo)
         rif = A.riferimenti(v["_pagine"])
-        arif = G.argomenti_rif(v["_argomenti"])
+        tutti = G.argomenti_rif(v["_argomenti"])
+        # Solo la parte cambiata (#384), come le carte
+        arif = DG.da_rifare(tutti, v["_pagine"], modo, self.studio.firme_parti(vid, "domande"))
+        rifatti = {int(a["id"]) for _r, a in arif}
+        if not arif:
+            n = self.studio.proponi_domande(vid, firma, [], DG.PROPOSTE, modo, rifatti=rifatti)
+            return "cambiate" if n is None else "proposte"
+        rif_r = rif if len(arif) == len(tutti) else DG.pagine_di_parte(rif, arif)
         t0 = time.monotonic()
         grezzi = None
         try:
             decisi = self.studio.argomenti_decisi(vid, "studio_domande")
             grezzi, _finita = self._chiedi_lista(
-                lambda ar: DG.corpo(self.modello, v, rif, ar), arif, m, vid, "domande", DG.leggi,
+                lambda ar: DG.corpo(self.modello, v, rif_r, ar), arif, m, vid, "domande", DG.leggi,
                 DG.parziale, lambda voci: _puliti(DG.proposte(voci, rif, arif)) | decisi,
                 lambda x: bool(_puliti(DG.proposte([x], rif, arif))))
         except Ceduta:
@@ -1521,7 +1530,7 @@ class Lettore:
                 proposte, esito = [], DG.ROTTO
             else:
                 proposte, esito = DG.proposte(grezzi, rif, arif), DG.PROPOSTE
-            n = self.studio.proponi_domande(vid, firma, proposte, esito, modo)
+            n = self.studio.proponi_domande(vid, firma, proposte, esito, modo, rifatti=rifatti)
         except Exception as e:  # noqa: BLE001
             return self._errore_generazione("domande", vid, e, lambda: (
                 self.studio.proponi_domande(vid, firma, [], DG.ERRORE, modo)))
@@ -1535,9 +1544,11 @@ class Lettore:
         if esito == DG.ROTTO:
             m["rotte"] += 1
             self._registra(f"verifica {vid}: domande illeggibili ({s:.1f} s)")
-            self._copertura(vid, "domande", arif, decisi)
+            self._copertura(vid, "domande", tutti,
+                            decisi | self._fermi(vid, "domande", tutti, rifatti))
             return "rotto"
-        self._copertura(vid, "domande", arif, _puliti(proposte) | decisi)
+        self._copertura(vid, "domande", tutti,
+                        _puliti(proposte) | decisi | self._fermi(vid, "domande", tutti, rifatti))
         m["domande"] += n
         if modo == DG.OMBRA:
             m["ombra"] += n
@@ -1552,7 +1563,7 @@ class Lettore:
         tipi = ", ".join(f"{t} {sum(d['tipo'] == t for d in proposte)}" for t in
                          dict.fromkeys(d["tipo"] for d in proposte))
         self._registra(f"verifica {vid}: {n} domande "
-                       f"{'in ombra' if modo == DG.OMBRA else 'proposte'} da {len(arif)} "
+                       f"{'in ombra' if modo == DG.OMBRA else 'nuove'} da {len(arif)} "
                        f"argomenti ({s:.1f} s" + (f"; tipi {tipi}" if tipi else "")
                        + (f"; avvisi {avv}" if avv else "") + ")")
         return "proposte"

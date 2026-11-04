@@ -1195,7 +1195,7 @@ class Mappe:
                 pagine = [dict(r) for r in db.execute(
                     "SELECT p.* FROM studio_pagine p JOIN studio_materiali m ON m.id = p.materiale"
                     " WHERE m.verifica = ?", (int(vid),))]
-                arg = None if a is None or a["stato"] not in D.ARGOMENTI_DEL_PIANO else {
+                arg = None if a is None or not self._nel_piano(a) else {
                     "id": a["id"], "titolo": a["titolo"],
                     "pagine": [int(x) for x in D.da_j(a["pagine"]) if str(x).isdecimal()]}
                 if v is None or arg is None or MG.firma_parte(arg, pagine, modo_) != firma:
@@ -1263,7 +1263,7 @@ class Mappe:
                          "pagine": [int(x) for x in D.da_j(a["pagine"]) if str(x).isdecimal()]}
                         for a in db.execute("SELECT * FROM studio_argomenti WHERE verifica = ? "
                                             "ORDER BY ordine, id", (int(vid),)).fetchall()
-                        if a["stato"] in D.ARGOMENTI_DEL_PIANO]
+                        if self._nel_piano(a)]
                 si, rifare = self._scheletro_toccabile(db, vid)
                 if v is None or not si or MG.firma(args, pagine, modo_) != firma:
                     db.rollback()
@@ -1461,7 +1461,7 @@ class Mappe:
                 "consigli": M.modo_consigli(self.cfg) != "spenta",
                 "argomenti": [{"id": a["id"], "numero": i, "titolo": a["titolo"]}
                               for i, a in enumerate(self.argomenti(chi, vid), 1)
-                              if a["stato"] in D.ARGOMENTI_DEL_PIANO],
+                              if self._nel_piano(a)],
                 "pagine": [{"id": k, "nome": x} for k, x in pagine.items()],
                 "aiuto": aiuto, "aiuti": dict(M.AIUTI),
                 "puo": {"scheletro": v["stato"] in ("bozza", "aperta") and not (

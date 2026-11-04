@@ -910,7 +910,8 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
                                "id = ?", (D.j(av), a["id"]))
                     # I tentativi e le carte degli uniti passano a quello che resta (passo 6,
                     # nota 2 della revisione della PR #323): la padronanza non li perde
-                    for t in ("studio_tentativi", "studio_carte"):
+                    # Anche le domande (#384): quelle generate resterebbero fuori dalle prove
+                    for t in ("studio_tentativi", "studio_carte", "studio_domande"):
                         db.execute(f"UPDATE {t} SET argomento = ? WHERE verifica = ? AND "
                                    "argomento = ?", (primo["id"], vid, a["id"]))
                 db.commit()
@@ -1008,11 +1009,29 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
                 else:
                     # Via i proposti che la persona non ha toccato; un proposto rinominato
                     # (titolo diverso da quello del modello) è una sua decisione e resta
+                    nuovi = {A.chiave(a["titolo"]): a for a in proposte}
+                    auto = self.generazione_automatica()
                     for r in db.execute("SELECT id, titolo, titolo_modello FROM studio_argomenti "
                                         "WHERE verifica = ? AND stato = 'proposto'",
                                         (int(vid),)).fetchall():
-                        if not A.rinominato(r["titolo"], r["titolo_modello"]):
-                            db.execute("DELETE FROM studio_argomenti WHERE id = ?", (r["id"],))
+                        if A.rinominato(r["titolo"], r["titolo_modello"]):
+                            continue
+                        # Con la generazione a lettura finita un proposto ha già carte e domande: lo
+                        # stesso titolo resta la stessa riga, con le pagine nuove (#384). Si rifà solo
+                        # se le sue pagine sono cambiate, e nessuna voce resta senza argomento
+                        if auto and A.chiave(r["titolo"]) in nuovi:
+                            a = nuovi[A.chiave(r["titolo"])]
+                            db.execute("UPDATE studio_argomenti SET pagine = ?, avvisi = ? WHERE id = ?",
+                                       (D.j(p for p in a["pagine"] if p in vive),
+                                        D.j(a["avvisi"]) if a["avvisi"] else None, r["id"]))
+                            continue
+                        if auto and self._materiale_toccato(db, vid, r["id"]):
+                            continue
+                        db.execute("DELETE FROM studio_argomenti WHERE id = ?", (r["id"],))
+                        if auto:
+                            for tab in ("studio_carte", "studio_domande"):
+                                db.execute(f"DELETE FROM {tab} WHERE verifica = ? AND argomento = ? "
+                                           "AND origine = 'modello'", (int(vid), r["id"]))
                 # I titoli decisi: quelli che restano e quelli del modello sotto una rinomina, che
                 # non si ripropongono accanto al titolo della persona
                 decisi = set()
@@ -1044,6 +1063,19 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
                     db.rollback()
                 raise
         return n
+
+    def _materiale_toccato(self, db, vid, aid) -> bool:
+        """L'argomento ha una carta o una domanda che la persona ha toccato: un'estrazione nuova non
+        lo cancella, anche se non lo trova più (#384). Le voci usate in una prova o tolte contano."""
+        args = [{"id": int(aid)}]
+        for tab in ("studio_carte", "studio_domande"):
+            tutte = {r["id"] for r in db.execute(
+                f"SELECT id FROM {tab} WHERE verifica = ? AND argomento = ? AND stato != 'ombra'",
+                (int(vid), int(aid))).fetchall()}
+            if tutte - set(self._da_rifare(db, tab, vid, {int(aid)}, args)):
+                return True
+        return db.execute("SELECT 1 FROM studio_tentativi WHERE verifica = ? AND argomento = ? "
+                          "LIMIT 1", (int(vid), int(aid))).fetchone() is not None
 
     # ── giorni ──
     def imposta_giorno(self, chi, giorno, minuti: int | None, motivo: str = "minuti",
@@ -1175,7 +1207,8 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
         return self.modo_padronanza == PD.MOSTRATA and self.per_schermi()
 
     def registra_tentativo(self, chi, vid, argomento, tipo: str, esito: str,
-                           fonte: str = "persona", giorno=None, carta=None) -> int:
+                           fonte: str = "persona", giorno=None, carta=None,
+                           generata: bool = False) -> int:
         """Un tentativo su un argomento della verifica: `tipo` in `padronanza.TIPI`, `esito` in
         `padronanza.ESITI`, `fonte` (chi ha deciso l'esito) in `padronanza.FONTI`, mai il modello
         da solo. Solo codici e id: nessun testo. Poi la misura del giorno. L'id del tentativo.
@@ -1207,10 +1240,10 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
             raise ValueError("il giorno è dopo oggi")
         tid = self.dati.scrivi(
             "INSERT INTO studio_tentativi (verifica, persona, argomento, giorno, ora, tipo, esito, "
-            "fonte, chi, carta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "fonte, chi, carta, generata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (v["id"], str(v["persona"]), a["id"], g.isoformat(),
              adesso.isoformat(timespec="seconds"), tipo, esito, fonte,
-             getattr(chi, "id", None), int(carta) if carta is not None else None))
+             getattr(chi, "id", None), int(carta) if carta is not None else None, int(bool(generata))))
         self.misure["padronanza"]["tentativi"] += 1
         try:
             self._misura_padronanza(v)
@@ -1226,10 +1259,10 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
                                  "ORDER BY ordine, id", (int(vid),))
         return [{"id": a["id"], "numero": i, "titolo": a["titolo"],
                  "pagine": [int(x) for x in D.da_j(a["pagine"]) if str(x).isdecimal()]}
-                for i, a in enumerate(elenco, 1) if a["stato"] in D.ARGOMENTI_DEL_PIANO]
+                for i, a in enumerate(elenco, 1) if self._nel_piano(a)]
 
     def _padronanza_di(self, vid) -> tuple[list[dict], dict]:
-        tent = self.dati.tutti("SELECT id, argomento, giorno, ora, tipo, esito, fonte FROM "
+        tent = self.dati.tutti("SELECT id, argomento, giorno, ora, tipo, esito, fonte, generata FROM "
                                "studio_tentativi WHERE verifica = ?", (int(vid),))
         return self._argomenti_numerati(vid), PD.calcola(tent, self._oggi())
 
@@ -1430,6 +1463,132 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
                        f"({self._chi_registro(chi, v['persona'])})")
         return {"confermate": n, "da_decidere": d}
 
+    # ── la generazione a lettura finita (04/11, #384, decisione 0035 punto 57) ──
+    def generazione_automatica(self) -> bool:
+        """Carte o domande su «attiva»: la verifica si apre da sola a lettura finita, e gli argomenti
+        proposti senza avvisi valgono come quelli del piano finché la persona non li corregge. La
+        mappa da sola non basta: `studio_mappa_genera` è «attiva» sulla DGX dal 30/10 con gli argomenti
+        confermati, e un aggiornamento non deve cambiarle il comportamento."""
+        from . import domande_genera as DG
+        from . import genera as G
+        return G.modo(self.cfg) == G.ATTIVA or DG.modo(self.cfg) == DG.ATTIVA
+
+    def _nel_piano(self, a) -> bool:
+        """L'argomento (una riga, con `stato` e `avvisi`) conta per il piano e per ciò che si
+        genera: tenuto o aggiunto; con la generazione a lettura finita anche proposto senza un avviso
+        da decidere. Confermarlo non cambia niente, e nemmeno la sua firma: per questo la conferma
+        non rifà i materiali."""
+        if a["stato"] in D.ARGOMENTI_DEL_PIANO:
+            return True
+        if a["stato"] != "proposto" or not self.generazione_automatica():
+            return False
+        from .argomenti import DA_DECIDERE
+        av = a["avvisi"]
+        return not set(av if isinstance(av, list) else D.da_j(av)) & set(DA_DECIDERE)
+
+    def apri_pronte(self) -> list[int]:
+        """Le verifiche in bozza con le pagine tutte lette e almeno un argomento buono si aprono da
+        sole, col piano (`generazione_automatica`; dal giro del lettore). Prima la conferma faceva
+        anche questo; adesso resta per correggere. Gli id aperti."""
+        from . import argomenti as A
+        if not self.generazione_automatica() or not self.dati.scrivibile:
+            return []
+        out = []
+        for v in self.dati.tutti("SELECT * FROM studio_verifiche WHERE stato = 'bozza' AND data >= ?",
+                                 (self._oggi().isoformat(),)):
+            if self.importazione_viva(v["id"]):
+                continue
+            pagine = self._pagine_di(v["id"])
+            if (not A.pronta(pagine) or v["argomenti_firma"] != A.firma(pagine)
+                    or not self._argomenti_per_carte(v["id"])):
+                continue
+            if self.dati.scrivi("UPDATE studio_verifiche SET stato = 'aperta' WHERE id = ? AND "
+                                "stato = 'bozza'", (v["id"],)):
+                self._registra(f"verifica {v['id']}: aperta da sola a lettura finita")
+                self._ricalcola_sicuro(v["id"])
+                out.append(v["id"])
+        return out
+
+    @staticmethod
+    def _generata(r) -> bool:
+        """Una carta o una domanda scritta dal modello e che nessuno ha toccato: corretta è della
+        persona (`origine`), tenuta o rimessa ha `modificata`. Vale per i premi e la padronanza."""
+        return r["origine"] == "modello" and not r["modificata"]
+
+    def firme_parti(self, vid, cosa: str) -> dict:
+        """{id dell'argomento (testo): firma} all'ultima generazione di `cosa` (carte, domande)."""
+        r = self.dati.uno("SELECT firme_parti FROM studio_verifiche WHERE id = ?", (int(vid),))
+        try:
+            x = json.loads((r or {}).get("firme_parti") or "{}")
+        except ValueError:
+            x = {}
+        y = x.get(cosa) if isinstance(x, dict) else None
+        return y if isinstance(y, dict) else {}
+
+    def _scrivi_firme(self, db, vid, cosa: str, args: list[dict], pagine: list[dict], modo_: str,
+                      rifatti):
+        """Le firme degli argomenti appena rifatti (`rifatti` None: tutti), dentro la transazione;
+        via quelle degli argomenti che non ci sono più (se tornano, si rifanno)."""
+        from . import genera as G
+        r = db.execute("SELECT firme_parti FROM studio_verifiche WHERE id = ?", (int(vid),)).fetchone()
+        try:
+            tutte = json.loads(r["firme_parti"] or "{}")
+        except (TypeError, ValueError):
+            tutte = {}
+        if not isinstance(tutte, dict):
+            tutte = {}
+        vive = {str(a["id"]) for a in args}
+        mie = {k: f for k, f in (tutte.get(cosa) or {}).items() if k in vive}
+        for a in args:
+            if rifatti is None or int(a["id"]) in rifatti:
+                mie[str(a["id"])] = G.firma_parte(a, pagine, modo_)
+        tutte[cosa] = mie
+        db.execute("UPDATE studio_verifiche SET firme_parti = ? WHERE id = ?",
+                   (json.dumps(tutte), int(vid)))
+
+    @staticmethod
+    def _da_rifare(db, tabella: str, vid, rifatti, args: list[dict]) -> list[int]:
+        """Le voci del modello da togliere prima di scrivere le nuove (`tabella` la scrive il codice).
+        Dell'ombra e proposte: di un argomento rifatto o che non è più nel piano. Quelle in uso solo di
+        un argomento rifatto, e **mai una toccata**: ripassata, corretta (è già della persona), tenuta
+        o rimessa, o usata in una prova, aperta o chiusa, che ne tiene l'id. Quelle tolte restano: la
+        domanda uguale non torna. Una carta in uso di un argomento uscito dal piano dorme: se
+        l'argomento torna, torna anche lei."""
+        usate = set()
+        for r in db.execute("SELECT voci FROM studio_prove WHERE verifica = ?", (int(vid),)):
+            try:
+                voci = json.loads(r["voci"] or "[]")
+            except (TypeError, ValueError):
+                voci = []
+            usate |= {(x.get("fonte"), x.get("id")) for x in voci if isinstance(x, dict)}
+        fonte = "carta" if tabella == "studio_carte" else "domanda"
+        nel_piano = {int(a["id"]) for a in args}
+        out = []
+        for r in db.execute(f"SELECT * FROM {tabella} WHERE verifica = ? AND origine = 'modello' AND "
+                            "stato IN ('proposta', 'ombra', 'attiva')", (int(vid),)).fetchall():
+            d = dict(r)
+            rifatta = rifatti is None or d["argomento"] in rifatti
+            if d["stato"] != "attiva":
+                if rifatta or d["argomento"] not in nel_piano:
+                    out.append(d["id"])
+            elif rifatta and not (d["modificata"] or d.get("ultima")
+                                  or (fonte, d["id"]) in usate):
+                out.append(d["id"])
+        return out
+
+    @staticmethod
+    def _esito_scritto(db, tabella: str, v, colonna: str, esito: str, n: int, rifatti, G) -> str:
+        """L'esito da scrivere: con niente da rifare resta quello di prima; una generazione senza voci
+        nuove è «vuoto» solo se del modello non resta niente (rifatta una parte sola, le altre ci
+        sono)."""
+        if rifatti is not None and not rifatti and v[colonna]:
+            return v[colonna]
+        if esito != G.PROPOSTE or n:
+            return esito
+        resta = db.execute(f"SELECT COUNT(*) FROM {tabella} WHERE verifica = ? AND origine = 'modello' "
+                           "AND stato != 'tolta'", (v["id"],)).fetchone()[0]
+        return esito if rifatti is not None and resta else G.VUOTO
+
     # ── la generazione (dal lettore, studio/lettura.py, studio/genera.py; niente `chi`) ──
     def _argomenti_per_carte(self, vid) -> list[dict]:
         """Gli argomenti del piano di una verifica, con le pagine (id), nell'ordine dell'elenco."""
@@ -1437,7 +1596,7 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
                  "pagine": [int(x) for x in D.da_j(a["pagine"]) if str(x).isdecimal()]}
                 for a in self.dati.tutti("SELECT * FROM studio_argomenti WHERE verifica = ? "
                                          "ORDER BY ordine, id", (int(vid),))
-                if a["stato"] in D.ARGOMENTI_DEL_PIANO]
+                if self._nel_piano(a)]
 
     def verifiche_per_carte(self) -> list[dict]:
         """Le verifiche aperte con almeno un argomento del piano che cita una pagina letta e una
@@ -1457,18 +1616,21 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
             lette = {int(p["id"]) for p in A.lette(pagine)}
             if not any(set(a["pagine"]) & lette for a in args):
                 continue
+            if m == G.ATTIVA and self._prova_aperta(v["id"]):
+                continue                 # le prove già aperte non cambiano: si riprova dopo (#384)
             if G.da_generare(v.get("carte_firma"), v.get("carte_esito"), v.get("carte_del"),
                              G.firma(args, pagine, m), self.adesso()):
                 out.append({**v, "_pagine": pagine, "_argomenti": args, "_modo": m})
         return out
 
     def proponi_carte(self, vid, firma: str, proposte: list[dict], esito: str,
-                      modo_: str) -> int | None:
-        """Scrive l'esito di una generazione: via le carte del modello non ancora decise (proposte
-        o dell'ombra, mai corrette né confermate), dentro le nuove (tranne una domanda che c'è
-        già), «proposta» con `studio_carte_genera: attiva`, «ombra» in ombra; la firma e l'esito.
-        Con «rotto» o «errore» restano quelle di prima. Se intanto argomenti o pagine sono cambiati
-        non scrive niente: None. Quante carte nuove."""
+                      modo_: str, rifatti=None) -> int | None:
+        """Scrive l'esito di una generazione: via le carte del modello mai toccate (`_da_rifare`) dei
+        soli argomenti `rifatti` (None: tutti), dentro le nuove (tranne una domanda che c'è già o che
+        è stata tolta), con `studio_carte_genera: attiva` le pulite subito nel ripasso e le altre
+        «proposte», «ombra» in ombra; la firma, le firme delle parti e l'esito. Con «rotto» o «errore»
+        restano quelle di prima. Se intanto argomenti o pagine sono cambiati, o in «attiva» c'è una
+        prova aperta, non scrive niente: None. Quante carte nuove."""
         from . import argomenti as A
         from . import genera as G
         with self.dati.lock:
@@ -1486,36 +1648,41 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
                          "pagine": [int(x) for x in D.da_j(a["pagine"]) if str(x).isdecimal()]}
                         for a in db.execute("SELECT * FROM studio_argomenti WHERE verifica = ? "
                                             "ORDER BY ordine, id", (int(vid),)).fetchall()
-                        if a["stato"] in D.ARGOMENTI_DEL_PIANO]
-                if v is None or G.firma(args, pagine, modo_) != firma:
+                        if self._nel_piano(a)]
+                # Le prove già aperte non cambiano (#384): la carta che usano resta com'è
+                if v is None or G.firma(args, pagine, modo_) != firma or (
+                        modo_ == G.ATTIVA and self._prova_aperta(int(vid))):
                     db.rollback()
                     return None
                 n = 0
                 if esito not in (G.ROTTO, G.ERRORE):
-                    db.execute("DELETE FROM studio_carte WHERE verifica = ? AND origine = "
-                               "'modello' AND stato IN ('proposta', 'ombra')", (int(vid),))
+                    for cid in self._da_rifare(db, "studio_carte", vid, rifatti, args):
+                        db.execute("DELETE FROM studio_carte WHERE id = ?", (cid,))
                     decise = {A.chiave(r[0]) for r in db.execute(
                         "SELECT domanda FROM studio_carte WHERE verifica = ?", (int(vid),))}
                     tot = db.execute("SELECT COUNT(*) FROM studio_carte WHERE verifica = ? AND "
                                      "stato != 'ombra'", (int(vid),)).fetchone()[0]
                     adesso = self.adesso().isoformat(timespec="seconds")
-                    stato = "ombra" if modo_ == G.OMBRA else "proposta"
                     for c in proposte:
                         if A.chiave(c["domanda"]) in decise or tot + n >= C.CARTE_MAX:
                             continue
+                        stato = G.stato_iniziale(c["avvisi"], modo_)
                         db.execute(
                             "INSERT INTO studio_carte (verifica, persona, argomento, domanda, "
                             "risposta, chiusa, pagine, origine, stato, avvisi, scatola, scadenza, "
-                            "creata) VALUES (?, ?, ?, ?, ?, ?, ?, 'modello', ?, ?, 1, NULL, ?)",
+                            "creata) VALUES (?, ?, ?, ?, ?, ?, ?, 'modello', ?, ?, 1, ?, ?)",
                             (int(vid), str(v["persona"]), c["argomento"], c["domanda"],
                              c["risposta"], C.chiusa(c["risposta"]), D.j(c["pagine"]), stato,
-                             D.j(c["avvisi"]) if c["avvisi"] else None, adesso))
+                             D.j(c["avvisi"]) if c["avvisi"] else None,
+                             adesso if stato == "attiva" else None, adesso))
                         decise.add(A.chiave(c["domanda"]))
                         n += 1
+                    self._scrivi_firme(db, vid, "carte", args, pagine, modo_, rifatti)
                 scritta, errori = G.firma_da_scrivere(v["carte_firma"], firma, esito)
                 db.execute("UPDATE studio_verifiche SET carte_firma = ?, carte_esito = ?, "
                            "carte_del = ? WHERE id = ?",
-                           (scritta, esito if esito != G.PROPOSTE or n else G.VUOTO,
+                           (scritta, self._esito_scritto(db, "studio_carte", v, "carte_esito", esito,
+                                                         n, rifatti, G),
                             self.adesso().isoformat(timespec="seconds"), int(vid)))
                 db.commit()
                 if errori >= G.ERRORI_MAX:
@@ -1529,8 +1696,8 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
 
     def _del_piano(self, vid) -> set:
         return {a["id"] for a in self.dati.tutti(
-            "SELECT id, stato FROM studio_argomenti WHERE verifica = ?", (int(vid),))
-            if a["stato"] in D.ARGOMENTI_DEL_PIANO}
+            "SELECT id, stato, avvisi FROM studio_argomenti WHERE verifica = ?", (int(vid),))
+            if self._nel_piano(a)}
 
     def carte(self, chi, vid) -> list[dict]:
         """Tutte le carte di una verifica, col numero (l'ordine di scrittura), il numero
@@ -1543,10 +1710,10 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
         """`chi`: chi guarda; le carte della mappa si nascondono alla persona (e ai conti, senza
         `chi`), non al tutore (seconda revisione della PR #330)."""
         adesso = self.adesso()
-        elenco = self.dati.tutti("SELECT id, stato FROM studio_argomenti WHERE verifica = ? "
+        elenco = self.dati.tutti("SELECT id, stato, avvisi FROM studio_argomenti WHERE verifica = ? "
                                  "ORDER BY ordine, id", (v["id"],))
         numeri = {a["id"]: i for i, a in enumerate(elenco, 1)}
-        nel_piano = {a["id"] for a in elenco if a["stato"] in D.ARGOMENTI_DEL_PIANO}
+        nel_piano = {a["id"] for a in elenco if self._nel_piano(a)}
         out = []
         # Con la mappa libera aperta (passo 7c, #328) le carte scritte da «Fanne carte» non si
         # vedono e non si ripassano: dicono i concetti dello scheletro, che resta nascosto
@@ -1641,7 +1808,8 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
                 and self.modo_padronanza != PD.SPENTA):
             try:
                 tid = self.registra_tentativo(chi, v["id"], c["argomento"], "carta",
-                                              C.ESITO_TENTATIVO[esito], fonte, carta=c["id"])
+                                              C.ESITO_TENTATIVO[esito], fonte, carta=c["id"],
+                                              generata=self._generata(c))
             except (ValueError, NonTrovata, NonPermesso) as e:
                 self._registra(f"tentativo della carta {c['id']} non scritto: {type(e).__name__}")
         self._registra(f"verifica {v['id']}: carta {c['id']} {esito} ({fonte}), scatola "
@@ -1818,7 +1986,7 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
         """Le pagine degli argomenti tenuti, una volta sola, senza quelle tolte."""
         argomenti = [a for a in self.dati.tutti(
             "SELECT * FROM studio_argomenti WHERE verifica = ?", (int(vid),))
-            if a["stato"] in D.ARGOMENTI_DEL_PIANO]
+            if self._nel_piano(a)]
         ids = {int(x) for a in argomenti for x in D.da_j(a["pagine"])
                if isinstance(x, int) or str(x).isdecimal()}
         righe = self.dati.tutti(
@@ -1980,7 +2148,7 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
                  for p_ in g["pagine"]}
         pag = self.pagine(chi, v["id"])
         ordine = {p_["id"]: p_["ordine"] for p_ in pag if p_["stato"] != "tolta"}
-        args = [a for a in self.argomenti(chi, v["id"]) if a["stato"] in D.ARGOMENTI_DEL_PIANO]
+        args = [a for a in self.argomenti(chi, v["id"]) if self._nel_piano(a)]
         righe_m = self.dati.tutti("SELECT giorno, valore, fonte FROM studio_misure WHERE "
                                   "verifica = ? ORDER BY giorno, id", (v["id"],))
         # Le misure della padronanza (passo 5) entrano nella forbice solo se è mostrata: quelle
@@ -2206,7 +2374,10 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
                 "previsione": (list((pi or {}).get("previsione"))
                                if (pi or {}).get("previsione") else None),
                 "lettura": self.lettura(chi, vid),
-                "argomenti": {"tenuti": sum(a["stato"] in D.ARGOMENTI_DEL_PIANO for a in args),
+                # Cosa è pronto dei materiali generati, senza toccare niente (#384): righe scritte
+                # dal codice, solo conti. None senza la generazione a lettura finita
+                "pronto": self.pronto(v),
+                "argomenti": {"tenuti": sum(self._nel_piano(a) for a in args),
                               "proposti": sum(a["stato"] == "proposto" for a in args),
                               "da_decidere": decidere},
                 "da_parte": self._da_parte(vid),

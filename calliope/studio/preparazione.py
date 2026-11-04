@@ -496,11 +496,104 @@ class Preparazioni:
                              (json.dumps(tutti) if tutti else None, int(vid)))
 
     def argomenti_decisi(self, vid, tabella: str) -> set:
-        """Gli argomenti con una carta o una domanda già decisa (scritta o confermata), che una
-        generazione non tocca: sono coperti. `tabella` la scrive il codice."""
+        """Gli argomenti con una carta o una domanda già decisa (scritta, tenuta o toccata), che una
+        generazione non tocca: sono coperti. Una generata in uso e mai toccata non è decisa: si rifà
+        con la sua parte (#384). `tabella` la scrive il codice."""
         return {r["argomento"] for r in self.dati.tutti(
-            f"SELECT argomento FROM {tabella} WHERE verifica = ? AND stato = 'attiva'", (int(vid),))
-            if r["argomento"] is not None}
+            f"SELECT * FROM {tabella} WHERE verifica = ? AND stato = 'attiva'", (int(vid),))
+            if r["argomento"] is not None
+            and not (r["origine"] == "modello" and not r["modificata"] and not r.get("ultima"))}
+
+    # ── cosa è pronto, per la scheda della verifica e per la voce (#384) ──
+    def _stato_generazione(self, v: dict, cosa: str, modulo, args, pagine) -> str | None:
+        """«pronte», «in_preparazione», «ferma» o «non_riuscita» delle carte o delle domande di una
+        verifica; None se non sono su «attiva» (in ombra non si dice niente alla persona)."""
+        m = modulo.modo(self.cfg)
+        if m != modulo.ATTIVA:
+            return None
+        base, n = G.firma_e_errori(v.get(f"{cosa}_firma"))
+        if base != modulo.firma(args, pagine, m):
+            return "in_preparazione"
+        esito = v.get(f"{cosa}_esito")
+        if esito == G.ERRORE:
+            return "ferma" if n >= G.ERRORI_MAX else "in_preparazione"
+        return "non_riuscita" if esito == G.ROTTO else "pronte"
+
+    def _riga_materiale(self, nome: str, stato: str, pronte: int, da_guardare: int,
+                        scoperti: int) -> str:
+        """Una riga della scheda: solo conti, scritta dal codice."""
+        pezzi = [f"{pronte} pront{'a' if pronte == 1 else 'e'}"] if pronte else []
+        if da_guardare:
+            pezzi.append(f"{da_guardare} da guardare")
+        if stato == "in_preparazione":
+            pezzi.append("le altre le sto preparando" if pezzi else "le sto preparando")
+        elif stato in ("ferma", "non_riuscita"):
+            pezzi.append("non sono riuscita a farne altre" if pezzi else "non ci sono riuscita")
+        elif not pezzi:
+            pezzi.append("dalle pagine non ne è venuta nessuna")
+        if scoperti and stato == "pronte":
+            pezzi.append(f"{scoperti} argoment{'o' if scoperti == 1 else 'i'} senza")
+        return f"{nome}: " + ", ".join(pezzi) + "."
+
+    def pronto(self, v: dict) -> dict | None:
+        """Cosa è pronto dei materiali generati di una verifica: {in_corso, righe, generate,
+        da_guardare}. Le righe le scrive il codice con i soli conti, mai il testo (si possono dire a
+        voce e mostrare sullo schermo). None senza la generazione a lettura finita, a verifica chiusa
+        o con una prova aperta, che nasconde tutto. Un riassunto o altro materiale generato (#386)
+        aggiunge qui la sua riga, e in `Lettore._passi_materiali` il suo passo."""
+        from . import domande_genera as DG
+        from . import mappa_genera as MG
+        if (not self.generazione_automatica() or v["stato"] not in ("bozza", "aperta")
+                or self._libreria_chiusa(v)):
+            return None
+        pagine = self._pagine_di(v["id"])
+        if not [p for p in pagine if p["stato"] != "tolta"]:
+            return None
+        letto = "Le preparo io: carte, domande e mappe arrivano da sole, non devi fare niente."
+        if any(p["stato"] in ("da_leggere", "in_lettura") for p in pagine):
+            # Senza il lettore (la lettura spenta, il portatile da 8 GB) non si promette niente
+            if getattr(self, "lettore", None) is None:
+                return None
+            return {"in_corso": True, "righe": ["Sto leggendo le pagine. " + letto],
+                    "generate": 0, "da_guardare": 0}
+        args = self._argomenti_per_carte(v["id"])
+        if not args:
+            if v.get("argomenti_firma") != A.firma(pagine) and getattr(
+                    self.cfg, "studio_argomenti", True):
+                return {"in_corso": True, "righe": ["Sto cercando gli argomenti nelle pagine. " + letto],
+                        "generate": 0, "da_guardare": 0}
+            return {"in_corso": False, "generate": 0, "da_guardare": 0,
+                    "righe": ["Nelle pagine non ho trovato argomenti sicuri: guardali qui sotto o "
+                              "scrivili tu, e preparo il resto."]}
+        scoperti = self.scoperti_di(v["id"])
+        vivi = {int(a["id"]) for a in args}
+        righe, in_corso, generate, guardare = [], False, 0, 0
+        for cosa, nome, modulo, tab in (("carte", "Carte", G, "studio_carte"),
+                                        ("domande", "Domande", DG, "studio_domande")):
+            stato = self._stato_generazione(v, cosa, modulo, args, pagine)
+            if stato is None:
+                continue
+            voci = self.dati.tutti(f"SELECT stato, avvisi, origine, argomento FROM {tab} WHERE "
+                                   "verifica = ?", (v["id"],))
+            pronte = sum(r["stato"] == "attiva" and r["argomento"] in vivi for r in voci)
+            dg = sum(r["stato"] == "proposta" for r in voci)
+            generate += sum(r["origine"] == "modello" and r["stato"] == "attiva" for r in voci)
+            guardare += dg
+            sc = len(set((scoperti.get(cosa) or {}).get("argomenti") or ()) & vivi)
+            righe.append(self._riga_materiale(nome, stato, pronte, dg, sc))
+            in_corso = in_corso or stato == "in_preparazione"
+        if MG.modo(self.cfg) == MG.ATTIVA:
+            cm = self._conto_mappa(v)
+            da_fare = bool(self.verifiche_per_mappa(v["id"]))
+            pezzi = (["la generale"] if cm["scheletro"] else []) + (
+                [f"{cm['parti']} parti su {len(args)}"] if cm["parti"] else [])
+            righe.append("Mappe: " + (" e ".join(pezzi) if pezzi else "nessuna per ora")
+                         + (", le altre le sto preparando." if da_fare and pezzi
+                            else ", le sto preparando." if da_fare else "."))
+            in_corso = in_corso or da_fare
+        if in_corso and getattr(getattr(self, "lettore", None), "in_attesa", None):
+            righe.append("La DGX adesso è occupata: continuo appena è libera.")
+        return {"in_corso": in_corso, "righe": righe, "generate": generate, "da_guardare": guardare}
 
     def scoperti_di(self, vid) -> dict:
         r = self.dati.uno("SELECT scoperti FROM studio_verifiche WHERE id = ?", (int(vid),))

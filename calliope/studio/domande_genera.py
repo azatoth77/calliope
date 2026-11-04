@@ -27,9 +27,14 @@ a 5» dava 35 domande diverse e fine dei token a 3500, due volte, e nessuna doma
 - una domanda chiusa (scelta, vero o falso, numero, parole) la cui risposta attesa, detta così
   com'è, il codice non dà «giusta» (`risposte.valuta`) → `da_controllare` (banco del 31/10, #344);
 - doppioni tolti, al più `MAX_DOMANDE`.
-Mai scartata per un avviso, mai un secondo giro. **Nessuna domanda generata entra in una prova
-senza la persona o il tutore**: con `studio_domande_genera: attiva` arrivano «proposte» e si
-confermano come le carte; in «ombra» (di serie) restano «ombra», solo conti nel registro.
+- i valori della risposta attesa nelle pagine citate (`genera.valori_fuori`, #384), altrimenti
+  `da_controllare`.
+Mai scartata per un avviso, mai un secondo giro. Con `studio_domande_genera: attiva` **le domande
+pulite sono subito usabili** da interrogazione e verifica finta, a lettura finita (04/11, #384, 0035
+punto 57); quelle con un avviso restano «proposte», fuori dalle prove, e si tengono una per una; in
+«ombra» (di serie) restano «ombra», solo conti nel registro. Come le carte, si rifanno solo le
+domande degli argomenti cambiati. *[storico fino al 04/11: «nessuna domanda generata entra in una
+prova senza la persona o il tutore»]*
 """
 
 from __future__ import annotations
@@ -87,6 +92,10 @@ ERRORI_MAX = G.ERRORI_MAX
 firma_e_errori = G.firma_e_errori
 da_generare = G.da_generare
 firma_da_scrivere = G.firma_da_scrivere
+stato_iniziale = G.stato_iniziale
+firma_parte = G.firma_parte
+da_rifare = G.da_rifare
+pagine_di_parte = G.pagine_di_parte
 
 
 def modo(cfg) -> str:
@@ -204,9 +213,13 @@ def proposte(grezzi: list[dict], rif, arif) -> list[dict]:
         # 31/10, #344): se no la domanda farebbe sbagliare chi risponde giusto
         sbagliata = d["tipo"] in RS.CHIUSE + ("parole",) and RS.valuta(d, d["attesa"])[0] \
             != RS.GIUSTO
-        if not dentro or aid is None or not testo_pag or falso or sbagliata:
+        # I valori della risposta: per «vero» o «falso» quelli dell'affermazione (#384)
+        fuori = G.valori_fuori(d["testo"] if d["tipo"] == "vero_falso" else d["attesa"],
+                               [testi[r] for r in esistono])
+        if not dentro or aid is None or not testo_pag or falso or sbagliata or fuori:
             avvisi.append(DA_CONTROLLARE)
-        if esistono and all(r in istruzioni for r in esistono):
+        # Anche una sola pagina con le istruzioni (#384), come le carte
+        if any(r in istruzioni for r in esistono):
             avvisi.append(PAGINA_CON_ISTRUZIONI)
         visti.add(A.chiave(d["testo"]))
         out.append({**d, "argomento": aid, "pagine": [ids[r] for r in esistono],

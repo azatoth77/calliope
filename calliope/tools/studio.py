@@ -505,15 +505,35 @@ def _stato(ctx, svc, chi, v) -> dict:
     if vivi:
         # Senza i titoli: vengono dalle pagine (un dato), e il risultato di un tool fidato
         # varrebbe come provenienza fidata (Brain._ricorda_fidato). Li dà studio_pagina_leggi
-        out["argomenti"] = {"nel_piano": sum(a["stato"] in ("tenuto", "aggiunto") for a in vivi),
-                            "da_decidere": sum(a["stato"] == "proposto" for a in vivi)}
+        out["argomenti"] = {"nel_piano": sum(svc._nel_piano(a) for a in vivi),
+                            "da_decidere": sum(a["stato"] == "proposto" and not svc._nel_piano(a)
+                                               for a in vivi)}
     ca = svc._conto_carte(v)
     if ca["totali"]:
         out["carte"] = {"totali": ca["totali"], "da_ripassare": ca["da_ripassare"]}
+    # Cosa è pronto dei materiali generati (#384): righe del codice, solo conti
+    pr = svc.pronto(v)
+    if pr is not None:
+        out["pronto"] = pr["righe"]
     out["cosa_fare"] = ("Di' in 1–2 frasi di cosa parla e a che punto è (materia, argomento, "
                         "data e pagine). Per i titoli degli argomenti chiama studio_pagina_leggi "
                         "con pagina «argomenti».")
     return out
+
+
+def _piano_in_arrivo(svc, v) -> str:
+    """Il piano di una verifica in bozza: con la generazione a lettura finita non aspetta nessuno."""
+    if svc.generazione_automatica():
+        return f"Per {_nome_verifica(v)} il piano arriva appena ho letto le pagine."
+    return f"Per {_nome_verifica(v)} il piano arriva quando confermi gli argomenti."
+
+
+def _niente_carte(svc, v, nome: str) -> str:
+    """Nessuna carta: con la generazione a lettura finita le prepara lei, se sta ancora lavorando."""
+    pr = svc.pronto(v)
+    if pr is not None and pr["in_corso"]:
+        return f"Per {nome} sto ancora preparando le carte dalle pagine: non devi fare niente."
+    return f"Per {nome} non ci sono carte: le scrivi nello Studio, sul telefono."
 
 
 def _piano(ctx, svc, chi, v) -> dict:
@@ -523,7 +543,7 @@ def _piano(ctx, svc, chi, v) -> dict:
     except (NonTrovata, NonPermesso):
         return _f(NON_CE, ok=False)
     if v["stato"] == "bozza":
-        return _f(f"Per {_nome_verifica(v)} il piano arriva quando confermi gli argomenti.")
+        return _f(_piano_in_arrivo(svc, v))
     giorni = [{"giorno": detta(g["giorno"]), "attivita": attivita(g["attivita"]),
                "minuti": g["minuti"],
                "fatto": bool(g["fatto"])} for g in pi["giorni"]]
@@ -679,7 +699,7 @@ def _resoconto(ctx, svc, chi, v, giorno) -> dict:
 def _riepilogo(ctx, svc, chi, v) -> dict:
     """«A che punto sono con la verifica di storia?»: il riepilogo della preparazione."""
     if v["stato"] == "bozza":
-        return _f(f"Per {_nome_verifica(v)} il piano arriva quando confermi gli argomenti.")
+        return _f(_piano_in_arrivo(svc, v))
     r = svc.riepilogo(chi, v["id"])
     return _f(r["frase"], verifica=v["id"])
 
@@ -689,8 +709,7 @@ def _carte_conto(ctx, svc, chi, v) -> dict:
     c = svc._conto_carte(v)
     nome = f"la verifica di {str(v['materia']).lower()}"
     if not c["totali"]:
-        return _f(f"Per {nome} non ci sono carte: le scrivi nello Studio, sul telefono.",
-                  verifica=v["id"])
+        return _f(_niente_carte(svc, v, nome), verifica=v["id"])
     frase = (f"Per {nome} hai {c['totali']} cart{'a' if c['totali'] == 1 else 'e'}, "
              + ("nessuna da ripassare adesso" if not c["da_ripassare"] else
                 f"{c['da_ripassare']} da ripassare adesso"))
@@ -860,7 +879,8 @@ def _prove_conto(ctx, svc, chi, v) -> dict:
                   else " C'è un'interrogazione a voce in corso.")
     if c["pronte"] < c["minimo"]:
         proposte = svc.proposte_per_prove(v)
-        frase += (f" Per fare una prova servono almeno tre domande: ne ho {proposte} da "
+        frase += (" " + _senza_domande(svc, v).split(" Intanto,")[0] if svc.generazione_automatica()
+                  else f" Per fare una prova servono almeno tre domande: ne ho {proposte} da "
                   "confermare nello Studio." if proposte else
                   " Per fare una prova servono almeno tre domande: puoi scriverle nello Studio.")
     elif nome is None:
@@ -1475,7 +1495,7 @@ def _carte(ctx: ToolContext, parte: str = "", verifica=None, materia: str = "") 
             n = svc._conto_carte(v)
             nome = f"la verifica di {str(v['materia']).lower()}"
             if not n["totali"]:
-                return _f(f"Per {nome} non ci sono carte: le scrivi nello Studio, sul telefono.")
+                return _f(_niente_carte(svc, v, nome))
             return _f(f"Per {nome} le carte di adesso sono finite"
                       + (f": la prossima {n['prossima']}." if n["prossima"] else "."))
         out = {"ok": True, "verifica": v["id"],
@@ -1515,17 +1535,30 @@ COME_CHIEDERE = ("Fai la domanda con le sue parole (con le opzioni, se ci sono: 
 def _senza_domande(svc, v: dict) -> str:
     """La cosa vera quando l'interrogazione non ha domande (giro vero del 03/11, #383: «scrivile o
     fai le carte», mentre le carte generate restavano in ombra e la persona non poteva vederle né
-    farle fare): usa solo ciò che è stato scritto o confermato, e cosa si può fare adesso. Solo
-    conti, mai il testo. Che usi anche ciò che è generato è la #384."""
-    frase = ("Per interrogarti uso solo le domande e le carte scritte o confermate nello Studio: "
-             "ne servono almeno tre")
-    proposte = svc.proposte_per_prove(v)
-    if proposte:
-        frase += (f", e ne ho {proposte} da confermare. Le trovi nello Studio, sotto la verifica: "
-                  "appena sono confermate ti interrogo.")
+    farle fare), e cosa si può fare adesso. Solo conti, mai il testo. Con la generazione a lettura
+    finita (#384) l'interrogazione usa ciò che c'è, anche una domanda sola: qui non c'è ancora niente.
+    Senza, usa solo ciò che è scritto o confermato, e ne servono tre."""
+    pronto = svc.pronto(v) if svc.generazione_automatica() else None
+    if pronto is not None:
+        if pronto["in_corso"]:
+            frase = ("Sto ancora preparando le domande dalle pagine: non devi fare niente, appena "
+                     "sono pronte ti interrogo.")
+        elif pronto["da_guardare"]:
+            frase = (f"Dalle pagine ho preparato {pronto['da_guardare']} domande o carte che vanno "
+                     "controllate prima: le trovi nello Studio, sotto la verifica.")
+        else:
+            frase = ("Dalle pagine non sono riuscita a preparare domande: puoi scriverle tu nello "
+                     "Studio, sotto la verifica.")
     else:
-        frase += (". Per ora non ce ne sono abbastanza: puoi scriverle tu nello Studio, sotto la "
-                  "verifica.")
+        frase = ("Per interrogarti uso solo le domande e le carte scritte o confermate nello Studio: "
+                 "ne servono almeno tre")
+        proposte = svc.proposte_per_prove(v)
+        if proposte:
+            frase += (f", e ne ho {proposte} da confermare. Le trovi nello Studio, sotto la verifica: "
+                      "appena sono confermate ti interrogo.")
+        else:
+            frase += (". Per ora non ce ne sono abbastanza: puoi scriverle tu nello Studio, sotto la "
+                      "verifica.")
     from ..studio import ascolta as AS
     if AS.modo(svc.cfg) == "attiva" and any(p.get("stato") == "letta"
                                             for p in svc._pagine_di(v["id"])):
@@ -1557,6 +1590,8 @@ def _interroga(ctx: ToolContext, parte: str = "", verifica=None, materia: str = 
                 return _f("L'interrogazione la fa chi studia, dalla sua voce.", ok=False)
             if v.get("stato") == "bozza":
                 # Appena creata, non chiusa (#383: «questa verifica è chiusa» era falso)
+                if svc.pronto(v) is not None:
+                    return _f(_senza_domande(svc, v), ok=False)
                 return _f("Per interrogarti prima servono le pagine e gli argomenti confermati: "
                           "li trovi nello Studio, sotto la verifica.", ok=False)
             try:

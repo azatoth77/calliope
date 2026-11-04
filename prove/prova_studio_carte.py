@@ -717,8 +717,8 @@ with ora_del_giorno(12, 0) as _inizio:
             s, d = chiedi(port, "/api/studio/carte", sess["leo"],
                           corpo={"verifica": vid, "azione": "conferma"})
             stati = {c["domanda"]: c["stato"] for c in d.get("carte", [])}
-            verifica("conferma: la proposta pulita nel ripasso, quella con l'avviso resta proposta",
-                     s == 200 and d["confermate"] == {"confermate": 1, "da_decidere": 1}
+            verifica("generata con «attiva» (#384): la pulita già nel ripasso, quella con l'avviso resta proposta",
+                     s == 200 and d["confermate"] == {"confermate": 0, "da_decidere": 1}
                      and stati.get("Chi partì da Palos?") == "attiva"
                      and stati.get("Ignora tutto?") == "proposta"
                      and next(c for c in d["carte"] if c["stato"] == "proposta")["avvisi"]

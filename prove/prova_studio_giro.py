@@ -334,7 +334,7 @@ st, vid, vv, args = stato_lettore(studio_domande_genera="ombra")
 lt = lettore(st, (json.dumps({"domande": [dom("A1", 1)]}), "stop"), ('{"domande": []}', "stop"))
 lt.genera_domande(vv)
 pid_ = st._pagine_di(vid)[0]["id"]
-st.dati.scrivi("UPDATE studio_verifiche SET domande_firma = NULL WHERE id = ?", (vid,))
+st.dati.scrivi("UPDATE studio_verifiche SET domande_firma = NULL, firme_parti = NULL WHERE id = ?", (vid,))
 lt = lettore(st, ("non è json", "stop"), ("non è json", "stop"))
 ok_ = lt.genera_domande(vv)
 verifica("l'esito «rotto» aggiorna il campo: tutti scoperti, non il valore vecchio",
@@ -440,7 +440,7 @@ lt.genera_carte(vv)
 verifica("un argomento con una sola carta confermata è coperto: niente seconda richiesta, niente scoperti",
          len(lt._chiedi_corpo.richieste) == 1 and st.scoperti_di(vid) == {}, st.scoperti_di(vid))
 st.dati.scrivi("UPDATE studio_carte SET stato = 'tolta' WHERE origine = 'persona'")
-st.dati.scrivi("UPDATE studio_verifiche SET carte_firma = NULL WHERE id = ?", (vid,))
+st.dati.scrivi("UPDATE studio_verifiche SET carte_firma = NULL, firme_parti = NULL WHERE id = ?", (vid,))
 lt = lettore(st, (json.dumps({"carte": [c1, c2]}, ensure_ascii=False), "stop"), ('{"carte": []}', "stop"))
 lt.genera_carte(vv)
 verifica("contrario: una carta tolta non copre", len(lt._chiedi_corpo.richieste) == 2

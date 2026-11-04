@@ -182,16 +182,19 @@ st, vid, ids, lett = prepara({"studio_carte_genera": "attiva"}, nome="attiva")
 PA.rispondi(CARTE)
 lett.giro()
 cc = st.carte(LEO, vid)
-verifica("attiva: le carte «proposte», con gli avvisi, nessuna nel ripasso",
-         len(cc) == 7 and all(c["stato"] == "proposta" for c in cc)
-         and not st.da_ripassare(LEO, vid) and st.prossima_carta(LEO, vid, 1) is None, len(cc))
+verifica("attiva (#384): le due pulite subito nel ripasso, quelle con un avviso restano proposte",
+         len(cc) == 7 and sum(c["stato"] == "attiva" for c in cc) == 2
+         and sum(c["stato"] == "proposta" for c in cc) == 5
+         and all(c["avvisi"] for c in cc if c["stato"] == "proposta")
+         and not any(c["avvisi"] for c in cc if c["stato"] == "attiva")
+         and len(st.da_ripassare(LEO, vid)) == 2, len(cc))
 h = st.home(LEO)["verifiche"][0]["carte"]
-verifica("la home: le proposte contate, nessuna da ripassare", h["proposte"] == 7
-         and h["da_ripassare"] == 0, h)
+verifica("la home: le proposte contate, le pulite da ripassare", h["proposte"] == 5
+         and h["da_ripassare"] == 2, h)
 r = st.conferma_carte(ANDREA, vid)
 cc = {c["domanda"]: c for c in st.carte(LEO, vid)}
-verifica("«Conferma» (anche dal tutore): le due pulite nel ripasso, le altre restano proposte",
-         r == {"confermate": 2, "da_decidere": 5}
+verifica("«Conferma» non serve più: le pulite ci sono già, le altre restano proposte",
+         r == {"confermate": 0, "da_decidere": 5}
          and cc[BUONA1["domanda"]]["stato"] == "attiva" and cc[BUONA1["domanda"]]["da_ripassare"]
          and cc["Chi inventò la macchina a vapore?"]["stato"] == "proposta", r)
 verifica("un altro adulto non conferma (non c'è)",
@@ -218,8 +221,7 @@ verifica("rigenerata: le confermate, la tolta, la corretta e la tenuta restano; 
          and dopo["Che cosa dice la professoressa?"]["stato"] == "tolta"
          and dopo["Chi inventò la macchina a vapore?"]["origine"] == "persona"
          and dopo["Chi era Cristoforo Colombo?"]["stato"] == "attiva"
-         and "Dove si trova il sito?" not in dopo
-         and dopo["Chi raggiunse il Capo di Buona Speranza?"]["stato"] == "proposta"
+         and dopo["Chi raggiunse il Capo di Buona Speranza?"]["stato"] == "attiva"
          and sum("Costantinopoli" in d for d in dopo) == 1, sorted(dopo))
 st.rinomina_argomento(LEO, a2, "Il Portogallo e l'Africa")
 PA.rispondi(("{\"carte\": [{\"argomento\"", "stop"))
@@ -323,7 +325,7 @@ PA.rispondi({"carte": [BUONA1]})
 lett.giro()
 cc = st.dati.tutti("SELECT stato FROM studio_carte WHERE verifica = ?", (vid,))
 verifica("da ombra ad attiva: si rigenera, le carte dell'ombra vanno via",
-         len(PA.F.richieste) == 2 and [c["stato"] for c in cc] == ["proposta"], cc)
+         len(PA.F.richieste) == 2 and [c["stato"] for c in cc] == ["attiva"], cc)
 st.close()
 
 print("— il banco (fase «carte», a secco)")

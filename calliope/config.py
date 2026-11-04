@@ -2196,12 +2196,14 @@ class Config:
     studio_padronanza: str = "ombra"
     # Le carte generate dalle pagine lette (30/10, passo 6, seconda parte, #246,
     # calliope/studio/genera.py): lo stesso thread della lettura, con la sua guardia, chiede a
-    # qwen3.6 le carte degli argomenti confermati di una verifica aperta, dal solo testo letto in
-    # busta. Il codice le controlla come gli argomenti (pagine vere, risposta nelle pagine,
-    # forma). «ombra» le genera e le misura soltanto: nessuna carta va alla persona; «attiva» le
-    # dà «proposte», e nessuna entra nel ripasso finché la persona o il tutore non la conferma;
-    # «spenta» niente. Si passa ad «attiva» col banco delle carte (prove/manuali/banco_studio.py,
-    # fase «carte») e la rilettura delle carte in ombra
+    # qwen3.6 le carte degli argomenti di una verifica aperta, dal solo testo letto in busta. Il
+    # codice le controlla come gli argomenti (pagine vere, risposta e valori nelle pagine, forma).
+    # «ombra» le genera e le misura soltanto: nessuna carta va alla persona. «attiva» (dal 04/11,
+    # #384, 0035 punto 57; *[storico: «le dà proposte, da confermare» fino al 04/11]*) lavora a
+    # lettura finita senza aspettare la conferma degli argomenti (con questa o con
+    # `studio_domande_genera` la verifica si apre da sola): le carte pulite vanno subito nel ripasso,
+    # quelle con un avviso restano fuori. «spenta» niente. Si passa ad «attiva» guardando quante sono
+    # sbagliate col banco della rilettura (prove/manuali/banco_rilettura.py): i conti in docs/aree/studio.md
     studio_carte_genera: str = "ombra"
     # La mappa concettuale (30/10, passo 7, #247, calliope/studio/mappa.py): al più tanti concetti
     # nello scheletro; nella mappa dello studente e a memoria la persona ne aggiunge al più 6 suoi
@@ -2254,9 +2256,10 @@ class Config:
     # calliope/studio/domande_genera.py): lo stesso thread della lettura, con la sua guardia, le
     # chiede a qwen3.6 dal solo testo letto in busta, dopo carte e scheletro; il codice le
     # controlla nella forma (una sola opzione giusta, un numero leggibile, le parole chiave nelle
-    # pagine). «ombra» le genera e le misura soltanto: nessuna va alla persona; «attiva» le dà
-    # «proposte», da confermare; «spenta» niente. Si passa ad «attiva» col banco delle domande
-    # (prove/manuali/banco_studio.py, fase «domande») e la rilettura delle domande in ombra
+    # pagine). «ombra» le genera e le misura soltanto: nessuna va alla persona. «attiva» (dal 04/11,
+    # #384; *[storico: «proposte, da confermare» fino al 04/11]*) come le carte: a lettura finita, le
+    # pulite subito in interrogazione e verifica finta, anche una sola. «spenta» niente. Si passa ad
+    # «attiva» col banco della rilettura (prove/manuali/banco_rilettura.py)
     studio_domande_genera: str = "ombra"
     # Il ripasso da ascoltare (31/10, passo 9, #249, calliope/studio/ascolta.py): le pagine lette
     # degli argomenti del piano e le carte, lette da Piper, a voce («fammi ascoltare il ripasso»,

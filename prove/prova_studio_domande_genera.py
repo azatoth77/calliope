@@ -185,16 +185,19 @@ st, vid, ids, lett = prepara({"studio_domande_genera": "attiva"}, nome="attiva")
 PA.rispondi(DOMANDE)
 lett.giro()
 dd = st.domande(LEO, vid)["domande"]
-verifica("attiva: proposte, con gli avvisi", len(dd) == 11
-         and {d["stato"] for d in dd} == {"proposta"} and all(d["origine"] == "modello"
-                                                              for d in dd))
-verifica("nessuna proposta entra in una prova senza la persona", st._pool(st.verifica(LEO, vid))
-         == [])
-r = st.conferma_domande(LEO, vid)
+puliti_ = [d for d in dd if not d["avvisi"]]
+verifica("attiva (#384): le pulite subito usabili, quelle con un avviso proposte", len(dd) == 11
+         and all(d["origine"] == "modello" for d in dd)
+         and {d["stato"] for d in puliti_} == {"attiva"}
+         and {d["stato"] for d in dd if d["avvisi"]} == {"proposta"}, [d["stato"] for d in dd])
 pool = st._pool(st.verifica(LEO, vid))
-verifica("conferma: le pulite attive (ed entrano nelle prove), le altre restano proposte",
-         r["confermate"] == 5 and r["da_decidere"] == 6 and len(pool) == 5
-         and not any("professoressa" in x["testo"] for x in pool), r)
+verifica("nelle prove le sole pulite, mai quelle con un avviso",
+         len(pool) == len(puliti_) >= 1 and all(x["generata"] for x in pool)
+         and not any("professoressa" in x["testo"] for x in pool), len(pool))
+r = st.conferma_domande(LEO, vid)
+verifica("«Conferma» non serve più: non cambia niente", r["confermate"] == 0
+         and r["da_decidere"] == 11 - len(puliti_)
+         and len(st._pool(st.verifica(LEO, vid))) == len(puliti_), r)
 st.close()
 
 print("— il giro: spenta")

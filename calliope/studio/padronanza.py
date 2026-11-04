@@ -25,6 +25,10 @@ del 27/10, decisione 0019): si cambiano qui, le prove le leggono da qui.
   per il criterio di «mostrata» (0035 punto 32) si misura contro la padronanza calcolata **senza**
   i giudizi (`accordo`): altrimenti il tutore si confronterebbe con sé stesso.
 
+- dal 04/11 (#384): un tentativo su una carta o una domanda **generata** e non corretta da nessuno
+  (`generata`) pesa `PESO_GENERATA` (la metà): nessuno ha riletto quel materiale, e può essere
+  sbagliato (i conti del banco nel documento d'area). Conta per la soglia di misura: è pratica vera.
+
 Lo stato d'animo e l'autovalutazione «da 1 a 5» non entrano: non sono su disco (0035 punto 27).
 """
 
@@ -45,6 +49,8 @@ PAROLA_GIUDIZIO = {v: k for k, v in GIUDIZI.items()}
 FONTI = ("persona", "codice", "tutore")
 # L'autovalutazione su una voce di una prova (passo 8, #248): metà del peso
 PESO_AUTO = 0.5
+# Su materiale generato e non riletto da nessuno (#384): metà del peso
+PESO_GENERATA = 0.5
 TIPI_PROVA = ("verifica_finta", "interrogazione")
 MEZZA_VITA_GIORNI = 7.0
 CALO_GIORNI = 21.0
@@ -97,6 +103,8 @@ def calcola(tentativi: list[dict], oggi) -> dict:
             continue
         w = TIPI[t["tipo"]] * (PESO_AUTO if t["tipo"] in TIPI_PROVA
                                and t.get("fonte") == "persona" else 1.0)
+        if t.get("generata"):
+            w *= PESO_GENERATA
         per.setdefault(int(t["argomento"]), []).append((g, w, t["esito"],
                                                         t.get("tipo") == GIUDIZIO))
     out = {}
