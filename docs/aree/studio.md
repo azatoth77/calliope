@@ -253,7 +253,8 @@ quello anche se cambiano le pagine o gli argomenti, finché nessuno lo riscrive;
 **Un falso allarme trovato dal banco.** «Martin Waldseemüller — chiama — America» era `testo_ordine` perché
 «chiama» è anche un imperativo, e la mappa di Vespucci perdeva 6 voci. Ora l'avviso cade solo se sono forme chiuse
 tutti e due: il verbo, per intero e minuscolo, è «chiama», «manda» o «invia» più al massimo una preposizione o una
-locuzione chiusa, e il concetto di arrivo è un nome proprio con le maiuscole e senza cifre (`_forma_verbo`,
+locuzione chiusa, e il concetto di arrivo è un nome proprio con le maiuscole e senza cifre, senza un articolo in
+testa (si perde anche «L'Aquila») né una parola di ruolo («Password», «Numero Verde») (`_forma_verbo`,
 `_nome_proprio`, principio 10, contrari in `prova_testo.py`). Tutto il resto resta un ordine, in italiano e in
 inglese. *[storico, due revisioni della PR #389: prima l'ordine si riconosceva dalle parole «istruzioni», «regole»…,
 e «manda i soldi a», «ignora la verifica» passavano; poi dal solo verbo, e passava lo spezzato: «manda a» → «la
@@ -286,7 +287,7 @@ argomenti non facoltativi, i criteri delle domande nei concetti e nei verbi).
 | coperti dal codice (sul ricalcolo) | 7 su 8 | 5 su 7 | 7 su 9 |
 | dalla verità: argomenti, domande | 5/6, 1/10 | 4/5, 2/10 | 7/8, 1/10 |
 | secondi | 7 | 9 | 9 |
-| **Dopo** (15:50, con le due revisioni), generale: concetti, collegamenti | 20, 19 | 17, 21 | 20, 19 |
+| **Dopo** (15:48, con le due revisioni), generale: concetti, collegamenti | 20, 19 | 17, 21 | 20, 19 |
 | coperti dal codice (fuori prima della mirata) | 8 su 8 (1) | 7 su 7 (2) | 7 su 9 (2) |
 | dalla verità: argomenti, domande | 6/6, 2/10 | 4/5, 4/10 | 7/8, 4/10 |
 | parti connesse, deboli | 1, 0 | 1, 0 | 1, 0 |
@@ -304,7 +305,9 @@ Togliere i `da_controllare` costa poco: prima della revisione 92/101, 100/107 e 
 e 10 su 10; le mappe non connesse restano così, ora senza legami deboli. La regola più stretta sui verbi perde
 pochissimo: nel banco una sola voce tolta come ordine. I criteri di matematica A3 e A6 sono stati allargati
 («trasporto termini», «cambio segno», «verifica soluzione»): erano coperti, ma con altre parole. In storia, in
-questo giro, due argomenti restano fuori dal conto del codice anche dopo la mirata, e la pagina lo dice. La mappa che manca è un argomento su pagine con istruzioni (non si chiede). Le domande di matematica
+questo giro, due argomenti restano fuori dal conto del codice anche dopo la mirata, e la pagina lo dice (uno era
+la mirata illeggibile col tetto pieno: dalla terza revisione lo scheletro si rifà lo stesso, 8 su 9 sulla stessa
+uscita). La mappa che manca è un argomento su pagine con istruzioni (non si chiede). Le domande di matematica
 restano 4/10: i loro criteri sono risultati di esercizi, che in una mappa non ci sono né devono esserci. Il banco varia da un giro all'altro anche a temperatura 0 (la
 generale di matematica 10–20 concetti in cinque giri, una parte sola 67–100 %). Tutto insieme circa due minuti a
 verifica, a DGX libera. Le uscite in `/tmp/banco-385/` sulla DGX, non conservate.

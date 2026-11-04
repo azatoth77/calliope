@@ -338,6 +338,23 @@ nn, cc = MG.scheletro(sp, rif, arif, 20, titolo="Le scoperte geografiche")
 verifica("l'ordine spezzato fra verbo e concetto: testo_ordine sul collegamento e sui due capi",
          all(MG.TESTO_ORDINE in c["avvisi"] for c in cc if c["verbo"] in {x for x, _a in SPEZZATI})
          and sum(MG.TESTO_ORDINE in c["avvisi"] for c in cc) == len(SPEZZATI), cc)
+# La mirata che non si legge: la parte staccata col suo argomento resta, dal tetto (terza revisione)
+chiedi, viste = chi_dice({"triple": rete_e_isola}, "non è json")
+r = MG.rete(chiedi, v, rif, arif, 6, titolo="Centro", argomenti=args, pagine=pagine)
+verifica("una mirata illeggibile: lo scheletro si rifà lo stesso, gli ultimi posti alla parte staccata",
+         r["forma"]["copertura_rotta"] == 1 and {"Verifica", "Valore"} <= {n["testo"] for n in r["nodi"]},
+         [n["testo"] for n in r["nodi"]])
+# `connetti` guarda il concetto di arrivo come le triple
+nn, cc = MG.scheletro([tripla("Colombo", "arriva in", "America", "A3", "P4"),
+                       tripla("Portogallo", "cerca", "il tool", "A2", "P3"),
+                       tripla("Costantinopoli", "cade per", "Turchi", "A1", "P2")], rif, arif, 20)
+cod = {n["testo"]: c for c, n in MG.codici(nn, cc)}
+agg = MG.connetti([{"da": cod["Colombo"], "relazione": "chiama", "a": cod["il tool"], "pagine": ["P4"]},
+                   {"da": cod["Colombo"], "relazione": "chiama", "a": cod["Turchi"], "pagine": ["P4"]}],
+                  nn, cc, rif, 20)
+verifica("la seconda passata: «chiama» verso un nome proprio pulito, verso «il tool» un ordine",
+         len(agg) == 2 and MG.TESTO_ORDINE in agg[0]["avvisi"] and MG.TESTO_ORDINE not in agg[1]["avvisi"],
+         agg)
 # La parte: le voci non studiabili via
 a_ost = {"id": 77, "titolo": "Le scoperte", "pagine": [ids["p112"], ids["p117"]]}
 sue = MG.pagine_di(a_ost, pagine)

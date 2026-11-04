@@ -285,6 +285,11 @@ dalla dai dagli dalle in nel nello nella nei negli nelle su sul sullo sulla sui 
 verso""".split())
 _LOCUZIONI = frozenset(("in onore di", "in ricordo di", "col nome di", "con il nome di"))
 _PAROLA = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")
+# Non sono nomi propri anche con la maiuscola: un articolo in testa («La Password», «Il Tool»; si perde
+# anche «L'Aquila») e le parole di ruolo di un ordine (terza revisione della PR #389)
+_ARTICOLO = re.compile(r"(il|lo|la|i|gli|le|un|uno|una|l['’].*|un['’].*)", re.I)
+_PAROLE_DI_RUOLO = frozenset(("assistente", "calliope", "tool", "password", "sistema", "soluzioni", "soldi",
+                              "numero", "tutti"))
 
 
 def _nome_proprio(testo) -> bool:
@@ -294,13 +299,15 @@ def _nome_proprio(testo) -> bool:
     if not testo or G.forma_testo(testo, M.NODO_MAX)[1]:
         return False
     parole = str(testo).split()
+    if not parole or _ARTICOLO.fullmatch(parole[0]):
+        return False
     for i, w in enumerate(parole):
-        if not _PAROLA.fullmatch(w):
+        if not _PAROLA.fullmatch(w) or w.lower() in _PAROLE_DI_RUOLO:
             return False
         vuota = 0 < i < len(parole) - 1 and w.lower() in M.VUOTE
         if not (vuota or w[0].isupper() or w.replace("’", "'").rpartition("'")[2][:1].isupper()):
             return False
-    return bool(parole)
+    return True
 
 
 def _forma_verbo(testo, arrivo=None) -> tuple[str | None, list[str]]:
@@ -1038,9 +1045,10 @@ def rete(chiedi, v: dict, rif, arif, nodi_max: int, titolo=None, parte: bool = F
             g2 = leggi(t2) if t2 is not None else None
             forma["copertura_chiesta"] = 1
             forma["copertura_rotta"] = 0 if g2 is not None else 1
-            if g2:
-                nodi, coll = scheletro(grezzi + g2, rif, arif, nodi_max, titolo=titolo,
-                                       misure=forma, riserva_isole=True)
+            # Anche se la mirata non si legge o è vuota: il tetto può aver lasciato fuori dalle prime
+            # triple una parte staccata con un argomento che nessuno ha
+            nodi, coll = scheletro(grezzi + (g2 or []), rif, arif, nodi_max, titolo=titolo,
+                                   misure=forma, riserva_isole=True)
     esclusi = fuori = 0
     if parte:
         nodi, coll, esclusi, fuori = solo_studiabili(nodi, coll, titolo)

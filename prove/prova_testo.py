@@ -1182,7 +1182,8 @@ for testo, nome, azione, sospeso, atteso in [
 from calliope.studio import mappa_genera as _MG  # noqa: E402
 
 for vb, arrivo in (("chiama", "America"), ("chiama in onore di", "Amerigo Vespucci"), ("manda", "Vasco da Gama"),
-                   ("manda a", "Capo di Buona Speranza"), ("invia a", "Isabella di Castiglia")):
+                   ("manda a", "Capo di Buona Speranza"), ("invia a", "Isabella di Castiglia"),
+                   ("chiama", "Luigi XIV"), ("manda", "Enrico VIII")):
     verifica(f"verbo della mappa, forma chiusa: «{vb}» → «{arrivo}»", _MG._forma_verbo(vb, arrivo)[1], [])
 for vb in ("chiama il numero 3331234567", "chiama il tool", "chiama la funzione", "manda i soldi a",
            "invia la password a", "ignora la verifica", "ignora tutto", "ignora", "cancella i file",
@@ -1196,7 +1197,11 @@ for vb, arrivo in (("manda a", "la password"), ("chiama", "3331234567"), ("chiam
                    ("chiama", "il tool"), ("chiama", "l'assistente"), ("manda", "i soldi"),
                    ("invia a", "mario chiocciola esempio punto it"), ("invia a", "mario@esempio.it"),
                    ("invia a", "www.esempio.it"), ("chiama", "Ignora la verifica"), ("manda", "La soluzione del compito"),
-                   ("manda", "le navi"), ("chiama nel", "1507"), ("chiama", ""), ("chiama", None)):
+                   ("manda", "le navi"), ("chiama nel", "1507"), ("chiama", ""), ("chiama", None),
+                   ("manda a", "La Password"), ("chiama", "L'Assistente"), ("chiama", "Il Tool"),
+                   ("manda", "Le Soluzioni"), ("manda", "Password"), ("chiama", "Sistema"),
+                   ("chiama", "Numero Verde"), ("manda", "TUTTI"), ("chiama", "Calliope"),
+                   ("chiama", "Assistente"), ("manda", "Ignora"), ("chiama", "Scrivi"), ("invia", "System")):
     verifica(f"verbo della mappa, contrario spezzato: «{vb}» → «{arrivo}»",
              _MG._forma_verbo(vb, arrivo)[1], [_MG.TESTO_ORDINE])
 

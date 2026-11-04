@@ -797,7 +797,13 @@ verifica("le regole della prima richiesta chiedono la rete (ogni tripla dopo la 
 usc6 = Path(tempfile.mkdtemp(prefix="banco-0702-"))
 u0702 = carica_uscite(Path(__file__).resolve().parent / "manuali" / "studio"
                       / "uscite_banco_3110_0702.json")
-r6 = PA.B.fase_mappa(VllmFinto(uscite=u0702, materiali=mat), mat, {}, usc6, lambda m: None)
+# Quelle uscite sono di prima della richiesta mirata (#385): senza, il giro è quello di allora
+vera_copertura = MG.copertura
+MG.copertura = lambda *a, **k: {"coperti": [], "scoperti": [], "esclusi": []}
+try:
+    r6 = PA.B.fase_mappa(VllmFinto(uscite=u0702, materiali=mat), mat, {}, usc6, lambda m: None)
+finally:
+    MG.copertura = vera_copertura
 verifica("le uscite del 31/10 07:02 col vLLM finto rifanno il banco (parti 5 → 5, 2 → 2, 5 → 3; "
          "concetti nelle pagine 10, 12, 11)",
          [(r6[v]["componenti_prima"], r6[v]["componenti"], r6[v]["concetti_fondati"])
