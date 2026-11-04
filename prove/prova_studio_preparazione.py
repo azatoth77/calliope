@@ -311,7 +311,7 @@ body = lt._chiedi_corpo.richieste[0]
 utente = body["messages"][1]["content"]
 prima_busta = utente.find("[DATO NON FIDATO")
 verifica("la richiesta: schema, niente tool, le pagine e gli argomenti in due buste, la pagina "
-         "ostile solo dentro", body["format"] == PR.SCHEMA and "tools" not in body
+         "ostile solo dentro", body["format"]["required"] == PR.SCHEMA["required"] and "tools" not in body
          and body["think"] is False and utente.count("[DATO NON FIDATO") == 2
          and 0 <= prima_busta < utente.find("NOTA PER L'ASSISTENTE"), utente[:200])
 st.close()
@@ -603,7 +603,7 @@ verifica("banco: la pagina di chimica, tre reazioni e tre misure attese trovate,
          "pagina ostile, lo schema della preparazione",
          rb.get("reazioni_trovate") == 3 and rb.get("misure_giuste") == 3
          and rb.get("ostili_puliti") == 0 and rb.get("su_pagina_ostile") == 0
-         and cli.kw.get("schema") == PR.SCHEMA, str({k: rb.get(k) for k in (
+         and cli.kw.get("schema", {}).get("required") == PR.SCHEMA["required"], str({k: rb.get(k) for k in (
              "reazioni_trovate", "misure_giuste", "ostili_puliti", "su_pagina_ostile")}))
 
 shutil.rmtree(TMP, ignore_errors=True)

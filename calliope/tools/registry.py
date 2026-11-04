@@ -9,7 +9,9 @@ una frase pronta (`risposta_finale`), senza un'altra passata del modello.
 Senza rete i tool con requires_internet spariscono dall'elenco (principio 5).
 """
 
+import datetime
 import json
+import re
 
 from .. import politica
 from ..conferme import admin_confermato, chiedi_conferma, e_admin, incerta_con_admin
@@ -116,13 +118,21 @@ STUDIO_VERI = frozenset({"studio_pagina_leggi", "studio_carte", "studio_interrog
                          "studio_mappa_consigli"})
 
 
+# Un campo inventato che dice la data della verifica: mai quella di partenza di uno spostamento
+_CHIAVE_DATA = re.compile(r"quando|(?:il_)?giorno|(?:la_)?data|giorno_(?:verifica|prova|nuovo)"
+                          r"|data_(?:verifica|prova|nuova)|nuova_data|nuovo_giorno")
+
+
 def studio_dal_nome(name, arguments, veri=()) -> tuple[str, dict] | None:
     """Un nome inventato `studio_<oggetto>_<azione>` (31/10, #373: gemma4 26B chiamava
     `studio_verifica_crea` e la verifica non si creava) → ("studio", argomenti con l'azione):
     l'azione degli argomenti se è un'azione di `studio`, altrimenti l'unica azione di `studio`
     fra le parole del nome («crea», «sposta», «salta_oggi»). Correzione della forma di una
     scelta già fatta dal modello (principio 10, regola `tool_nome_azione`). Gli argomenti che
-    `studio` non conosce si tolgono. None senza un'azione che esiste, con due azioni diverse nel
+    `studio` non conosce si tolgono, tranne una data sola in un campo inventato che dice la data
+    della verifica («quando», «il_giorno», `_CHIAVE_DATA`), per le azioni con la data, che va in
+    `data` (giro vero del 03/11, #383: `studio_verifica` con azione e materia, e il giorno detto
+    perso). Il valore deve essere per intero una data, e con due date non si sceglie. None senza un'azione che esiste, con due azioni diverse nel
     nome, o per un altro prefisso. Il chiamante controlla prima che il nome non sia un tool vero.
     Revisione della PR #374: None anche se il nome dice un'azione diversa da quella degli
     argomenti (`studio_verifica_sposta` con «archivia»), e se comincia col nome di un altro tool
@@ -133,7 +143,7 @@ def studio_dal_nome(name, arguments, veri=()) -> tuple[str, dict] | None:
     if any(n.startswith(v + "_") for v in set(STUDIO_VERI) | {str(x) for x in veri or ()}
            if v != "studio"):
         return None
-    from .studio import AZIONI, PARAMETRI
+    from .studio import AZIONI, CON_DATA, PARAMETRI, data_intera
     args = dict(arguments) if isinstance(arguments, dict) else {}
     parti = [x for x in n.split("_")[1:] if x]
     trovate, i = [], 0
@@ -156,9 +166,27 @@ def studio_dal_nome(name, arguments, veri=()) -> tuple[str, dict] | None:
             return None
         a = trovate[0]
     ammessi = PARAMETRI.get("properties") or {}
+    tolti = {k: v for k, v in args.items() if k not in ammessi}
     args = {k: v for k, v in args.items() if k in ammessi}
+    if a in CON_DATA and not args.get("data") and not args.get("giorno"):
+        oggi = datetime.date.today()
+        date = {k: v for k, v in tolti.items() if data_intera(v, oggi)}
+        if len(date) == 1 and all(_CHIAVE_DATA.fullmatch(str(k).lower()) for k in date):
+            args["data"] = next(iter(date.values()))
     args["azione"] = a
     return "studio", args
+
+
+def forma_argomenti(spec, ctx, arguments):
+    """La forma degli argomenti (ToolSpec.prepara), prima di permessi e politica. Da qui passano
+    anche i confronti con una proposta già scritta in questa forma (`Brain._domanda_non_vale`). Nel
+    dubbio, gli argomenti come sono."""
+    if getattr(spec, "prepara", None) is None:
+        return arguments
+    try:
+        return spec.prepara(ctx, dict(arguments or {})) or arguments
+    except Exception:  # noqa: BLE001
+        return arguments
 
 
 def nome_e_argomenti(name, arguments, veri=()) -> tuple[str, dict] | None:
@@ -410,11 +438,7 @@ class ToolRegistry:
                 note_rule(ctx, "estensione_gestisci_modifica")
                 name, spec, arguments = "sviluppo_apri", self._tools["sviluppo_apri"], conv
         if getattr(spec, "prepara", None) is not None:
-            # La forma degli argomenti (ToolSpec.prepara), prima di permessi e politica
-            try:
-                arguments = spec.prepara(ctx, dict(arguments or {})) or arguments
-            except Exception:  # noqa: BLE001 — nel dubbio, gli argomenti come sono
-                pass
+            arguments = forma_argomenti(spec, ctx, arguments)
         sc = getattr(ctx, "speaker_ctx", None)
         # La soluzione di un esercizio guidato vivo di chi parla negli argomenti (31/10, #278,
         # revisione della PR #367: «ricorda» la ripeteva nella sua conferma): non si scrive né

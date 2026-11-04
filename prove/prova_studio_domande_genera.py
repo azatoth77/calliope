@@ -144,7 +144,7 @@ print("— la richiesta")
 c = DG.corpo("qwen", st.verifica(LEO, vid), rif, arif)
 testo = c["messages"][1]["content"]
 verifica("niente tool, schema guidato coi tipi, temperatura 0, thinking spento",
-         "tools" not in c and c["format"] == DG.SCHEMA and c["think"] is False
+         "tools" not in c and c["format"] == DG.schema(arif) and c["think"] is False
          and c["options"] == {"temperature": 0, "num_predict": DG.MAX_TOKENS}
          and DG.SCHEMA["properties"]["domande"]["items"]["properties"]["tipo"]["enum"]
          == ["scelta", "vero_falso", "numero", "parole", "aperta"])

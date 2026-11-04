@@ -551,7 +551,13 @@ def _v15(db: sqlite3.Connection):
         db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
 
 
-MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12, _v13, _v14, _v15]
+def _v16(db):
+    """Ciò che una generazione ha lasciato scoperto (04/11, revisione della PR #388):
+    {"carte"|"domande"|"preparazione": {"argomenti": [id…], "valori_persi": bool}}; solo id."""
+    db.execute("ALTER TABLE studio_verifiche ADD COLUMN scoperti TEXT")
+
+
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12, _v13, _v14, _v15, _v16]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
 CON_ORFANI = ("studio_eventi", "studio_tentativi", "studio_pratica")

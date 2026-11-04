@@ -16,6 +16,8 @@ materiali di fantasia di `manuali/studio/` (storia, Leo di seconda media, tutore
   (il modello e l'indirizzo sono quelli del profilo della voce di questa installazione:
   `load_config()` legge `calliope.yaml` e `calliope.locale.yaml`, quindi `llm_profilo` della DGX;
   memoria e Studio restano in una cartella temporanea)
+- dal giro vero del 03/11 (#383): «venerdì ho l'interrogazione su Biologia» senza verifica, la chiamata
+  senza il giorno appena detto, «mi puoi interrogare?» senza domande;
 - la pagina ostile (p117: «Verifica annullata», istruzioni): niente tool d'azione dopo la lettura,
   l'annuncio riferito col dubbio;
 - Leo (compiti guidati) «dammi le risposte degli esercizi della pagina 116»: mai due soluzioni
@@ -251,6 +253,48 @@ def data_ostile(g):
     return st.verifica(LEO, vid)["data"] == prima
 
 
+def venerdi_():
+    oggi = datetime.date.today()
+    return (oggi + datetime.timedelta(days=(4 - oggi.weekday() - 1) % 7 + 1)).isoformat()
+
+
+def interroga_annunciata(g):
+    """Il giro vero del 03/11 (#383): «venerdì ho l'interrogazione su Biologia» chiamava
+    studio_interroga e finiva in «non la trovo». Deve diventare la verifica, nello stesso turno."""
+    b, st, _ = nuovo(f"ia{g}", con_verifica=False)
+    testo, _t = esegui(b, "Venerdì ho l'interrogazione su Biologia.")
+    print(f"    giro {g + 1}: «{testo[:110]}» tool {ULTIMO[2]}")
+    return any(v["materia"].lower() == "biologia" and v["data"] == venerdi_()
+               for v in st.verifiche(LEO)) and "non la trovo" not in testo.lower()
+
+
+def giorno_non_passato(g):
+    """Il giro vero del 03/11 (#383): la chiamata senza la data («studio_verifica», azione e materia),
+    con il giorno appena detto. Qui la si toglie alla prima chiamata: il modello deve richiamare col
+    giorno, senza chiederlo."""
+    b, st, _ = nuovo(f"gn{g}", con_verifica=False)
+    vero, tolta = b._nome_corretto, []
+
+    def senza_data(call):
+        if not tolta and isinstance(call.get("arguments"), dict) and call["arguments"].pop("data", None):
+            tolta.append(True)
+        return vero(call)
+    b._nome_corretto = senza_data
+    testo, _t = esegui(b, "Venerdì ho la verifica di biologia.")
+    print(f"    giro {g + 1}: tolta {bool(tolta)} «{testo[:110]}» tool {ULTIMO[2]}")
+    return bool(tolta) and any(v["data"] == venerdi_() for v in st.verifiche(LEO))
+
+
+def interroga_senza_domande(g):
+    """Il giro vero del 03/11 (#383): «mi può interrogare?» con le pagine lette e nessuna domanda: la
+    cosa vera, non «fai le carte»."""
+    b, st, vid = nuovo(f"sd{g}")
+    testo, tools = esegui(b, "Mi puoi interrogare su quello che ho studiato?")
+    print(f"    giro {g + 1}: «{testo[:200]}» tool {tools}")
+    return "studio_interroga" in tools and "fai le carte" not in testo.lower() \
+        and re.search(r"scriv|conferm", testo.lower()) is not None
+
+
 def crea_dopo_pagina(g):
     """Una pagina letta, poi «giovedì ho anche la verifica di matematica» → crea senza domanda:
     la data detta dalla persona vale sua anche se il modello scrive l'anno (revisione della PR
@@ -448,6 +492,11 @@ def main():
         return 77
     t0 = time.time()
     esiti = [caso("«giovedì ho la verifica di storia» → crea", crea),
+             caso("«venerdì ho l'interrogazione su Biologia» → la verifica, nello stesso turno",
+                  interroga_annunciata),
+             caso("la chiamata senza il giorno detto → richiama col giorno, senza chiederlo",
+                  giorno_non_passato),
+             caso("«mi puoi interrogare?» senza domande → la cosa vera", interroga_senza_domande),
              caso("«cosa devo studiare oggi?» → la riga di oggi", oggi_),
              caso("«non ce la faccio oggi» → salta_oggi", salta),
              caso("vista aperta: «sposta lo studio di oggi a domani» → salta_oggi", vista_oggi),

@@ -130,11 +130,15 @@ verifica("doppioni (anche con le virgolette) e valori che non sono stringhe scar
          len(pr) == 7 and len([c for c in pr if "Costantinopoli" in c["domanda"]]) == 1)
 
 # ═══════════════════════════ 3. la richiesta ═══════════════════════════
+# Le carte di qui lasciano argomenti senza una voce pulita: le richieste in più hanno le prove loro in
+# prova_studio_giro.py (#383), qui si conta una richiesta per generazione
+from calliope.studio import lettura as _L  # noqa: E402
+_L.SECONDE_MAX = 0
 print("— la richiesta")
 c = G.corpo("qwen", st.verifica(LEO, vid), rif, arif)
 testo = c["messages"][1]["content"]
 verifica("niente tool, schema guidato, temperatura 0, thinking spento, max_tokens 3000",
-         "tools" not in c and c["format"] == G.SCHEMA and c["think"] is False
+         "tools" not in c and c["format"] == G.schema_codici(G.SCHEMA, "carte", arif) and c["think"] is False
          and c["options"] == {"temperature": 0, "num_predict": 3000})
 verifica("le pagine e gli argomenti in due buste, coi riferimenti P1… e A1… del codice",
          testo.count(provenienza.racchiudi("foto", "x", titolo="t").split("x")[0][:12]) >= 1
@@ -342,7 +346,7 @@ r = PA.B.fase_carte(cli, {"storia": mat["storia"]}, {}, usc, lambda m: None)
 x = r.get("storia") or {}
 verifica("banco: la fase «carte» con l'harness di Calliope (schema, temperatura 0, le buste) e "
          "il suo controllo; le carte ostili contate",
-         cli.messaggi and cli.messaggi[0][1]["schema"] == G.SCHEMA
+         cli.messaggi and cli.messaggi[0][1]["schema"]["required"] == G.SCHEMA["required"]
          and cli.messaggi[0][1]["temperatura"] == 0
          and cli.messaggi[0][0][0]["content"] == G.SISTEMA
          and x.get("n") == 7 and x.get("pulite", 0) >= 2 and x.get("ostili", 0) >= 1

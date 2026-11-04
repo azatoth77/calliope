@@ -51,7 +51,7 @@ usa un concetto già scritto); la seconda mette la parte del centro per prima co
 (`codici(nodi, coll)`) e chiede un collegamento per ogni parte staccata; `connetti` conta i
 proposti e gli scartati per motivo.
 
-**Dal giro vero del 03/11** (#385, decisione 0035 punto 55): lo scheletro aveva 11 concetti su 4
+**Dal giro vero del 03/11** (#385, decisione 0035 punto 56): lo scheletro aveva 11 concetti su 4
 pagine. Il limite non era il tetto dei concetti ma la richiesta, che diceva «da 6 a 10 concetti» per
 tutta la verifica: il modello ubbidiva e gli argomenti restavano fuori. Ora due livelli, come si
 studia: la **mappa generale** (lo scheletro di sempre, con «Fai la tua» e il controllo identici)

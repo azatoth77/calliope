@@ -2,7 +2,7 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 """La mappa generale completa e le mappe delle parti a secco (04/11, issue #385, epic #251, decisione
-0035 punto 55; calliope/studio/mappa_genera.py `copertura`, `rete`, `solo_studiabili`,
+0035 punto 56; calliope/studio/mappa_genera.py `copertura`, `rete`, `solo_studiabili`,
 studio/lettura.py `Lettore.prepara_mappe`, `genera_parte`, studio/mappe.py `proponi_parte`,
 `_parti_per_schermo`), col vLLM finto e i materiali di fantasia di `prova_studio_argomenti.py`.
 

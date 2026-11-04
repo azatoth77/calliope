@@ -31,7 +31,7 @@ confronto del codice (`mappa.confronta`), gli indicatori del metodo per giro (`g
 sui concetti chiave, una volta per giro; «Parliamone» legge `consigli_mappa` (in busta, senza i
 concetti nascosti) e `misura_consigli` conta i concetti svelati.
 
-**Le mappe delle parti** (04/11, #385, decisione 0035 punto 55): una per argomento del piano, tipo
+**Le mappe delle parti** (04/11, #385, decisione 0035 punto 56): una per argomento del piano, tipo
 «parte», da leggere: niente copie, niente controllo, nessuno le cambia (`_mappa` le rifiuta con
 `cambia`). Lo stato della generazione di ogni parte sta nella sua riga (`aiuto`: argomento, firma,
 esito, quando), e nessun campo nuovo nello schema: una parte che non riesce lascia le altre e la sua

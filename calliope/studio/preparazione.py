@@ -51,8 +51,12 @@ PRONTE = "pronte"
 ESITI = (PRONTE, G.VUOTO, G.ROTTO, G.ERRORE)
 QUIETE_S = 120.0
 
-TEMPERATURA, PRESENCE, MAX_TOKENS = 0, 0, 3500
-PARAGRAFI_MAX, PARAGRAFO_MAX = 4, 400
+# Il caso peggiore ci sta: 12 lezioni da 3 paragrafi al tetto sono circa 190 token a paragrafo (3,7
+# caratteri a token e le chiavi, misura del 03/11, #383), più reazioni e misure: ~7700. Il solito è
+# molto meno (11 lezioni in 1900). Un paragrafo oltre il tetto lo chiude lo schema a metà di una frase
+# (a 400 caratteri 5 paragrafi su 22, il 03/11): il tetto è largo, e il codice taglia alla frase
+TEMPERATURA, PRESENCE, MAX_TOKENS = 0, 0, 8000
+PARAGRAFI_MAX, PARAGRAFO_MAX = 4, 600
 REAZIONI_MAX, MISURE_MAX = 6, 8
 FORMULA_MAX = 12
 MATERIALE_MAX = 30
@@ -67,8 +71,9 @@ ELEMENTI = frozenset("H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Fe Cu Z
 
 REGOLE = (
     "Prepara lo studio degli argomenti confermati, solo da ciò che c'è nelle pagine. Regole:\n"
-    "- per ogni argomento (A1, A2…) una lezione breve: da 2 a 4 paragrafi chiari per un ragazzo, "
-    "ognuno con le pagine che usa (P1, P2…), senza inventare;\n"
+    "- per ogni argomento una lezione breve, col suo codice (solo A1, A2…, senza il titolo): da 2 a "
+    "3 paragrafi chiari per un ragazzo, al più tre frasi l'uno, ognuno con le pagine che usa (P1, "
+    "P2…), senza inventare;\n"
     "- «reazioni»: le equazioni chimiche bilanciate scritte nelle pagine, così come sono scritte "
     "(per esempio «2 H2 + O2 -> 2 H2O»), con le pagine; nessuna se non ce ne sono;\n"
     "- «misure»: gli esempi con la massa in grammi e il volume in cm³ di un materiale scritti "
@@ -88,7 +93,8 @@ SCHEMA = {"type": "object", "properties": {
         "materiale": {"type": "string", "maxLength": 40}, "m": {"type": "number"},
         "V": {"type": "number"}, "pagine": {"type": "array", "items": {"type": "string"}}},
         "required": ["materiale", "m", "V", "pagine"]}}},
-    "required": ["lezioni"]}
+    # Obbligatorie anche vuote (04/11, #383): senza, a lezioni finite il modello chiudeva il JSON
+    "required": ["lezioni", "reazioni", "misure"]}
 
 
 def modo(cfg) -> str:
@@ -99,6 +105,10 @@ def modo(cfg) -> str:
 def firma(argomenti: list[dict], pagine: list[dict], modo_: str) -> str:
     """Come le carte (`genera.firma`), con un segno suo: argomenti del piano, pagine lette, modo."""
     return hashlib.sha256(("prep:" + G.firma(argomenti, pagine, modo_)).encode()).hexdigest()[:16]
+
+
+def schema(arif) -> dict:
+    return G.schema_codici(SCHEMA, "lezioni", arif)
 
 
 def messaggi(v: dict, rif, arif) -> list[dict]:
@@ -112,7 +122,7 @@ def corpo(modello: str, v: dict, rif, arif) -> dict:
     """La richiesta come le carte: schema guidato, niente tool, thinking spento, temperatura 0."""
     return {"model": modello, "messages": messaggi(v, rif, arif),
             "options": {"temperature": TEMPERATURA, "num_predict": MAX_TOKENS},
-            "think": False, "format": SCHEMA, "openai": {"presence_penalty": PRESENCE}}
+            "think": False, "format": schema(arif), "openai": {"presence_penalty": PRESENCE}}
 
 
 def leggi(testo: str) -> dict | None:
@@ -128,6 +138,57 @@ def leggi(testo: str) -> dict | None:
     if not isinstance(j, dict) or not isinstance(j.get("lezioni", []), list):
         return None
     return j
+
+
+def parziale(testo) -> dict | None:
+    """Le voci intere di una risposta tagliata (`genera.oggetti_completi`), o None senza una
+    lezione: le lezioni vengono prima, e senza nemmeno una si richiede."""
+    lezioni = G.oggetti_completi(testo, "lezioni")
+    if not lezioni:
+        return None
+    return {"lezioni": lezioni, "reazioni": G.oggetti_completi(testo, "reazioni"),
+            "misure": G.oggetti_completi(testo, "misure")}
+
+
+# La fine di una frase: un segno, uno spazio, poi una maiuscola o una virgoletta. Il punto di «2.7» non
+# ha lo spazio, «2. 7» e «1. 500» (l'OCR) e «gen. di» non hanno la maiuscola; il punto prima di
+# un'iniziale, di una sigla o di un numero d'elenco non chiude niente («J. Watt», «a.C.», «il sig.
+# Bianchi», «i passi: 1. Pesa»)
+_FINE_FRASE = re.compile(r"[.!?](?=\s+[\"«“‘'A-ZÀ-ÖØ-Þ])")
+_ABBREVIAZIONI = frozenset("sig sigg dott dr prof ing avv arch geom rag on gen col cav mons sen ecc es "
+                           "cfr pag pagg vol cap fig tab art nr num tel ca cioè".split())
+_NUMERO_ELENCO = re.compile(r"(?:^|[:;,]\s*)\d+$")
+# Sotto questa lunghezza ciò che resta non è una frase di una lezione («1.», «Il sig.», «Il pH è 7.»)
+FRASE_MIN = 25
+
+
+def _chiude(testo: str, i: int) -> bool:
+    """Il segno in `i` chiude davvero una frase? Il punto no dopo un'abbreviazione, una lettera sola
+    o un numero d'elenco."""
+    if testo[i] != ".":
+        return True
+    if _NUMERO_ELENCO.search(testo[:i]):
+        return False
+    parola = re.search(r"[^\W\d_]+$", testo[:i])
+    return parola is None or (len(parola.group(0)) > 1
+                              and parola.group(0).lower() not in _ABBREVIAZIONI)
+
+
+def fino_alla_frase(testo) -> str | None:
+    """Il paragrafo del modello, una riga. Arrivato al tetto, lo schema l'ha chiuso a metà: fino
+    all'ultima frase finita (revisione della PR #388: «è 2.7 g…» diventava «è 2.», un dato falso a
+    chi studia). La fine del testo tagliato non conta: «2.» può essere la metà di «2.7». None se non
+    ce n'è una abbastanza lunga: meglio niente di un pezzo. Il tetto si guarda sul testo grezzo,
+    quello che lo schema conta: con uno spazio doppio, o uno spazio al carattere 600, il pezzo
+    normalizzato sembrerebbe integro (seconda revisione della PR #388: «la massa vale 3»)."""
+    grezzo = str(testo if testo is not None else "")
+    t = " ".join(grezzo.split())
+    if len(grezzo) < PARAGRAFO_MAX:
+        return t
+    fine = [m.start() for m in _FINE_FRASE.finditer(t[:PARAGRAFO_MAX]) if _chiude(t, m.start())]
+    if not fine or fine[-1] + 1 < FRASE_MIN:
+        return None
+    return t[:fine[-1] + 1]
 
 
 # ─────────────────────────── i valori: reazioni e misure ───────────────────────────
@@ -363,7 +424,7 @@ def valida(grezzo: dict, rif, arif) -> dict:
             if not isinstance(p, dict) or not isinstance(p.get("testo"), str):
                 scartati += 1
                 continue
-            t, avvisi = G.forma_testo(p["testo"], PARAGRAFO_MAX)
+            t, avvisi = G.forma_testo(fino_alla_frase(p["testo"]), PARAGRAFO_MAX)
             if t is None:
                 scartati += 1
                 continue
@@ -418,6 +479,36 @@ class Preparazioni:
 
     def preparazione_modo(self) -> str:
         return modo(self.cfg)
+
+    def segna_scoperti(self, vid, cosa: str, argomenti: list[int], valori_persi: bool = False):
+        """Cosa ha lasciato scoperto l'ultima generazione di `cosa` (carte, domande, preparazione);
+        niente scoperto toglie la voce. Vale per tutte e tre: stanno sulla stessa verifica."""
+        with self.dati.lock:
+            r = self.dati.uno("SELECT scoperti FROM studio_verifiche WHERE id = ?", (int(vid),))
+            if r is None:
+                return
+            tutti = self.scoperti_di(vid)
+            if argomenti or valori_persi:
+                tutti[cosa] = {"argomenti": list(argomenti), "valori_persi": bool(valori_persi)}
+            else:
+                tutti.pop(cosa, None)
+            self.dati.scrivi("UPDATE studio_verifiche SET scoperti = ? WHERE id = ?",
+                             (json.dumps(tutti) if tutti else None, int(vid)))
+
+    def argomenti_decisi(self, vid, tabella: str) -> set:
+        """Gli argomenti con una carta o una domanda già decisa (scritta o confermata), che una
+        generazione non tocca: sono coperti. `tabella` la scrive il codice."""
+        return {r["argomento"] for r in self.dati.tutti(
+            f"SELECT argomento FROM {tabella} WHERE verifica = ? AND stato = 'attiva'", (int(vid),))
+            if r["argomento"] is not None}
+
+    def scoperti_di(self, vid) -> dict:
+        r = self.dati.uno("SELECT scoperti FROM studio_verifiche WHERE id = ?", (int(vid),))
+        try:
+            x = json.loads(r["scoperti"] or "{}") if r is not None else {}
+        except ValueError:
+            x = {}
+        return x if isinstance(x, dict) else {}
 
     def _misure_prep(self) -> dict:
         return self.misure.setdefault("preparazione", {

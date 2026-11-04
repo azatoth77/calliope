@@ -347,6 +347,18 @@ class Prove:
                                                  if str(x).isdecimal()]})
         return out
 
+    def proposte_per_prove(self, v: dict) -> int:
+        """Quante domande e carte aspettano una conferma che la persona può dare adesso: quelle
+        «proposte», senza avvisi, sugli argomenti del piano. Quelle in ombra non contano: la
+        persona non le vede."""
+        nel_piano = self._del_piano(v["id"])
+        n = 0
+        for tab in ("studio_domande", "studio_carte"):
+            n += sum(1 for r in self.dati.tutti(
+                f"SELECT argomento, avvisi FROM {tab} WHERE verifica = ? AND stato = 'proposta'",
+                (v["id"],)) if r["argomento"] in nel_piano and not D.da_j(r["avvisi"]))
+        return n
+
     def _mix(self, v: dict, pool: list[dict], n: int, seme: int) -> tuple[list[dict], dict]:
         """Le domande della prova: per argomento, uniformi o pesate dalla padronanza mostrata
         (in ombra i pesi sono solo una misura); dentro un argomento prima le usate meno."""

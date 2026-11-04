@@ -147,6 +147,131 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   ≥ 90 %» non si raggiunge; il prompt nuovo della seconda passata e i codici al posto dei concetti
   sono da rimisurare col banco vero.
 
+## Il giro vero del 03/11 (04/11, issue #383, ramo `issue-383-giro-studio`)
+
+Una verifica vera di 4 pagine lette e 11 argomenti, dalle 18:44 alle 19:02. Le cause, tutte riprodotte
+sulla DGX con la stessa richiesta o con frasi di fantasia (i materiali restano fuori dal repository; dal
+banco sono usciti solo conti e struttura). Decisione: 0035 punto 55.
+
+1. **Domande «in tondo» (93,5 s, nessuna domanda): non era un giro in tondo.** La risposta ricostruita
+   aveva 35 domande **tutte diverse**, ferma all'argomento A10 su 11 per la fine dei 3500 token: «da 3 a
+   5 per argomento, al più 30» con 11 argomenti chiede almeno 33, e costa circa 100 token a domanda. A
+   temperatura 0 la seconda richiesta dà lo stesso taglio, e tutto si buttava. Ora: la regola dice quante
+   ne stanno (`genera.quante_per_argomento`: 2 per argomento con 11), lo schema ha il tetto di 30, il
+   budget è 5000, e `Lettore._chiedi_lista` tiene le voci intere di una risposta tagliata (carte, domande,
+   lezioni), con lo stesso controllo e senza richiedere (`genera.oggetti_completi`). Il registro dice
+   «tagliate», la misura `tagliate`.
+2. **Preparazione a 0 lezioni con 11 scartati: lo scarto non era giusto.** Il modello scriveva
+   `"argomento": "A1: <titolo>"` come nella busta degli argomenti, e `genera._arg` non riconosceva il
+   codice: tutte le lezioni, buone, fuori. Ora lo schema ha i soli codici di questa richiesta (`enum`, anche
+   carte e domande) e `_arg` legge il codice in testa; un titolo o un codice che non c'è restano scartati.
+   Altri due difetti visti nella stessa misura: 5 paragrafi su 22 erano esattamente a 400 caratteri, chiusi
+   dallo schema a metà frase (ora il tetto è 600, due o tre paragrafi di tre frasi, e il codice taglia
+   all'ultima frase intera, `fino_alla_frase`); `reazioni` e `misure` non erano obbligatorie, e col nuovo
+   prompt il modello chiudeva il JSON dopo le lezioni (sulla pagina di chimica 0 su 3; obbligatorie anche
+   vuote, 3 reazioni e 3 misure su 3).
+3. **Il giorno detto che si perde.** Il modello ha chiamato il nome inventato `studio_verifica` con azione
+   e materia, senza la data. Il registro non permette di dire se l'avesse messa in un campo che
+   `studio_dal_nome` toglie: sulla DGX `studio_verifica` è ricomparso 1 volta su 8 dopo un «non la trovo»,
+   con la data giusta, e la frase da sola dà la data 5 volte su 5. Il turno che ne seguiva lo chiudeva il
+   `cosa_fare` di «manca la data», che diceva solo di chiedere. Ora dice di richiamare subito se il giorno
+   è già detto (col modello, togliendo la data alla prima chiamata: 3/3 senza chiederlo); una data sola in
+   un campo inventato di un nome inventato va in `data`; `giorno` al posto di `data` vale come data, e
+   `tipo` al posto di `prova` con «crea» (`senza_mascherati`, prima dei controlli: la politica sulle date
+   non si scavalca); il log scrive le chiavi del modello prima della conversione. Nessuna regola sul testo:
+   la #365 (il tema della data nella frase) non cambia.
+4. **`studio_interroga` senza verifica.** Due cause: la descrizione non separava «interrogami» da «venerdì
+   ho l'interrogazione» (la frase da sola, senza verifiche: `studio_interroga` 4 volte su 5), e il risultato
+   era la frase pronta «non la trovo», che chiude il turno; in più il modello aveva scritto `verifica: 1`
+   prima che esistesse. Ora: `_verifica` con un id inventato e la materia vale la materia, per tutti i tool;
+   `_nessuna_verifica` (interroga, carte, ascolta, studio) con una materia detta non ha frase pronta e dà la
+   strada verso «crea»; la descrizione dice che l'interrogazione vera è «crea» e
+   che `materia` si passa solo se nominata. Col modello 3/3, nello stesso turno, con la prova giusta. Senza
+   materia resta lo stesso «non la trovo» di una verifica di un altro. Vista scrivendo le prove: su una
+   verifica in bozza l'interrogazione diceva «è chiusa», falso; ora dice cosa manca.
+5. **«Scrivile o fai le carte».** La frase non diceva che le 23 carte generate erano in ombra, e «fai le
+   carte» sembrava un'offerta. Ora `_senza_domande` dice ciò che usa (scritte o confermate), quante ne ha
+   da confermare se ce ne sono (`proposte_per_prove`: mai quelle in ombra né con un avviso), che può
+   scriverle, e che intanto può leggere il ripasso, se è acceso e c'è una pagina letta. **Che
+   l'interrogazione usi le carte generate è della #384**: qui non sono usabili.
+6. **Il promemoria detto durante lo studio.** Il controllo del 31/10 (#373) guardava solo i tool del turno,
+   e a «lo farei io» non ce n'erano. La modalità studio è il posto giusto, perché è già lo stato «su questo
+   dispositivo si sta studiando», per satellite e con una chiusura sua: **effetto 3**, dichiarato in
+   `modalita.py`. `Ciclo._modalita_turno` lo mette in `speaker_ctx`, `Brain._sviluppo_coda` tace il promemoria
+   (senza consumarlo) e la riga dello sviluppo aperto, anche nel turno che apre la modalità (si apre a fine
+   turno). Parlando dello sviluppo si dice. Regola `sviluppo_taciuto_studio`, solo quando ci sarebbe stato
+   qualcosa da dire. Limite: fuori dalla modalità (un altro satellite) una risposta senza tool resta come prima.
+
+**Misure sulla DGX (04/11, sola lettura, codice del ramo in una cartella temporanea, qwen3.6-35b e voce del
+profilo).** Sullo stesso materiale, 3 giri: domande 25, 25 e 27 (fine «stop», 39–64 s, 2906–3038 token, tutti
+gli 11 argomenti, 23, 23 e 26 senza avvisi); preparazione 11 lezioni su 11 con 22 paragrafi (19, 21 e 18 senza
+avvisi, 0 scartati, tutti finiti a una frase, 24–43 s); carte 23 su 23 (2 giri, 22 senza
+avvisi). Prima: 0 domande in 93,5 s, 0 lezioni. Banco sui materiali di fantasia, 2 giri: prove 29–30 domande
+per verifica con 0 ostili; preparazione 8–10 lezioni su tutte; chimica 3 reazioni e 3 misure su 3 (2 giri).
+`prova_studio_ollama.py 3`: 19 casi su 19, i 3 nuovi 3/3. **Non misurato:** la correttezza delle domande e delle
+lezioni riga per riga contro le pagine (il banco della #384) e il giro intero con un riavvio sulla versione nuova:
+sulla DGX gira ancora il codice di prima, e `studio_domande_genera` e `studio_preparazione` restano in ombra.
+
+Prove: `prova_studio_giro.py` (nuova, a secco, ogni punto coi contrari), tre casi in `prova_studio_ollama.py`.
+`prova_studio_modalita` confrontava l'orologio vero con una data scritta e cadeva dal 04/11: corretta.
+
+### 04/11: correzioni dopo la revisione della PR #388
+
+- **Il paragrafo al tetto**: `fino_alla_frase` tagliava sui punti dei decimali e delle sigle («è 2.7 g…»
+  diventava «è 2.», senza avvisi: un dato falso). Ora la fine di frase è un segno seguito da uno spazio,
+  mai dopo un'abbreviazione o una lettera sola, e con almeno `FRASE_MIN` caratteri; se no il paragrafo si
+  scarta. *[storico: «taglia all'ultima frase intera» qui sopra valeva con qualunque punto]*
+- **Il «sì» con `giorno`**: la proposta è già nella forma di `ToolSpec.prepara`, la chiamata no, e la domanda
+  tornava. `tools.registry.forma_argomenti` è il punto unico, usato da `ToolRegistry.call` e da
+  `Brain._domanda_non_vale`.
+- **Una verifica che manca, per azione**: la strada verso «crea» solo per letture, interrogazione, carte e
+  ascolto; il richiamo solo con una verifica sola, senza materia. Con `archivia`, `conclusa` e le altre
+  azioni che cambiano qualcosa: dillo in breve o chiedi quale. Nessuna materia scritta dalla persona in
+  `cosa_fare`.
+- **La copertura**: dopo un taglio `Lettore._chiedi_lista` richiede i soli argomenti scoperti, con gli stessi
+  codici, al più `SECONDE_MAX` (2). Ciò che resta scoperto dopo il controllo sta in
+  `studio_verifiche.scoperti` (migrazione 16, solo id, anche `valori_persi` per reazioni e misure).
+- **L'effetto 3**: solo a modalità aperta, come dice il documento; il turno che apre la modalità con un tool
+  può ancora dire la riga dello sviluppo. `sviluppo_taciuto_studio` scatta solo se c'era da dire
+  (`Sviluppi.riga_dovuta`). In modalità il modello riceve `SVILUPPO_IN_STUDIO` al posto di `SVILUPPO_MSG`.
+- **`studio_dal_nome`**: solo un valore che è per intero una data, solo da un campo che dice la data
+  della verifica (`_CHIAVE_DATA`: mai `da`, `vecchia`, `nota`), e con due date non si sceglie.
+- **`_arg`**: «A1 e A2», «A1-A3», «A1.2» non sono un codice: valeva per la mappa (`mappa_genera`, senza
+  `enum`), che con la prima versione di questa PR prendeva il primo; corretto in `genera.py`.
+- **Le carte**: la regola viene da `quante_per_argomento`, `maxItems` 30 come il tetto.
+- **Le domande a scelta senza opzioni**: `opzioni` era facoltativo, e in un giro del banco 15 domande su 25
+  sono state scartate dal controllo. Ora è obbligatorio, vuoto per gli altri tipi.
+- **Budget della preparazione**: 8000. Misura forzando il caso peggiore sul materiale del giro (3 paragrafi per
+  argomento, almeno 550 caratteri): 5366 token per 11 lezioni e 33 paragrafi da 537 caratteri; 12 lezioni al
+  tetto con reazioni e misure sono stimate sotto gli 8000.
+
+Dopo la seconda revisione della PR #388:
+
+- **Il tetto del paragrafo** si guarda sul testo grezzo, quello che conta lo schema: con uno spazio doppio o uno
+  spazio al carattere 600 un paragrafo tagliato sembrava integro («la massa vale 3»). La frase si chiude solo con
+  una maiuscola o una virgoletta dopo lo spazio: fuori «2. 7», «1. 500», «gen. di»; anche i numeri d'elenco.
+- **I sospesi in modalità** solo se si nomina lo sviluppo: «continuiamo il ripasso» e «come si sviluppa la
+  fotosintesi?» li portavano nei dati del turno.
+- **`scoperti` conta le voci senza avvisi**, e la seconda richiesta parte anche dopo una risposta intera, per gli
+  argomenti senza una voce pulita; se non cambia niente ci si ferma (una pagina con le istruzioni resta con
+  l'avviso). La lezione nuova prende il posto di quella con gli avvisi. Con un esito «rotto» tutti scoperti, mai il
+  valore vecchio.
+- **«tipo»** con una materia che non c'è ha la strada verso «crea», senza richiamo.
+
+Dopo la terza revisione: **una seconda richiesta può solo aggiungere** (`lettura._aggiungi`). Delle nuove voci
+contano solo i codici mancanti, al più 3 per argomento, prima una per ciascuno; escono solo le vecchie di quegli
+argomenti; le vecchie pulite stanno davanti, dentro al tetto. Una lezione pulita non si sostituisce. Prima 30 voci sporche
+su un argomento facevano sparire quelle buone degli altri. Un argomento con una carta o una domanda già decisa è coperto
+(`argomenti_decisi`) e non si richiede.
+
+Misure dopo le prime correzioni (DGX, sola lettura). Sul materiale del giro: domande 4 giri, 23–27 su 11 argomenti (fine
+«stop», 35–43 s, 21–23 senza avvisi); preparazione 2 giri, 11 lezioni su 11, 14–15 paragrafi senza avvisi su 18–19,
+0 scartati, tutti finiti a una frase; carte 2 giri, 22–24 su 11 argomenti. Taglio forzato a 900 token: domande 6
+voci, la seconda richiesta chiede i soli 8 argomenti scoperti e li copre tutti; preparazione 5 lezioni, poi le altre
+6. Banco di fantasia: prove 30 domande per verifica con 0 ostili; preparazione 8–10 lezioni su tutte, chimica 3
+reazioni e 3 misure su 3. `prova_studio_ollama.py 3`: 19 su 19, misurata prima dell'ultimo ritocco, che tocca solo lo
+schema delle domande. Mutanti di `prova_studio_giro`: 39 su 39 cadono, compresi i 5 sopravvissuti alla revisione.
+
 ## Il nome inventato `studio_verifica_crea` (31/10, issue #373, ramo `issue-373-studio-nome-inventato`)
 
 Nella prova di chi amministra del 31/10 alle 9:23 il 26B ha chiamato `studio_verifica_crea` e la
@@ -177,7 +302,7 @@ secondo giro del solo caso).
 
 ## Le mappe complete: la generale con ogni argomento e una per parte (04/11, issue #385, ramo `issue-385-mappa-completa`)
 
-*Epic #251, decisione 0035 punto 55. Nel giro vero del 03/11 lo scheletro aveva 11 concetti e 10
+*Epic #251, decisione 0035 punto 56. Nel giro vero del 03/11 lo scheletro aveva 11 concetti e 10
 collegamenti su 4 pagine: chi aveva fotografato le pagine non trovava una mappa per studiare.*
 
 **La causa non era il tetto.** Il banco sulla versione attiva (`banco_studio.py --fasi mappa`,
@@ -325,7 +450,8 @@ una parte.
 ## La modalità studio (02/11, issue #376, ramo `issue-376-modalita-studio`)
 
 Decisione 0035 punto 54; il perché nella issue. `studio/modalita.py`: uno stato in memoria per
-satellite (`Studio.modalita`) con due effetti soltanto.
+satellite (`Studio.modalita`) con due effetti soltanto *[storico: dal 04/11 tre, #383, vedi la voce del
+giro vero del 03/11]*.
 - **Si apre**: `Ciclo._modalita_dopo_turno` (un tool dello Studio che la politica ha fatto passare,
   detto dal proprietario sul suo satellite personale; regola `modalita_studio_aperta`) e
   `POST /api/vista` (la sezione aperta, se il satellite dello schermo è dello stesso proprietario, e

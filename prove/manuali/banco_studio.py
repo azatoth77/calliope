@@ -1064,7 +1064,7 @@ def fase_carte(cli, materiali, testi_letti, uscita, log) -> dict:
         v = {"materia": ver["materia"], "livello": ver.get("classe"),
              "data": ver["data_verifica"], "argomento": ver.get("argomento")}
         rif, arif = A.riferimenti(pagine), G.argomenti_rif(args)
-        r = cli.chat(G.messaggi(v, rif, arif), max_token=G.MAX_TOKENS, schema=G.SCHEMA,
+        r = cli.chat(G.messaggi(v, rif, arif), max_token=G.MAX_TOKENS, schema=G.schema_codici(G.SCHEMA, "carte", arif),
                      temperatura=G.TEMPERATURA, presence=G.PRESENCE)
         grezzi = G.leggi(r.get("testo", "")) or []
         carte = G.proposte(grezzi, rif, arif)
@@ -1121,7 +1121,7 @@ def fase_preparazione(cli, materiali, testi_letti, uscita, log) -> dict:
         v = {"materia": ver["materia"], "livello": ver.get("classe"),
              "data": ver["data_verifica"], "argomento": ver.get("argomento")}
         rif, arif = A.riferimenti(pagine), G.argomenti_rif(args)
-        r = cli.chat(PR.messaggi(v, rif, arif), max_token=PR.MAX_TOKENS, schema=PR.SCHEMA,
+        r = cli.chat(PR.messaggi(v, rif, arif), max_token=PR.MAX_TOKENS, schema=PR.schema(arif),
                      temperatura=PR.TEMPERATURA, presence=PR.PRESENCE)
         grezzo = PR.leggi(r.get("testo", "")) or {}
         ris = PR.valida(grezzo, rif, arif)
@@ -1193,7 +1193,7 @@ def fase_prove(cli, materiali, testi_letti, uscita, log) -> dict:
         v = {"materia": ver["materia"], "livello": ver.get("classe"),
              "data": ver["data_verifica"], "argomento": ver.get("argomento")}
         rif, arif = A.riferimenti(pagine), G.argomenti_rif(args)
-        r = cli.chat(DG.messaggi(v, rif, arif), max_token=DG.MAX_TOKENS, schema=DG.SCHEMA,
+        r = cli.chat(DG.messaggi(v, rif, arif), max_token=DG.MAX_TOKENS, schema=DG.schema(arif),
                      temperatura=DG.TEMPERATURA, presence=DG.PRESENCE)
         grezzi = DG.leggi(r.get("testo", "")) or []
         domande = DG.proposte(grezzi, rif, arif)
