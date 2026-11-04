@@ -2923,6 +2923,7 @@
     if (!p || !p.n) return "";
     if (p.tipo === "carte") return "Le carte";
     if (p.tipo === "riassunto") return "Riassunto";
+    if (p.tipo === "podcast") return p.una_voce ? "Podcast, a una voce" : "Podcast";
     return "Argomento " + Number(p.argomento) + (p.continua ? " (continua)" : "");
   }
   function pagineDette(p) {
@@ -3009,9 +3010,14 @@
     // riassunto pronto le pagine a un tocco (lo strumento compensativo resta)
     if (d.avviso) box.append(nodo("p", "studio-h-riga", String(d.avviso)));
     if (d.fonte === "riassunto") box.append(nodo("p", "studio-h-riga", "È un riassunto scritto da me: per i dettagli il libro resta la fonte."));
-    if (d.riassunto) {
+    // Il podcast (04/11, #387): accanto al riassunto, con la stessa frase; finché non c'è, lo dice
+    if (d.fonte === "podcast") box.append(nodo("p", "studio-h-riga", "È un riassunto scritto da me, detto da due voci: per i dettagli il libro resta la fonte."));
+    if (d.podcast_nota) box.append(nodo("p", "studio-h-riga", String(d.podcast_nota)));
+    if (d.riassunto || d.podcast) {
       const tf = nodo("div", "studio-h-tasti");
-      tf.append(tastoAscolta(d.fonte === "riassunto" ? "Leggi le pagine" : "Ascolta il riassunto", "fonte", {}));
+      if (d.riassunto) tf.append(tastoAscolta(d.fonte === "riassunto" ? "Leggi le pagine" : "Ascolta il riassunto", "fonte", {}));
+      if (d.podcast && d.fonte !== "podcast") tf.append(tastoAscolta("Ascolta il podcast", "fonte", { fonte: "podcast" }));
+      if (d.fonte === "podcast" && !d.riassunto) tf.append(tastoAscolta("Leggi le pagine", "fonte", {}));
       box.append(tf);
     }
     const cur = parteCorrente();
@@ -3056,7 +3062,7 @@
     if (!ascolta.parte) {
       const prima = parti.find((p) => p.oggi) || parti[0];
       const t0 = nodo("div", "studio-h-tasti");
-      t0.append(tastoAscolta(d.fonte === "riassunto" ? (prima.oggi ? "Ascolta da oggi" : "Ascolta il riassunto")
+      t0.append(tastoAscolta(d.fonte === "podcast" ? "Ascolta il podcast" : d.fonte === "riassunto" ? (prima.oggi ? "Ascolta da oggi" : "Ascolta il riassunto")
         : prima.oggi ? "Ascolta le pagine di oggi" : "Ascolta dall'inizio", "parte", { n: prima.n }, "studio-h-primo"));
       box.append(t0);
     }
@@ -3083,7 +3089,7 @@
     sez.append(nodo("h4", "studio-h-sotto", "Ascolta"));
     const aperta = ascolta && ascolta.vid === v.id;
     if (!aperta) {
-      sez.append(nodo("p", "studio-h-riga", "Il riassunto delle pagine, o le pagine lette, e le carte, ad alta voce."));
+      sez.append(nodo("p", "studio-h-riga", "Il riassunto delle pagine, o le pagine lette, e le carte, ad alta voce; il podcast a due voci, quando è pronto."));
     }
     const t = nodo("div", "studio-h-tasti");
     t.append(tastoAscolta(aperta ? "Chiudi il ripasso" : "Ripasso da ascoltare", aperta ? "chiudi" : "apri", {}, aperta ? "" : "studio-h-primo"));
@@ -3115,7 +3121,7 @@
     if (az === "fonte") {
       if (lettore) lettore.pause();
       buttaAudio();
-      ascolta.fonte = ascolta.dati && ascolta.dati.fonte === "riassunto" ? "pagine" : undefined;
+      ascolta.fonte = dati.fonte === "podcast" ? "podcast" : ascolta.dati && ascolta.dati.fonte === "riassunto" ? "pagine" : undefined;
       ascolta.parte = 0;
       ascolta.esito = "";
       await caricaAscolta(vid);

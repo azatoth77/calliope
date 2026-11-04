@@ -1199,7 +1199,7 @@ st14.dati.scrivi("UPDATE studio_pagine SET testo = testo || ' Altro.' WHERE id =
 verifica("contrario: cambiato intanto, non si tiene", anc() is False)
 st14.sintesi = None
 verifica("senza sintesi niente in coda, niente errori", st14.riassunto_audio(vid14) == 0)
-verifica("il tool ha «fonte»", TS.PARAMETRI_ASCOLTA["properties"]["fonte"]["enum"] == ["riassunto", "pagine"]
+verifica("il tool ha «fonte»", TS.PARAMETRI_ASCOLTA["properties"]["fonte"]["enum"] == ["riassunto", "pagine", "podcast"]
          and "fonte" in TS._ascolta.__code__.co_varnames)
 verifica("un valore strano è spento", R.modo(type("C", (), {"studio_riassunto": "boh"})()) == R.SPENTA)
 yaml = (QUI.parent / "calliope.yaml").read_text(encoding="utf-8")

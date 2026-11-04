@@ -39,6 +39,9 @@ stanza). Solo libreria standard (e le voci di Piper che ha già lo Speaker).
 dal lettore e controllato dal codice) le sezioni prendono il posto delle pagine, nella voce di
 Calliope; un argomento senza una sezione buona legge le sue pagine, dicendolo. `fonte` «pagine» le
 chiede sempre. Comandi, posizione, prova aperta, ospiti e cache non cambiano.
+
+**Dal 04/11 (#387, punto 58 della 0035) il podcast a due voci** (`podcast.py`): quando è pronto, `fonte` «podcast»
+legge file già fatti (`AUDIO`): una voce per parte, con l'avviso nel file e saltato a voce dopo il primo.
 """
 
 from __future__ import annotations
@@ -72,7 +75,7 @@ VOCE_FERMA_S = 1.5            # la sintesi per lo schermo aspetta la voce dal vi
 VOCE_ATTESA_MAX_S = 60.0      # …ma al più tanto per frase
 CARTELLA = "ascolta"
 COSE = ("oggi", "tutto", "argomento", "carte")
-CALLIOPE, LIBRO, PAUSA = "calliope", "libro", "pausa"
+CALLIOPE, LIBRO, PAUSA, AUDIO = "calliope", "libro", "pausa", "audio"
 MODI = ("spenta", "attiva")
 
 # Le frasi del codice (mai testo delle pagine)
@@ -86,7 +89,11 @@ RIASSUNTO_INTRO = "È un riassunto scritto da me: per i dettagli il libro resta 
 PARTE_RIASSUNTO_S = 120.0     # le sezioni di fila fanno una parte fino a tanto: un file o una parte toccata
 #                               comincia con l'avviso, che su una sezione di 15 secondi peserebbe troppo
 SEZIONE_SENZA = "Di questo argomento non ho un riassunto sicuro: ti leggo le pagine."
-FONTI = ("riassunto", "pagine")
+FONTI = ("riassunto", "pagine", "podcast")
+# Il podcast (04/11, #387): il modello ha scritto le battute, e due voci che non sono Calliope le dicono
+PODCAST_INTRO = "È un riassunto scritto da me, detto da due voci: per i dettagli il libro resta la fonte."
+PODCAST_NON_PRONTO = "Il podcast non è ancora pronto: intanto ti dico il riassunto."
+PODCAST_PEZZO_A_UNA_VOCE = "Questo pezzo a due voci non è venuto bene: te lo dico io."
 # Perché si leggono le pagine al posto del riassunto, per stato del copione (`_riassunto_vivo`)
 AVVISI_FONTE = {"scarso": "Il riassunto non ha passato i miei controlli: ti leggo le pagine.",
                 "in_preparazione": "Il riassunto non è ancora pronto: intanto ti leggo le pagine.",
@@ -109,6 +116,8 @@ class Voce:
     par: int
     secondi: float = 0.0
     argomento: int | None = None    # di quale argomento: la posizione regge se il copione cambia
+    file: str = ""                  # `AUDIO`: il file già pronto (`testo` è solo un segno, mai materiale)
+    salta: float = 0.0              # `AUDIO`: i secondi di testa da non dire (l'avviso già detto)
 
     def per_firma(self):
         return [self.tipo, self.testo, round(self.secondi, 2)]
@@ -364,6 +373,12 @@ def _durata(caratteri: int, pause: float = 0.0) -> int:
     return int(round(caratteri / CARATTERI_AL_SECONDO + pause))
 
 
+def _durata_voci(voci) -> int:
+    """Una pausa e un file già pronto hanno i loro secondi; il resto si stima dai caratteri."""
+    return _durata(sum(len(v.testo) for v in voci if v.tipo not in (PAUSA, AUDIO)),
+                   sum(v.secondi for v in voci if v.tipo in (PAUSA, AUDIO)))
+
+
 class Copione:
     """Le voci del ripasso di una verifica, divise in parti, con la firma."""
 
@@ -372,7 +387,9 @@ class Copione:
         self.voci: list[Voce] = []
         self.parti: list[dict] = []
         self.saltate: dict = {}
-        self.fonte = "pagine"               # «riassunto» se c'è almeno una sezione del copione
+        self.fonte = "pagine"               # «riassunto» se c'è almeno una sezione del copione, o «podcast»
+        self.cartella = None                # il podcast: dove stanno le sue parti (`podcast.cartella_podcast`)
+        self.firma_file = None              # il podcast: la firma nel nome dei suoi file
         self._par = 0
 
     def inizio_argomento(self, argomento_id) -> int | None:
@@ -394,9 +411,7 @@ class Copione:
         return next((i for i, v in enumerate(self.voci) if v.parte == n), 0)
 
     def secondi(self, parte: int | None = None) -> int:
-        voci = [v for v in self.voci if parte is None or v.parte == parte]
-        return _durata(sum(len(v.testo) for v in voci if v.tipo != PAUSA),
-                       sum(v.secondi for v in voci if v.tipo == PAUSA))
+        return _durata_voci([v for v in self.voci if parte is None or v.parte == parte])
 
 
 def _gruppi_argomenti(args: list[dict], pagine: list[dict], solo: set | None = None) -> list:
@@ -588,14 +603,15 @@ def da_ripetere(voci: list[Voce], pos: int) -> int:
 
 def pezzi(voci: list[Voce], da: int) -> list[list[int]]:
     """Gli indici delle voci da `da` in pezzi di al più `PEZZO_FRASI` frasi, senza staccare un
-    silenzio dalla frase prima (le pause non contano)."""
+    silenzio dalla frase prima (le pause non contano). Un file già pronto (`AUDIO`) dura come tante
+    frasi: un pezzo suo, i controlli fra un file e l'altro."""
     out, corrente, n = [], [], 0
     for i in range(max(0, da), len(voci)):
         if voci[i].tipo != PAUSA and n >= PEZZO_FRASI:
             out.append(corrente)
             corrente, n = [], 0
         corrente.append(i)
-        n += voci[i].tipo != PAUSA
+        n += PEZZO_FRASI if voci[i].tipo == AUDIO else voci[i].tipo != PAUSA
     if corrente:
         out.append(corrente)
     return out
@@ -653,6 +669,9 @@ def leggi(lettura: dict, uscita, speaker, controlla=None, voce_libro: str | None
             v = voci[k]
             if v.tipo == PAUSA:
                 uscita.pausa(v.secondi)
+            elif v.tipo == AUDIO:
+                uscita.audio(v.file, v.testo, v.salta)
+                mandate += 1
             else:
                 uscita.leggi(v.testo, voce=voce_libro if v.tipo == LIBRO else None)
                 mandate += 1
@@ -881,14 +900,15 @@ def durata_wav(path: Path) -> float | None:
 
 
 def togli_audio(cartella, verifiche_vive: set | None = None, piu_vecchi_di_s: float = 0.0,
-                solo: list | None = None) -> int:
-    """I file del ripasso sotto `cartella/ascolta`: di tutte le verifiche (`svuota`), di quelle in
-    `solo` (cancellate), di quelle che non sono in `verifiche_vive` e quelli non ascoltati da più
-    di `piu_vecchi_di_s` (la rotazione). Mai fuori dalla cartella, mai seguendo un link."""
+                solo: list | None = None, sotto: str = CARTELLA) -> int:
+    """I file del ripasso sotto `cartella/ascolta` (`sotto`: quelli del podcast stanno altrove, #387): di
+    tutte le verifiche (`svuota`), di quelle in `solo` (cancellate), di quelle che non sono in
+    `verifiche_vive` e quelli non ascoltati da più di `piu_vecchi_di_s` (la rotazione). Mai fuori dalla
+    cartella, mai seguendo un link."""
     if not cartella:
         return 0
     base = Path(cartella).resolve()
-    radice = base / CARTELLA
+    radice = base / sotto
     if radice.is_symlink() or not radice.is_dir() or base not in radice.resolve().parents:
         return 0
     n = 0
@@ -997,8 +1017,14 @@ class Ascolti:
                  per_voce: bool = False) -> Copione:
         """Il copione di una verifica (dentro il lock). ValueError «niente» se non c'è niente da
         ascoltare, «argomento» se l'argomento detto non è nel piano. `fonte` «pagine» legge le pagine
-        anche con un riassunto pronto; di serie il riassunto, se c'è (#386)."""
+        anche con un riassunto pronto; di serie il riassunto, se c'è (#386); «podcast» il podcast, se è
+        pronto (#387), altrimenti ValueError «niente»."""
         from . import piano as P
+        if fonte == "podcast":
+            cp = self._copione_podcast(v, per_voce)
+            if cp is None:
+                raise ValueError("niente")
+            return cp
         args = self._argomenti_numerati(v["id"])
         pagine = [p for p in self.dati.tutti(
             "SELECT p.* FROM studio_pagine p JOIN studio_materiali m ON m.id = p.materiale "
@@ -1072,8 +1098,9 @@ class Ascolti:
                     raise LookupError("nessuno")
                 v = self._ascoltabile(chi, s["verifica"])
                 # Si riprende ciò che si ascoltava: chi stava sulle pagine resta sulle pagine anche
-                # se intanto il riassunto è arrivato (#386)
-                fonte = "pagine" if s.get("fonte") == "pagine" else None
+                # se intanto il riassunto è arrivato (#386); il podcast, se c'è ancora, resta il podcast
+                fonte = s.get("fonte") if s.get("fonte") == "pagine" else (
+                    "podcast" if s.get("fonte") == "podcast" and self.podcast_pronto(v) else None)
                 cp = self._copione(chi, v, s["cosa"], s["numero"], fonte, per_voce=True)
                 if cp.firma == s["firma"]:
                     pos = min(s["pos"], len(cp.voci) - 1)
@@ -1096,13 +1123,23 @@ class Ascolti:
                 # Ogni inizio di ascolto dice che può sbagliare, anche una ripresa a metà parte
                 if cp.fonte == "riassunto" and cp.voci[pos].testo != RIASSUNTO_INTRO:
                     intro.append(RIASSUNTO_INTRO)
+                elif cp.fonte == "podcast" and cp.voci[pos].testo != PODCAST_INTRO:
+                    intro.append(PODCAST_INTRO)
                 cosa, numero = s["cosa"], s["numero"]
             else:
                 v = self._ascoltabile(chi, vid)
+                if fonte == "podcast":
+                    if self.podcast_pronto(v):
+                        cosa, numero = "tutto", None      # il podcast è uno: non ha «oggi» né argomenti
+                    else:
+                        fonte = None                      # resta il riassunto, dicendolo
+                        intro.append(PODCAST_NON_PRONTO)
                 cp = self._copione(chi, v, cosa, numero, fonte, per_voce=True)
                 pos = 0
                 avviso = self._avviso_fonte(v, cosa, cp, fonte)
-                if avviso:
+                if cp.fonte == "podcast":
+                    self._misure_podcast()["detti"] += 1
+                elif avviso:
                     intro.append(avviso)
                     self._misure_riassunto()["pagine_al_posto"] += 1
                 elif cp.fonte == "riassunto":
@@ -1114,8 +1151,7 @@ class Ascolti:
                 "numero": numero, "firma": cp.firma, "voci": cp.voci, "da": pos, "intro": intro,
                 "fonte": cp.fonte,
                 "parti": len(cp.parti), "parte": cp.voci[pos].parte if resto else len(cp.parti),
-                "secondi": _durata(sum(len(x.testo) for x in resto if x.tipo != PAUSA),
-                                   sum(x.secondi for x in resto if x.tipo == PAUSA))}
+                "secondi": _durata_voci(resto)}
 
     def ascolto_vale(self, lettura: dict):
         """Prima di ogni pezzo della lettura a voce: None per andare avanti, o (motivo, frase del
@@ -1136,8 +1172,8 @@ class Ascolti:
                 try:
                     cp = self._copione(self._profilo(lettura["chi"]), v, lettura["cosa"],
                                        lettura.get("numero"),
-                                       "pagine" if lettura.get("fonte") == "pagine" else None,
-                                       per_voce=True)
+                                       lettura.get("fonte") if lettura.get("fonte") in ("pagine", "podcast")
+                                       else None, per_voce=True)
                 except ValueError:
                     cp = None
                 if cp is None or cp.firma != lettura["firma"]:
@@ -1223,11 +1259,15 @@ class Ascolti:
         m = self._misure_ascolto()
         vuoto = {"prova": False, "parti": [], "firma": None, "secondi": 0,
                  "audio": self.sintesi is not None, "fonte": "pagine", "riassunto": False,
-                 "avviso": None}
+                 "avviso": None, "podcast": False, "podcast_nota": None}
         with self.dati.lock:
             v = self._verifica(chi, vid)
             if self._prova_aperta(v["id"]) is not None:
                 return {**vuoto, "verifica": v["id"], "prova": True}
+            con_podcast = self.podcast_pronto(v)
+            nota_podcast = self.podcast_nota(v)
+            if fonte == "podcast" and not con_podcast:
+                fonte = None
             try:
                 cp = self._copione(chi, v, "tutto", fonte=fonte)
             except ValueError:
@@ -1238,15 +1278,15 @@ class Ascolti:
             oggi_pag = set(oggi["pagine"]) if oggi and oggi["fase"] == "studio" else set()
             ids_parte = {a["id"]: set(a["pagine"]) for a in self._argomenti_numerati(v["id"])}
         firma = self._firma_audio(cp)
-        cartella = cartella_audio(self.cfg, v["id"])
+        cartella = cp.cartella if cp.fonte == "podcast" else cartella_audio(self.cfg, v["id"])
         parti = []
         for p in cp.parti:
-            path = cartella / nome_file(firma, p["n"]) if cartella is not None else None
+            path = cartella / nome_file(cp.firma_file or firma, p["n"]) if cartella is not None else None
             pronta = bool(path is not None and path.exists())
             stato = self.sintesi.stato(path) if (self.sintesi is not None and path is not None
                                                  and not pronta) else None
             x = {k: p.get(k) for k in ("n", "tipo", "argomento", "titolo", "pagine", "frasi",
-                                       "carte", "continua")}
+                                       "carte", "continua", "una_voce")}
             durata = durata_wav(path) if pronta else None
             x["secondi"] = int(round(durata)) if durata is not None else p["secondi"]
             x["oggi"] = bool(oggi_pag and p["tipo"] != "carte" and any(
@@ -1258,13 +1298,16 @@ class Ascolti:
         m["parti_schermo"] += 1
         return {"verifica": v["id"], "prova": False, "firma": firma, "parti": parti,
                 "secondi": sum(x["secondi"] for x in parti), "audio": self.sintesi is not None,
-                "fonte": cp.fonte, "riassunto": stato_r == "pronto", "avviso": avviso}
+                "fonte": cp.fonte, "riassunto": stato_r == "pronto", "avviso": avviso,
+                "podcast": con_podcast, "podcast_nota": nota_podcast}
 
     def ascolto_audio(self, chi, vid, parte: int, firma: str | None,
                       fonte: str | None = None) -> dict:
         """Il file di una parte: {"file": Path} se è pronto; {"pronto": False, "fatto": x} se si
         prepara adesso (e intanto la parte dopo); {"cambiato": True} se il copione è cambiato;
         {"senza_voce": True} senza la sintesi. ProvaAperta, NonTrovata, ValueError «parte»."""
+        if fonte == "podcast":
+            return self._audio_podcast(chi, vid, parte, firma)
         with self.dati.lock:
             v = self._ascoltabile(chi, vid)
             cp = self._copione(chi, v, "tutto", fonte=fonte)
@@ -1299,3 +1342,23 @@ class Ascolti:
         return {"pronto": False,
                 "fatto": self.sintesi.chiedi(path, voci, self._ancora_firma(v["id"], chi, fa, fonte)),
                 "firma": fa}
+
+    def _audio_podcast(self, chi, vid, parte: int, firma: str | None) -> dict:
+        """Il file di una parte del podcast (#387): è già pronto, o il podcast non c'è più: mai una sintesi
+        a richiesta, che richiederebbe di fermare vLLM."""
+        with self.dati.lock:
+            v = self._ascoltabile(chi, vid)
+            try:
+                cp = self._copione(chi, v, "tutto", fonte="podcast")
+            except ValueError:
+                return {"cambiato": True, "firma": None}
+        fa = self._firma_audio(cp)
+        if firma and firma != fa:
+            return {"cambiato": True, "firma": fa}
+        if not any(x.parte == int(parte) for x in cp.voci):
+            raise ValueError("parte")
+        path = cp.cartella / nome_file(cp.firma_file, parte)
+        if not path.exists():
+            return {"cambiato": True, "firma": fa}
+        self._misure_ascolto()["audio_serviti"] += 1
+        return {"file": path, "firma": fa}

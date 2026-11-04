@@ -217,6 +217,17 @@ class Uscita:
             # un turno nuovo, che cancellerebbe l'interruzione prima che la lettura la veda)
         self.speaker.say(testo, spezza=False, voce=voce)
 
+    def audio(self, percorso: str, segno: str, salta: float = 0.0):
+        """Un file già pronto nella lettura (il podcast dello Studio, #387): `segno` finisce in `played`
+        come una frase, così la posizione regge; `salta` i secondi di testa da non dire."""
+        if not self._aperto:
+            self.turno_lettura()
+        if bool(getattr(self.speaker, "interrupted", False)):
+            return
+        f = getattr(self.speaker, "suona_file", None)
+        if callable(f):
+            f(percorso, segno, salta)
+
     def pausa(self, secondi: float):
         """Un silenzio nella lettura (i secondi per pensare di una carta)."""
         f = getattr(self.speaker, "silenzio", None)

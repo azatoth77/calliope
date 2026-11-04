@@ -505,8 +505,9 @@ def valida(grezzi: list[dict], M: C.Materiale, rif: list, arif: list, piano_: di
             car += len(testo)
             car_totale += len(testo)
             pagina = esito["fonti"][0].split(".")[0]
+            # Chi la dice e le parole dell'altra voce, nel podcast (#387): già pulite da `podcast.normalizza`
             tenute.append({"testo": testo, "fonti": esito["fonti"], "pagine": [ids[pagina]],
-                           "argomento": aid})
+                           "argomento": aid, **{k: x[k] for k in ("voce", "prima", "dopo") if x.get(k)}})
         if not tenute:
             continue
         if len(tenute) / max(1, proposte) < SEZIONE_MIN:
@@ -736,6 +737,7 @@ class Riassunti:
         from . import dati as D
         from .ascolta import togli_audio
         togli_audio(D.cartella_di(self.cfg), solo=[int(vid)])
+        self.podcast_pagine_cambiate(vid)
 
     def riassunto_stato(self, vid) -> dict:
         """Per il banco e la pagina: {esito, conti} dell'ultimo copione, solo conti."""

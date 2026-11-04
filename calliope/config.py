@@ -2317,6 +2317,30 @@ class Config:
     # tutti, minore compreso: si accende quando il banco passa il criterio della decisione 0035, punto
     # 57. «spenta» niente. Le pagine si chiedono sempre a voce e con un tasto
     studio_riassunto: str = "ombra"
+    # Il podcast a due voci (04/11, #387, decisione 0035 punto 58, calliope/studio/podcast.py): un copione col metodo
+    # del riassunto, ogni battuta cita la sua frase; le due voci con MOSS-TTSD, in un container senza rete, a DGX
+    # libera, con vLLM fermo e sempre ripartito con le stesse impostazioni. Ogni pezzo si ritrascrive e si confronta col
+    # copione. Finché non c'è resta il riassunto. «spenta» di serie; «attiva» su una macchina con la GPU e i pesi
+    # (`calliope motore moss installa`)
+    studio_podcast: str = "spenta"
+    # La cartella di MOSS (pesi, codice e ambiente a versione fissata); vuota: ~/calliope-motore/moss
+    studio_podcast_moss: str = ""
+    # Le due voci, generate da due voci di Piper: mai una persona reale, mai i campioni di MOSS. giorgio è quella
+    # ascoltata sul banco del 04/11, ma ha una licenza ambigua (voices/LEGGIMI.md, nota 3): per uso domestico privato
+    studio_podcast_voce_a: str = "voices/it_IT-paola-medium.onnx"
+    studio_podcast_voce_b: str = "voices/it_IT-giorgio-medium.onnx"
+    # Quando può fermare vLLM (ore locali; vuota: a ogni ora). Non per la sicurezza, che è nei controlli: di giorno una
+    # sessione interrotta costa 4 minuti di vLLM che riparte a chi chiede un agente, e il primo turno dopo può essere
+    # più lento (lo swap del banco del 04/11)
+    studio_podcast_fascia: str = "00:30-07:00"
+    # Da quanti secondi la voce dev'essere ferma perché parta
+    studio_podcast_quiete_s: int = 900
+    # La memoria disponibile che deve esserci con vLLM fermo (il banco: 24,7 GB di GPU e 5,9 di processo)
+    studio_podcast_memoria_gb: int = 32
+    # Una finestra al più: vLLM fermo, caricamento e riavvio compresi
+    studio_podcast_tetto_min: int = 60
+    # I tentativi in più su un pezzo che non torna col copione: poi lo dice Calliope a una voce
+    studio_podcast_rigenera: int = 2
     # I premi dello Studio (31/10, issue #296, calliope/studio/premi.py): un rinforzo positivo e
     # al minimo, calcolato dal codice dai soli dati della pratica (sessioni misurate fra «Inizia»
     # e «Fatto», carte ripassate, prove consegnate, esiti decisi dal codice o dal tutore), mai
@@ -3663,7 +3687,10 @@ SEZIONI: dict[str, list[str]] = {
                 "studio_importa_max_mb", "studio_importa_file_max", "studio_importa_voce_max_mb",
                 "studio_importa_totale_max_mb", "studio_importa_passo_s",
                 "studio_importa_tempo_max_s", "studio_importa_coda", "studio_esercizi",
-                "studio_preparazione", "studio_preparazione_quiete_s", "studio_riassunto"],
+                "studio_preparazione", "studio_preparazione_quiete_s", "studio_riassunto",
+                "studio_podcast", "studio_podcast_moss", "studio_podcast_voce_a", "studio_podcast_voce_b",
+                "studio_podcast_fascia", "studio_podcast_quiete_s", "studio_podcast_memoria_gb",
+                "studio_podcast_tetto_min", "studio_podcast_rigenera"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -4296,6 +4323,8 @@ _MODI_NUOVI = {
                                  falso="spenta"),
     # Il riassunto da ascoltare (04/11, #386)
     "studio_riassunto": _modi("studio_riassunto", ("spenta", "ombra", "attiva"), falso="spenta"),
+    # Il podcast a due voci (04/11, #387)
+    "studio_podcast": _modi("studio_podcast", ("spenta", "attiva"), falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},

@@ -169,6 +169,7 @@ class Servizi:
     # Lo Studio (29/10, calliope/studio/, #280): None con `studio_modo: spento`; in ombra i dati
     # si scrivono ma niente arriva al modello né agli schermi (Studio.per_modello/per_schermi)
     studio: object = None
+    podcast_ripresa: object = None       # il fermo di vLLM del podcast (#387, studio/podcast_motore.py)
     # Cambiano a voce (modalità, main.applica_modalita) o da un'installazione
     wake: object = None
     suoni: object = None

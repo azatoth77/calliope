@@ -791,6 +791,7 @@ class Avvio:
         except Exception as e:  # noqa: BLE001 — lo Studio non ferma l'avvio
             print(f"[STUDIO] non preparato: {type(e).__name__}: {e}", flush=True)
             s.studio = None
+        self._podcast_ripresa()
         if s.studio is not None:
             atexit.register(s.studio.close)
             _lega_studio_giochi(s)
@@ -820,6 +821,31 @@ class Avvio:
                 print(f"[STUDIO] importazioni non riprese: {type(e).__name__}: {e}", flush=True)
             self._ripasso_da_ascoltare()
 
+    def _podcast_ripresa(self):
+        """Il podcast ferma vLLM a macchina libera (#387, studio/podcast_motore.py): chi aspetta il motore lo sa, alla
+        chiusura vLLM riparte, e all'avvio una sessione caduta a metà lo fa ripartire, anche con il podcast spento
+        (magari è stato spento proprio dopo la caduta)."""
+        cfg, s = self.cfg, self.s
+        from .agenti.arbitro import radice
+        from .studio import dati as _dati
+        from .studio import podcast as _podcast
+        from .studio import podcast_motore as _motore
+        try:
+            base = _dati.cartella_di(cfg)
+            if base is None or (_podcast.modo(cfg) != _podcast.ATTIVA and not (base / _motore.SEGNO).exists()):
+                return
+            lavori = getattr(s, "lavori", None)
+            url = getattr(getattr(lavori, "imp", None), "url", None) or getattr(cfg, "agenti_url", None)
+            ripresa = s.podcast_ripresa = _motore.Ripresa(
+                base, _motore.ControlloVllm(radice(url or "http://127.0.0.1:8000")),
+                log=lambda m: print(m, flush=True), pulisci=lambda: _podcast.togli_lavoro(base))
+            if lavori is not None:
+                lavori.attesa_motore = ripresa
+            atexit.register(ripresa.alla_chiusura)
+            ripresa.all_avvio()
+        except Exception as e:  # noqa: BLE001 — non ferma l'avvio
+            print(f"[STUDIO] controllo del podcast non riuscito: {type(e).__name__}: {e}", flush=True)
+
     def _ripasso_da_ascoltare(self):
         """Il ripasso da ascoltare (31/10, passo 9, #249): la «voce del libro» caricata in secondo
         piano, e la sintesi dell'audio per lo schermo con le voci e la pronuncia dello Speaker,
@@ -840,6 +866,17 @@ class Avvio:
             attivita=getattr(speaker, "_attivita", None), log=lambda m: print(m, flush=True))
         print(f"[STUDIO] ripasso da ascoltare: voce del libro "
               f"{Path(libro).name if libro else 'quella di Calliope'}", flush=True)
+        # Il podcast a due voci (#387): spento di serie
+        try:
+            from .studio import podcast_audio as _podcast_audio
+            prep = s.studio.podcast_preparatore = _podcast_audio.prepara(
+                s.studio, getattr(s, "podcast_ripresa", None), getattr(s, "lavori", None), speaker,
+                log=lambda m: print(m, flush=True))
+            if prep is not None:
+                atexit.register(prep.close)
+                print("[STUDIO] podcast a due voci: si prepara a macchina libera", flush=True)
+        except Exception as e:  # noqa: BLE001 — resta il riassunto
+            print(f"[STUDIO] podcast non preparato: {type(e).__name__}: {e}", flush=True)
         # Gli avvisi di pericolo (14/10 sera): l'audio nel cassetto del tutore, la trascrizione
         # di un avviso di prima ricostruita dalla stanza o dalla conversazione del minore, e
         # `calliope conserva --svuota` che li toglie
@@ -1175,6 +1212,10 @@ class Avvio:
                   f"{contesto.finestra(cfg)}", flush=True)
         # La conversazione ripresa dopo il riavvio va subito in cache (06/10, P3: il primo
         # turno non rilegge la storia) e, se ieri o oggi la voce era lenta, lo si dice (P4)
+        # Il podcast dello Studio (#387): dopo una sessione la voce può essere in swap, si scalda a voce ferma
+        prep = getattr(getattr(self.s, "studio", None), "podcast_preparatore", None)
+        if prep is not None:
+            prep.dopo_sessione = lambda: latenza.scalda_ripresa(brain, self.registro_conv.tutte())
         threading.Thread(target=latenza.scalda_ripresa, args=(brain, self.registro_conv.tutte()),
                          name="scalda-ripresa", daemon=True).start()
         avviso_latenza = latenza.avviso_recente(cfg)

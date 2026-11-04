@@ -78,6 +78,7 @@ from .preparazione import Preparazioni
 from .mappe import Mappe
 from .premi import Premi
 from .prove import Prove
+from .podcast import Podcast
 from .riassunto import Riassunti
 from .tutore import Tutore
 
@@ -233,7 +234,7 @@ def _data(valore) -> datetime.date:
 
 
 class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, Esercizi, Preparazioni,
-             Riassunti):
+             Riassunti, Podcast):
     """Lo Studio di questa installazione: un oggetto per processo. Le mappe concettuali (passo 7,
     #247) sono in `mappe.py`, le domande e le prove (passo 8, #248) in `prove.py`, il ripasso da
     ascoltare (passo 9, #249) in `ascolta.py`, la vista del tutore e le indicazioni (passo 10,
@@ -600,6 +601,7 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
         # L'audio del ripasso e la posizione a voce (04/11, #386): niente del materiale tolto
         from .ascolta import togli_audio
         n += togli_audio(D.cartella_di(self.cfg), solo=[int(v["id"])])
+        n += togli_audio(D.cartella_di(self.cfg), solo=[int(v["id"])], sotto="podcast")     # e il podcast (#387)
         self.ascolto_via_verifica(v["id"])
         self.ricalcola_persona(v["persona"])
         return {"verifiche": 1, "file": n}
