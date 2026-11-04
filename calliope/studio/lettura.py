@@ -1294,20 +1294,8 @@ class Lettore:
         t0 = time.monotonic()
         grezzi = None
         try:
-            for prova in range(2):
-                r = self._chiedi_corpo(G.corpo(self.modello, v, rif, arif))
-                m["token_in"] += int(r.get("prompt") or 0)
-                m["token_out"] += int(r.get("eval") or 0)
-                if not r.get("fine"):
-                    raise ErroreServer("stream senza fine")
-                self._errori_di_fila = 0
-                self._riprova_dopo = 0.0
-                self._risposte_ok += 1
-                if r.get("fine") != "length":
-                    grezzi = G.leggi(r.get("content") or "")
-                    break
-                self._registra(f"verifica {vid}: carte in tondo fino a max_tokens"
-                               + (", le richiedo" if not prova else ""))
+            grezzi = self._chiedi_lista(G.corpo(self.modello, v, rif, arif), m, vid, "carte",
+                                       G.leggi, G.parziale)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: carte, ceduto il passo a un lavoro dell'agente")
@@ -1360,6 +1348,34 @@ class Lettore:
                        + ")")
         return "proposte"
 
+    def _chiedi_lista(self, corpo: dict, m: dict, vid: int, cosa: str, leggi, parziale):
+        """Una richiesta che risponde con una lista di voci (carte, domande, lezioni) → ciò che
+        `leggi` o `parziale` ne tirano fuori, o None. Giro vero del 03/11 (#383): 35 domande buone
+        e diverse tagliate a `max_tokens`, buttate, e la stessa richiesta rifatta a temperatura 0
+        per lo stesso taglio (93,5 s). Una risposta tagliata non è un giro in tondo: si tengono le
+        voci intere, che passano dallo stesso controllo; si richiede solo se non ce n'è nessuna."""
+        for prova in range(2):
+            r = self._chiedi_corpo(corpo)
+            m["token_in"] += int(r.get("prompt") or 0)
+            m["token_out"] += int(r.get("eval") or 0)
+            if not r.get("fine"):
+                raise ErroreServer("stream senza fine")
+            self._errori_di_fila = 0
+            self._riprova_dopo = 0.0
+            self._risposte_ok += 1
+            if r.get("fine") != "length":
+                return leggi(r.get("content") or "")
+            voci = parziale(r.get("content") or "")
+            if voci:
+                m["tagliate"] = m.get("tagliate", 0) + 1
+                n = len(voci["lezioni"] if isinstance(voci, dict) else voci)
+                self._registra(f"verifica {vid}: {cosa} tagliate a max_tokens, tengo le {n} voci "
+                               "intere")
+                return voci
+            self._registra(f"verifica {vid}: {cosa} tagliate a max_tokens senza una voce intera"
+                           + (", richiedo" if not prova else ""))
+        return None
+
     def genera_domande(self, v: dict) -> str:
         """Le domande delle prove di una verifica aperta (`Studio.verifiche_per_domande`, passo
         8, #248): come le carte, una richiesta, il controllo del codice, le domande scritte
@@ -1376,20 +1392,8 @@ class Lettore:
         t0 = time.monotonic()
         grezzi = None
         try:
-            for prova in range(2):
-                r = self._chiedi_corpo(DG.corpo(self.modello, v, rif, arif))
-                m["token_in"] += int(r.get("prompt") or 0)
-                m["token_out"] += int(r.get("eval") or 0)
-                if not r.get("fine"):
-                    raise ErroreServer("stream senza fine")
-                self._errori_di_fila = 0
-                self._riprova_dopo = 0.0
-                self._risposte_ok += 1
-                if r.get("fine") != "length":
-                    grezzi = DG.leggi(r.get("content") or "")
-                    break
-                self._registra(f"verifica {vid}: domande in tondo fino a max_tokens"
-                               + (", le richiedo" if not prova else ""))
+            grezzi = self._chiedi_lista(DG.corpo(self.modello, v, rif, arif), m, vid, "domande",
+                                       DG.leggi, DG.parziale)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: domande, ceduto il passo a un lavoro dell'agente")
@@ -1493,20 +1497,8 @@ class Lettore:
         t0 = time.monotonic()
         grezzo = None
         try:
-            for prova in range(2):
-                r = self._chiedi_corpo(PR.corpo(self.modello, v, rif, arif))
-                m["token_in"] += int(r.get("prompt") or 0)
-                m["token_out"] += int(r.get("eval") or 0)
-                if not r.get("fine"):
-                    raise ErroreServer("stream senza fine")
-                self._errori_di_fila = 0
-                self._riprova_dopo = 0.0
-                self._risposte_ok += 1
-                if r.get("fine") != "length":
-                    grezzo = PR.leggi(r.get("content") or "")
-                    break
-                self._registra(f"verifica {vid}: preparazione in tondo fino a max_tokens"
-                               + (", la richiedo" if not prova else ""))
+            grezzo = self._chiedi_lista(PR.corpo(self.modello, v, rif, arif), m, vid, "preparazione",
+                                       PR.leggi, PR.parziale)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: preparazione, ceduto il passo a un lavoro "

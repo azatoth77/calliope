@@ -9,6 +9,7 @@ una frase pronta (`risposta_finale`), senza un'altra passata del modello.
 Senza rete i tool con requires_internet spariscono dall'elenco (principio 5).
 """
 
+import datetime
 import json
 
 from .. import politica
@@ -122,7 +123,9 @@ def studio_dal_nome(name, arguments, veri=()) -> tuple[str, dict] | None:
     l'azione degli argomenti se è un'azione di `studio`, altrimenti l'unica azione di `studio`
     fra le parole del nome («crea», «sposta», «salta_oggi»). Correzione della forma di una
     scelta già fatta dal modello (principio 10, regola `tool_nome_azione`). Gli argomenti che
-    `studio` non conosce si tolgono. None senza un'azione che esiste, con due azioni diverse nel
+    `studio` non conosce si tolgono, tranne una data sola in un campo inventato («quando», «il
+    giorno») per le azioni con la data, che va in `data` (giro vero del 03/11, #383: `studio_verifica`
+    con azione e materia, e il giorno detto perso). None senza un'azione che esiste, con due azioni diverse nel
     nome, o per un altro prefisso. Il chiamante controlla prima che il nome non sia un tool vero.
     Revisione della PR #374: None anche se il nome dice un'azione diversa da quella degli
     argomenti (`studio_verifica_sposta` con «archivia»), e se comincia col nome di un altro tool
@@ -133,7 +136,7 @@ def studio_dal_nome(name, arguments, veri=()) -> tuple[str, dict] | None:
     if any(n.startswith(v + "_") for v in set(STUDIO_VERI) | {str(x) for x in veri or ()}
            if v != "studio"):
         return None
-    from .studio import AZIONI, PARAMETRI
+    from .studio import AZIONI, CON_DATA, PARAMETRI, _data_detta
     args = dict(arguments) if isinstance(arguments, dict) else {}
     parti = [x for x in n.split("_")[1:] if x]
     trovate, i = [], 0
@@ -156,7 +159,13 @@ def studio_dal_nome(name, arguments, veri=()) -> tuple[str, dict] | None:
             return None
         a = trovate[0]
     ammessi = PARAMETRI.get("properties") or {}
+    tolti = {k: v for k, v in args.items() if k not in ammessi}
     args = {k: v for k, v in args.items() if k in ammessi}
+    if a in CON_DATA and not args.get("data") and not args.get("giorno"):
+        oggi = datetime.date.today()
+        date = [v for v in tolti.values() if _data_detta(v, oggi) is not None]
+        if len(date) == 1:
+            args["data"] = date[0]
     args["azione"] = a
     return "studio", args
 

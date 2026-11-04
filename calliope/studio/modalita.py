@@ -1,7 +1,7 @@
 """
 La modalità studio (02/11/2026, issue #376, decisione di chi amministra, 0035 punto 54).
 
-Uno stato **in memoria**, per satellite, con un **elenco chiuso di due effetti**. Non è un
+Uno stato **in memoria**, per satellite, con un **elenco chiuso di tre effetti**. Non è un
 meccanismo per cambiare interruttori: non tocca la configurazione e non ha altri effetti.
 
 **Si apre** alla prima chiamata di un tool dello Studio detta dal proprietario dal suo dispositivo
@@ -24,6 +24,11 @@ sui suoi dati** (`solo_propri`, `servizio.permesso`). Vale come la zona grigia (
 `dispositivo.proprio`). La voce chiaramente di un altro vince. Niente con la compagnia, un
 conoscente, un minore possibile, fuori orario per un minore; un tool fuori dallo Studio resta da
 ospite. `togli`, `archivia` e `conclusa` non si eseguono (`SOLO_VOCE_SICURA`).
+
+**Effetto 3** (04/11, issue #383, `Ciclo._modalita_turno`, `Brain._sviluppo_coda`): su quel satellite
+Calliope non aggiunge alle risposte il promemoria degli sviluppi sospesi né la riga dello sviluppo
+aperto, a meno che si stia parlando dello sviluppo. Il promemoria non si consuma: torna dopo la
+chiusura. Giro vero del 03/11: «A proposito: lo sviluppo di … è sospeso» detto a chi stava studiando.
 
 **Per quella frase Brain lavora come per un ospite qualunque**: la sua conversazione è una da ospite
 (`corsie`, «modalita»), `_speaker_key` è None, e ciò che è legato al proprietario non c'è per

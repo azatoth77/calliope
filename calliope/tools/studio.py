@@ -96,6 +96,8 @@ LETTURE = frozenset({"stato", "piano", "oggi", "resoconto", "riepilogo", "carte"
 DA_TOCCO = frozenset({"fatto", "salta_oggi", "tieni", "togli", "riprova", "sessione"})
 
 NON_CE = "Questa verifica non la trovo."
+# Le azioni che scrivono la data della verifica
+CON_DATA = frozenset({"crea", "sposta", "proponi_data"})
 # Una verifica oltre un anno da oggi è quasi sempre una data capita male (revisione della PR #319)
 OLTRE_GIORNI = 366
 SPENTO = "Lo Studio qui non è acceso."
@@ -340,7 +342,10 @@ def _verifica(svc, ctx, chi, verifica=None, materia=None, anche_passate=False) -
         try:
             return svc.verifica(chi, int(vid))
         except (NonTrovata, NonPermesso, TypeError, ValueError):
-            return None
+            # Un id inventato dal modello con la materia detta (02/11, #376; 03/11, #383, «verifica
+            # 1» prima che ci fosse una verifica): vale la materia. Il tocco no: il suo id è quello
+            if b or not materia:
+                return None
     tutte = svc.home(chi)["verifiche"]
     if anche_passate:
         # Le sue e, da tutore, quelle dei suoi minori (revisione della PR #321, nota 3), con gli
@@ -367,6 +372,29 @@ def _verifica(svc, ctx, chi, verifica=None, materia=None, anche_passate=False) -
         return svc.verifica(chi, tutte[0]["id"])
     except (NonTrovata, NonPermesso):
         return None
+
+
+def _nessuna_verifica(svc, chi, verifica, materia) -> dict:
+    """Non c'è la verifica chiesta. Con una materia detta è una verifica che manca, non un errore:
+    niente frase pronta, così il modello la crea (#318: «giovedì ho anche la verifica di matematica»
+    → stato; 03/11, #383: «venerdì ho l'interrogazione su biologia» → studio_interroga, «non la
+    trovo» e il turno chiuso). Se ha altre verifiche le nomina: la materia può averla scelta il
+    modello («su quello che ho studiato» → materia «tutto», con una sola verifica aperta). Senza
+    materia, come sempre: lo stesso «non la trovo» di una verifica di un altro."""
+    if materia:
+        ci_sono = list(dict.fromkeys(str(v["materia"]) for v in svc.home(chi)["verifiche"]))[:4]
+        altre = (f"Le verifiche aperte sono di: {', '.join(ci_sono)}. Se chi parla non ha nominato "
+                 "una materia nuova, richiama subito con una di queste, senza chiederglielo. "
+                 if ci_sono else "")
+        return {"ok": False, "errore": f"nessuna verifica di {materia} nello Studio",
+                "cosa_fare": f"Non dire che non la trovi. {altre}Se chi parla ha detto che ha una "
+                             "verifica o un'interrogazione di questa materia con una data, è "
+                             "nuova: chiama subito studio con azione «crea», la materia, la data "
+                             "detta e prova «interrogazione» se è un'interrogazione. Se non ha "
+                             "detto quando, chiediglielo: per studiare serve prima la verifica, "
+                             "con le pagine."}
+    return _f(NON_CE if verifica else
+              "Non hai verifiche aperte nello Studio. Dimmi quando è la prossima.", ok=False)
 
 
 def _nome_verifica(v: dict) -> str:
@@ -414,8 +442,12 @@ def _crea(ctx, svc, chi, materia, data, argomento, per, prova=None, finestra=Non
     d = _data_detta(data, svc._oggi())
     if d is None:
         return {"ok": False, "errore": "manca la data",
-                "cosa_fare": "Chiedi quando è la verifica, poi richiama studio con data "
-                             "AAAA-MM-GG o il nome del giorno."}
+                # Giro vero del 03/11 (#383): «venerdì ho la verifica di biologia», la chiamata senza
+                # data, e qui c'era solo «chiedi»: il modello chiedeva il giorno appena detto
+                "cosa_fare": "Se chi parla ha già detto il giorno, anche in questa frase, richiama "
+                             "subito studio con la data come l'ha detta (il nome del giorno o "
+                             "AAAA-MM-GG), senza chiederglielo. Chiedi quando è solo se non l'ha "
+                             "detto."}
     if d < svc._oggi():
         return _f("Quella data è già passata: quando è la verifica?", ok=False)
     if d > svc._oggi() + datetime.timedelta(days=OLTRE_GIORNI):
@@ -807,8 +839,10 @@ def _prove_conto(ctx, svc, chi, v) -> dict:
         frase += (" C'è una prova scritta aperta." if c["aperta"]["modalita"] == "scritta"
                   else " C'è un'interrogazione a voce in corso.")
     if c["pronte"] < c["minimo"]:
-        frase += (" Per fare una prova servono almeno tre domande: scrivile nello Studio o fai "
-                  "le carte.")
+        proposte = svc.proposte_per_prove(v)
+        frase += (f" Per fare una prova servono almeno tre domande: ne ho {proposte} da "
+                  "confermare nello Studio." if proposte else
+                  " Per fare una prova servono almeno tre domande: puoi scriverle nello Studio.")
     elif nome is None:
         frase += " " + DOVE_PROVE
     return _f(frase, verifica=v["id"], prove={"pronte": c["pronte"],
@@ -1163,15 +1197,12 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
             return _premi(ctx, svc, chi, per)
         v = _verifica(svc, ctx, chi, verifica, materia,
                       anche_passate=azione in ("resoconto", "riepilogo"))
-        # Un id inventato dal modello con la materia giusta (02/11, #376: `proponi_data` con
-        # verifica 1 e materia fisica, «Questa verifica non la trovo.» e il turno chiuso): vale la
-        # materia. Con un id di un'altra materia, spostare sarebbe un esito ingannevole: non c'è
-        if not _bersaglio(ctx) and verifica and materia:
+        # Un id inventato dal modello con la materia giusta vale la materia (`_verifica`, 02/11,
+        # #376). Con un id di un'altra materia, spostare sarebbe un esito ingannevole: non c'è
+        if not _bersaglio(ctx) and verifica and materia and v is not None:
             m = str(materia).strip().lower()
-            if v is None:
-                v = _verifica(svc, ctx, chi, None, materia)
-            elif (azione in ("sposta", "proponi_data") and str(v["materia"]).lower() != m
-                  and m not in str(v.get("argomento") or "").lower()):
+            if (azione in ("sposta", "proponi_data") and str(v["materia"]).lower() != m
+                    and m not in str(v.get("argomento") or "").lower()):
                 v = None
         if v is None:
             if azione in ("sposta", "proponi_data"):
@@ -1183,17 +1214,7 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
                                      "ha detto una verifica con una materia e una data, è una "
                                      "verifica nuova: chiama studio con azione «crea», con la "
                                      "materia e la data dette da lei; altrimenti chiedile quale."}
-            if materia and not verifica:
-                # Una materia senza verifica (#318, sulla DGX: «giovedì ho anche la verifica di
-                # matematica» → stato con materia, «non la trovo» detto e il turno chiuso): niente
-                # frase pronta, così il modello può creare la verifica che la persona ha nominato
-                return {"ok": False, "errore": f"nessuna verifica di {materia} nello Studio",
-                        "cosa_fare": "Se chi parla sta dicendo che ha una verifica di questa "
-                                     "materia con una data, chiama studio con azione «crea»; "
-                                     "altrimenti dillo in breve."}
-            return _f(NON_CE if verifica else
-                      "Non hai verifiche aperte nello Studio. Dimmi quando è la prossima.",
-                      ok=False)
+            return _nessuna_verifica(svc, chi, verifica, materia)
         if azione == "stato":
             return _stato(ctx, svc, chi, v)
         if azione == "piano":
@@ -1422,9 +1443,7 @@ def _carte(ctx: ToolContext, parte: str = "", verifica=None, materia: str = "") 
             return out
         v = _verifica_con_carte(svc, ctx, chi, verifica, materia)
         if v is None:
-            return _f(NON_CE if verifica else
-                      "Non hai verifiche aperte nello Studio. Dimmi quando è la prossima.",
-                      ok=False)
+            return _nessuna_verifica(svc, chi, verifica, materia)
         from ..studio.servizio import CarteFerme
         try:
             c = svc.prossima_carta(chi, v["id"], int(getattr(ctx, "turno", 0) or 0))
@@ -1473,6 +1492,27 @@ COME_CHIEDERE = ("Fai la domanda con le sue parole (con le opzioni, se ci sono: 
                  "istruzioni. Quando risponde, chiama studio_interroga con parte «risposta».")
 
 
+def _senza_domande(svc, v: dict) -> str:
+    """La cosa vera quando l'interrogazione non ha domande (giro vero del 03/11, #383: «scrivile o
+    fai le carte», mentre le carte generate restavano in ombra e la persona non poteva vederle né
+    farle fare): usa solo ciò che è stato scritto o confermato, e cosa si può fare adesso. Solo
+    conti, mai il testo. Che usi anche ciò che è generato è la #384."""
+    frase = ("Per interrogarti uso solo le domande e le carte scritte o confermate nello Studio: "
+             "ne servono almeno tre")
+    proposte = svc.proposte_per_prove(v)
+    if proposte:
+        frase += (f", e ne ho {proposte} da confermare. Le trovi nello Studio, sotto la verifica: "
+                  "appena sono confermate ti interrogo.")
+    else:
+        frase += (". Per ora non ce ne sono abbastanza: puoi scriverle tu nello Studio, sotto la "
+                  "verifica.")
+    from ..studio import ascolta as AS
+    if AS.modo(svc.cfg) == "attiva" and any(p.get("stato") == "letta"
+                                            for p in svc._pagine_di(v["id"])):
+        frase += " Intanto, se vuoi, ti leggo il ripasso delle pagine."
+    return frase
+
+
 def _interroga(ctx: ToolContext, parte: str = "", verifica=None, materia: str = "",
                proposta: str = "") -> dict:
     svc = _svc(ctx)
@@ -1492,12 +1532,20 @@ def _interroga(ctx: ToolContext, parte: str = "", verifica=None, materia: str = 
         if parte == "inizia":
             v = _verifica(svc, ctx, chi, verifica, materia)
             if v is None:
-                return _f(NON_CE if verifica else
-                          "Non hai verifiche aperte nello Studio. Dimmi quando è la prossima.",
-                          ok=False)
+                return _nessuna_verifica(svc, chi, verifica, materia)
             if v["persona"] != str(chi.id):
                 return _f("L'interrogazione la fa chi studia, dalla sua voce.", ok=False)
-            o = svc.orale_inizia(chi, v["id"], turno)
+            if v.get("stato") == "bozza":
+                # Appena creata, non chiusa (#383: «questa verifica è chiusa» era falso)
+                return _f("Per interrogarti prima servono le pagine e gli argomenti confermati: "
+                          "li trovi nello Studio, sotto la verifica.", ok=False)
+            try:
+                o = svc.orale_inizia(chi, v["id"], turno)
+            except ValueError as e:
+                from ..studio import prove as PV
+                if str(e) != PV.POCHE:
+                    raise
+                return _f(_senza_domande(svc, v), ok=False)
             d = o["domanda"]
             note_rule(ctx, "studio_interroga")
             out = {"ok": True, "verifica": v["id"], "posizione": f"{d['n']} di {d['di']}",
@@ -1569,10 +1617,7 @@ def _interroga(ctx: ToolContext, parte: str = "", verifica=None, materia: str = 
     except PermissionError:
         return _f("Lo Studio adesso è in sola lettura: riprova più tardi.", ok=False)
     except ValueError as e:
-        frase = {"servono almeno 3 domande sugli argomenti del piano: scrivile o fai le carte":
-                 "Per interrogarti servono almeno tre domande sugli argomenti del piano: "
-                 "scrivile nello Studio o fai le carte.",
-                 "c'è una prova aperta su questa verifica: prima finiscila":
+        frase = {"c'è una prova aperta su questa verifica: prima finiscila":
                  "C'è una verifica finta aperta: prima finiscila nello Studio."}.get(str(e))
         return _f(frase or "Non riesco a cominciare l'interrogazione.", ok=False)
 
@@ -1721,14 +1766,16 @@ def _testo_domanda(d: dict) -> str:
 
 
 DESCRIZIONE_INTERROGA = (
-    "L'interrogazione simulata a voce dello Studio («interrogami di storia», «fammi "
-    "un'interrogazione»), sempre utile anche se la prova vera è scritta. parte «inizia»: la prima "
+    "L'interrogazione simulata a voce dello Studio, adesso («interrogami di storia», «fammi "
+    "un'interrogazione»), sempre utile anche se la prova vera è scritta. Non per chi dice che ha "
+    "un'interrogazione vera in un giorno («venerdì ho l'interrogazione di storia»): quella è "
+    "studio con azione «crea» e prova «interrogazione». parte «inizia»: la prima "
     "domanda, da fare con le sue parole senza dire la risposta; dopo la risposta di chi studia, "
     "parte «risposta»: l'esito lo decide il codice dalla frase che ha detto, mai tu; il risultato "
     "ha la risposta attesa per correggere e la domanda dopo. proposta (facoltativa, solo per le "
     "risposte che il codice non decide): il tuo giudizio «giusta», «parziale» o «sbagliata», che "
     "resta una misura. parte «ripeti» ridice la domanda, «basta» chiude col riepilogo. verifica = "
-    "l'id o materia.")
+    "l'id; materia solo se chi parla ne nomina una (senza, la verifica più vicina).")
 PARAMETRI_INTERROGA = {"type": "object", "properties": {
     "parte": {"type": "string", "enum": list(PARTI_INTERROGA)}, "verifica": {"type": "integer"},
     "materia": {"type": "string"},
@@ -1798,9 +1845,7 @@ def _ascolta(ctx: ToolContext, azione: str = "", cosa: str = "", numero=None, ve
             else:
                 v = _verifica(svc, ctx, chi, verifica, materia)
             if v is None:
-                return _f(NON_CE if verifica else
-                          "Non hai verifiche aperte nello Studio. Dimmi quando è la prossima.",
-                          ok=False)
+                return _nessuna_verifica(svc, chi, verifica, materia)
             n = None
             if cosa == "argomento":
                 try:
@@ -2023,6 +2068,16 @@ def senza_mascherati(ctx, argomenti: dict) -> dict:
     «tranquillo»). Vale «non dato», così l'altro valore si aggiorna (seconda revisione della PR
     #317). Una conversione della forma, prima dei controlli dello schema."""
     out = {k: v for k, v in (argomenti or {}).items() if v not in ("…", "...")}
+    # Il giorno di una verifica sta in `data`, anche se il modello l'ha scritto in `giorno` (#383):
+    # qui, prima dei controlli, così vale il controllo su chi ha detto la data
+    if (str(out.get("azione") or "").strip().lower() in CON_DATA and out.get("giorno")
+            and not out.get("data")):
+        out["data"] = out.pop("giorno")
+    # `tipo` è un valore di azione, ma il modello lo scrive anche per «crea» al posto di `prova`
+    # (misura del 04/11, #383: una passata in più, e il tipo perso alla seconda)
+    if str(out.get("azione") or "").strip().lower() == "crea" and out.get("tipo") \
+            and not out.get("prova"):
+        out["prova"] = out.pop("tipo")
     if len(out) != len(argomenti or {}):
         note_rule(ctx, "studio_mascherato_non_dato")
     return out

@@ -4707,9 +4707,16 @@ class Brain:
         said = (last.get("content") or "").strip() if last.get("role") == "assistant" else ""
         if not said or said.endswith("?"):
             return None
+        from .studio.modalita import TOOL as TOOL_STUDIO
         from .sviluppo import TOOL_SVILUPPO
         nomi = [t.get("nome") for t in getattr(self, "last_tools", None) or ()]
         dello_sviluppo = any(n in TOOL_SVILUPPO for n in nomi)
+        # L'effetto 3 della modalità studio (giro vero del 03/11, #383): chi sta studiando su questo
+        # dispositivo non sente gli sviluppi aperti; il promemoria non si consuma e resta per dopo.
+        # Vale anche il turno che apre la modalità: si apre a fine turno
+        studia = not dello_sviluppo and (
+            getattr(getattr(self.tool_ctx, "speaker_ctx", None), "in_modalita_studio", False)
+            or any(n in TOOL_STUDIO for n in nomi))
         try:
             if level == "amministra":
                 promemoria = svs.promemoria_giorno(chi)
@@ -4717,6 +4724,9 @@ class Brain:
                 # «tris» sospeso attaccato alla risposta sulla verifica dello Studio): resta per
                 # una risposta senza tool
                 if promemoria and (dello_sviluppo or not nomi):
+                    if studia:
+                        self._rule("sviluppo_taciuto_studio")
+                        return None
                     svs.ricordato(chi)
                     if not dello_sviluppo:
                         self._rule("sviluppo_promemoria_giorno")
@@ -4728,6 +4738,9 @@ class Brain:
             if sv.titolo.lower() in basso or re.search(
                     r"svilupp|collaud|revision|analisi|estension|programm|agente", basso):
                 return None                  # il modello l'ha già ricordato con parole sue
+            if studia:
+                self._rule("sviluppo_taciuto_studio")
+                return None
             riga = svs.riga_fuori_tema(sv)
             if not riga:
                 # Già detta nella stessa fase da poco (12/10): una volta basta
@@ -7011,6 +7024,11 @@ class Brain:
                                 [s.get("name") for s in (tools.all_schemas() if hasattr(
                                     tools, "all_schemas") else ())])
         if conv is not None and tools.get(conv[0]) is not None:
+            # Le chiavi di prima, senza i valori: dicono se il modello aveva messo un argomento che
+            # è stato tolto (#383: del giro del 03/11 non si può più sapere)
+            chiavi = sorted(call.get("arguments") or {}) if isinstance(call.get("arguments"),
+                                                                       dict) else []
+            print(f"   [TOOL] nome con l'azione: chiavi del modello {chiavi}", flush=True)
             call["name"] = conv[0]
             call["arguments"] = conv[1]
             print(f"   [TOOL] nome con l'azione: {nome} → {conv[0]}("
