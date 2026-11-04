@@ -1468,7 +1468,7 @@
     for (const x of Array.isArray(pr.voci) ? pr.voci : []) {
       const li = nodo("li", "studio-p-voce studio-p-" + String(x.esito || "vuota"));
       li.append(nodo("p", "studio-c-domanda", String(x.testo || "")));
-      li.append(nodo("span", "studio-p-esito-voce", ESITI_PARTE[x.esito] || String(x.esito || "")));
+      li.append(nodo("span", "studio-p-esito-voce", ESITI_P[x.esito] || String(x.esito || "")));
       li.append(nodo("span", "studio-c-risp", "La tua risposta: " + (x.risposta ? String(x.risposta) : "nessuna")));
       li.append(nodo("span", "studio-c-risposta", "Risposta attesa: " + String(x.attesa || "")));
       if (x.esito === "da_rivedere" && pr.puo_rivedere) {
@@ -2078,6 +2078,8 @@
     const p = nodo("div", "studio-m");
     const d = mappa.dati;
     if (!d) { p.append(nodo("p", "pagina-nota", "Un attimo…")); return p; }
+    // Una prova vera aperta: nessuna mappa coi testi fino alla consegna (revisione della PR #389)
+    if (d.a_prova) { p.append(nodo("p", "studio-avviso", "C'è una prova aperta: le mappe tornano dopo la consegna.")); return p; }
     const sch_ = d.scheletro;
     const pronto = sch_ && sch_.stato === "confermata";
     // Con la mappa a memoria aperta lo scheletro e la mia mappa arrivano senza testi e le loro
@@ -2202,7 +2204,7 @@
   function notaCopertura(m) {
     const c = m.copertura;
     if (!c || !Number(c.totale)) return [];
-    const out = [nodo("p", "studio-h-nota", "Ci sono " + Number(c.coperti) + " argomenti su " + Number(c.totale) + ".")];
+    const out = [nodo("p", "studio-h-nota", (Number(c.coperti) === 1 ? "C'è " : "Ci sono ") + nn(c.coperti, "argomento", "argomenti") + " su " + Number(c.totale) + ".")];
     const fuori = Array.isArray(c.fuori) ? c.fuori : [];
     if (fuori.length) out.push(nodo("p", "studio-avviso", "Fuori da questa mappa: " + fuori.map(String).join("; ") + ". Guarda le loro pagine."));
     const esclusi = Array.isArray(c.esclusi) ? c.esclusi : [];
@@ -2216,7 +2218,7 @@
     vuoto: "Le pagine non bastano per una mappa: questa parte guardala sul libro." };
   function pannelloParti(d) {
     const pp = d.parti || {};
-    if (pp.nascoste) return [nodo("p", "studio-h-nota", "Le mappe delle parti tornano dopo la mappa senza guardare o la prova.")];
+    if (pp.nascoste) return [nodo("p", "studio-h-nota", "Le mappe delle parti tornano dopo la mappa senza guardare.")];
     const voci = Array.isArray(pp.voci) ? pp.voci : [];
     const pronte = voci.filter((x) => x.mappa).length;
     const out = [nodo("p", "studio-h-riga", "Una mappa per ogni argomento, da leggere per studiare: " + pronte + " pronte su " + voci.length + ". La tua mappa la fai dallo scheletro.")];
@@ -2233,6 +2235,8 @@
   }
   function corpoParte(x) {
     const m = x.mappa;
+    // Vuota perché tutto è stato tolto: non sono le pagine che non bastano
+    if (!m && x.esito === "vuoto" && Number(x.esclusi) + Number(x.fuori) > 0) return [nodo("p", "studio-h-nota", "Ho tolto tutte le voci che avevo: non stavano nelle pagine o venivano da un messaggio per un assistente. Questa parte guardala sul libro.")];
     if (!m) return [nodo("p", "studio-h-nota", ESITI_PARTE[x.esito] || "La sto ancora preparando.")];
     const out = [];
     const viste = nodo("div", "studio-m-schede");
@@ -2252,6 +2256,7 @@
       out.push(elencoMappa(m, false));
     }
     if (Number(x.saltate)) out.push(nodo("p", "studio-h-nota", nn(x.saltate, "pagina non usata: ha", "pagine non usate: hanno") + " un messaggio per un assistente. Guardala sul libro."));
+    if (Number(x.fuori)) out.push(nodo("p", "studio-h-nota", nn(x.fuori, "voce tolta: non sta", "voci tolte: non stanno") + " nelle pagine."));
     if (Number(x.esclusi)) out.push(nodo("p", "studio-h-nota", nn(x.esclusi, "voce non messa: viene", "voci non messe: vengono") + " da una pagina con un messaggio per un assistente o sembra un ordine."));
     return out;
   }

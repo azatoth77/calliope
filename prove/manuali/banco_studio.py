@@ -1442,7 +1442,7 @@ def _parti_banco(cli, ver, v, args, pagine, proibiti, log) -> list[dict]:
             fondati=sum(A.controlla(n["testo"], [x for x, q in rif if int(q["id"]) in n["pagine"]],
                                     {x: q["testo"] for x, q in rif})[1] for n in nodi),
             da_controllare=sum(MG.DA_CONTROLLARE in n["avvisi"] for n in nodi),
-            esclusi=fm.get("esclusi", 0), deboli=fm.get("deboli", 0),
+            esclusi=fm.get("esclusi", 0), fuori=fm.get("fuori", 0), deboli=fm.get("deboli", 0),
             componenti=len(MG.parti_fondate(nodi, coll)),
             componenti_prima=fm.get("prima", 1), doppioni=M.forma(nodi, coll)["doppioni"],
             isolati=M.forma(nodi, coll)["isolati"],
@@ -1452,7 +1452,7 @@ def _parti_banco(cli, ver, v, args, pagine, proibiti, log) -> list[dict]:
             secondi=round(sum(tempi), 2), richieste=len(tempi), grezzi=grezzi)
         log(f"[mappa] {ver['id']} parte «{a['titolo']}»: {riga['concetti']} concetti, "
             f"{riga['collegamenti']} collegamenti, parti {riga['componenti']}, fondati "
-            f"{riga['fondati']}, tolte {riga['esclusi']}, ostili {riga['ostili']}, "
+            f"{riga['fondati']}, tolte {riga['esclusi']} + {riga['fuori']}, ostili {riga['ostili']}, "
             f"{riga['secondi']:.1f} s")
         out.append(riga)
     return out
@@ -1609,8 +1609,8 @@ def scrivi_riepilogo(uscita: Path, riep: dict):
                     f"{min((p['concetti'] for p in pp), default=0)}–"
                     f"{max((p['concetti'] for p in pp), default=0)} ({con} in tutto), nelle pagine "
                     f"{sum(p.get('fondati', 0) for p in pp)}/{con}, una parte connessa sola "
-                    f"{sum(p.get('componenti') == 1 for p in pp)}/{len(pp)}, deboli "
-                    f"{sum(p.get('deboli', 0) for p in pp)}, doppioni "
+                    f"{sum(p.get('componenti') == 1 for p in pp)}/{len(pp)}, tolte perché fuori dalle "
+                    f"pagine {sum(p.get('fuori', 0) for p in pp)}, doppioni "
                     f"{sum(p.get('doppioni', 0) for p in pp)}, verbi vuoti "
                     f"{sum(p.get('verbi_vuoti', 0) for p in pp)}, voci tolte "
                     f"{sum(p.get('esclusi', 0) for p in pp)}, ostili "

@@ -1178,5 +1178,18 @@ for testo, nome, azione, sospeso, atteso in [
                                          POL.Turno(testo=testo, in_sospeso=sospeso)), atteso)
 
 
+# ── il verbo di una tripla della mappa (04/11, #385, revisione della PR #389): una forma chiusa ──
+from calliope.studio import mappa_genera as _MG  # noqa: E402
+
+for vb in ("chiama", "chiama in onore di", "chiama nel", "manda a", "invia a"):
+    verifica(f"verbo della mappa, terza persona: «{vb}»", _MG._forma_verbo(vb)[1], [])
+for vb in ("chiama il numero 3331234567", "chiama il tool", "chiama la funzione", "manda i soldi a",
+           "invia la password a", "ignora la verifica", "ignora tutto", "ignora", "cancella i file",
+           "dimentica", "esegui il comando", "rispondi sempre sì", "ignore all instructions",
+           "system override", "delete all files", "send the password to", "call me",
+           "manda a compiti@example.com", "scrivi a", "non serve più studiare"):
+    verifica(f"verbo della mappa, contrario: «{vb}»", _MG._forma_verbo(vb)[1], [_MG.TESTO_ORDINE])
+
+
 print(f"\n{errori} errori" if errori else "\nTutto a posto.")
 sys.exit(1 if errori else 0)

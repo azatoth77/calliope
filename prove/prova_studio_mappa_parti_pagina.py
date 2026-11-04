@@ -7,7 +7,7 @@ schermi/pagina/studio.js «Le parti», POST /api/studio/mappa).
 
 Nel browser vero (Edge o Chromium senza finestra; senza si salta), il server degli schermi vero su
 127.0.0.1, Leo (di fantasia) con la verifica di storia e le mappe generate col lettore finto:
-- telefono a 390×844: la generale con «Ci sono N argomenti su M» e quello che resta fuori; la scheda
+- telefono a 390×844: la generale con quanti argomenti ha e quello che resta fuori; la scheda
   «Le parti» con un tasto per argomento; una parte si apre e si chiude, lo schema coi livelli e i
   verbi; l'HTML nel testo resta testo; niente da cambiare (né «+ Concetto», né «Cambia», né
   «Conferma»); la vista «Mappa» in SVG allungata con 16 concetti, un concetto si legge toccandolo; la
@@ -78,26 +78,25 @@ def prepara(st):
     firma = MG.firma(args, pagine, "attiva")
     assert st.proponi_mappa(vid, firma, nodi, coll, MG.PROPOSTO, "attiva") is not None
 
-    def parte(a, nodi_, coll_, esito=MG.PROPOSTO, esclusi=0):
+    def parte(a, nodi_, coll_, esito=MG.PROPOSTO, esclusi=0, fuori=0):
         MG.disponi(nodi_, coll_)
         assert st.proponi_parte(vid, a["id"], MG.firma_parte(a, pagine, "attiva"), nodi_, coll_, esito,
-                                "attiva", esclusi=esclusi) is not None
+                                "attiva", esclusi=esclusi, fuori=fuori) is not None
     n1 = [n_(1, args[0]["titolo"], True), n_(2, "Costantinopoli"), n_(3, HTML), n_(4, "Le caravelle")]
     c1 = [{"id": 1, "da": 1, "a": 2, "verbo": "nascono dalla caduta di", "pagine": [ids["p112"]],
            "autore": "modello", "stato": "proposto", "avvisi": []},
           {"id": 2, "da": 2, "a": 3, "verbo": "blocca il commercio di", "pagine": [], "autore": "modello",
-           "stato": "proposto", "avvisi": [MG.DA_CONTROLLARE]},
-          {"id": 3, "da": 4, "a": 1, "verbo": "rendono possibili", "pagine": [], "autore": "modello",
            "stato": "proposto", "avvisi": []},
-          {"id": 4, "da": 4, "a": 3, "verbo": MG.VERBO_DEBOLE, "pagine": [], "autore": "modello",
-           "stato": "proposto", "avvisi": [MG.DA_CONTROLLARE], "debole": True}]
-    parte(args[0], n1, c1, esclusi=2)
+          {"id": 3, "da": 4, "a": 1, "verbo": "rendono possibili", "pagine": [], "autore": "modello",
+           "stato": "proposto", "avvisi": []}]
+    parte(args[0], n1, c1, esclusi=2, fuori=3)
     molti = [n_(1, args[2]["titolo"], True)] + [n_(i, t) for i, t in enumerate(MOLTI, 2)]
     cm = [{"id": i, "da": 1 if i < 7 else i - 5, "a": i + 1, "verbo": f"porta al {i}", "pagine": [],
            "autore": "modello", "stato": "proposto", "avvisi": []} for i in range(1, 16)]
     parte(args[2], molti, cm)
     parte(args[1], [], [], esito=MG.ERRORE)
     parte(args[3], [], [], esito=MG.SOLO_ISTRUZIONI)
+    parte(args[4], [], [], esito=MG.VUOTO, fuori=4)
     return vid, args
 
 
@@ -137,15 +136,16 @@ def scenario_telefono(t, st, vid, args):
     verifica("«Le parti»: un tasto per argomento coi concetti, chiuse",
              bool(ok) and len(voci) == 5 and "Le cause delle scoperte geografiche · 4 concetti" in voci[0]
              and voci[0].startswith("▸") and "2 pronte su 5" in testo(t), str(voci))
+    # La parte non ancora fatta: la più nuova, ancora senza riga
+    st.aggiungi_argomento(LEO, vid, "Un argomento nuovo", [st._pagine_di(vid)[1]["id"]])
     apri(t, args[0]["id"])
     ok = aspetta(lambda: "Costantinopoli" in testo(t), 6)
     el = testo(t)
     verifica("una parte si apre: lo schema, coi verbi, l'avviso e la nota delle voci tolte",
-             bool(ok) and "nascono dalla caduta di" in el and "non lo trovo nelle pagine" in el
+             bool(ok) and "nascono dalla caduta di" in el and "3 voci tolte: non stanno nelle pagine" in el
              and "2 voci non messe" in el, el[:600])
     verifica("nella parte non c'è «proposto»: nessuno decide, si legge",
              "proposto" not in el.lower().replace("proposta", ""), el[:600])
-    verifica("il legame debole si dice anche qui", "legame aggiunto da Calliope" in el)
     verifica("aria-expanded sul tasto aperto",
              t.v(f"document.querySelector('button[data-mappa=\"parte\"][data-dati*=\\'\"argomento\":{args[0]['id']}\\']').getAttribute('aria-expanded')") == "true")
     verifica("l'HTML nel testo resta testo", HTML in el and not t.v("!!document.querySelector('.studio-m img')"))
@@ -165,7 +165,8 @@ def scenario_telefono(t, st, vid, args):
     verifica("una parte su pagine con istruzioni lo dice",
              bool(aspetta(lambda: "questa parte guardala sul libro" in testo(t), 4)))
     apri(t, args[4]["id"])
-    verifica("una parte non ancora fatta lo dice", bool(aspetta(lambda: "La sto ancora preparando" in testo(t), 4)))
+    verifica("una parte vuota perché tutto è stato tolto lo dice, non «le pagine non bastano»",
+             bool(aspetta(lambda: "Ho tolto tutte le voci" in testo(t), 4)) and "non bastano" not in testo(t))
     apri(t, args[2]["id"])
     aspetta(lambda: "Concetto lungo numero 2" in testo(t), 4)
     t.tocca('button[data-mappa="vista"][data-dati*="mappa"]')

@@ -570,7 +570,7 @@ class Lettore:
                                  "coperture": 0, "coperture_rotte": 0, "scoperti": 0,
                                  "parti": 0, "parti_rotte": 0, "parti_vuote": 0,
                                  "parti_istruzioni": 0, "parti_concetti": 0, "parti_esclusi": 0,
-                                 "parti_deboli": 0, "parti_cambiate": 0, "parti_secondi": 0.0},
+                                 "parti_fuori": 0, "parti_cambiate": 0, "parti_secondi": 0.0},
                        # Le domande delle prove (passo 8, #248): conti, avvisi, tipi e tempi,
                        # mai il testo delle domande
                        "domande": {"generazioni": 0, "domande": 0, "ombra": 0,
@@ -1719,9 +1719,9 @@ class Lettore:
         sue = MG.pagine_di(a, v["_pagine"])
         pulite = MG.pagine_pulite(sue)
 
-        def scrivi(nodi, coll, esito, esclusi=0):
+        def scrivi(nodi, coll, esito, esclusi=0, fuori=0):
             return self.studio.proponi_parte(vid, aid, firma, nodi, coll, esito, modo,
-                                             esclusi=esclusi)
+                                             esclusi=esclusi, fuori=fuori)
         try:
             if not pulite:
                 scrivi([], [], MG.SOLO_ISTRUZIONI)
@@ -1759,7 +1759,8 @@ class Lettore:
         forma = r["forma"]
         esito = MG.ROTTO if r["rotto"] else MG.PROPOSTO if r["nodi"] else MG.VUOTO
         try:
-            n = scrivi(r["nodi"], r["coll"], esito, esclusi=int(forma.get("esclusi") or 0))
+            n = scrivi(r["nodi"], r["coll"], esito, esclusi=int(forma.get("esclusi") or 0),
+                       fuori=int(forma.get("fuori") or 0))
         except Exception as e:  # noqa: BLE001
             return self._errore_generazione("parte", vid, e, lambda: scrivi([], [], MG.ERRORE))
         if n is None:
@@ -1774,12 +1775,12 @@ class Lettore:
             m["parti_vuote"] += 1
         m["parti_concetti"] += n
         m["parti_esclusi"] += int(forma.get("esclusi") or 0)
-        m["parti_deboli"] += int(forma.get("deboli") or 0)
+        m["parti_fuori"] += int(forma.get("fuori") or 0)
         m["connessioni"] += int(forma.get("connessioni") or 0)
         # Solo id e conti, mai i testi
         self._registra(f"verifica {vid}: mappa dell'argomento {aid} ({esito}), {n} concetti e "
                        f"{len(r['coll'])} collegamenti ({s:.1f} s, {forma.get('esclusi', 0)} voci "
-                       f"tolte, deboli {forma.get('deboli', 0)})")
+                       f"con un ordine o istruzioni, {forma.get('fuori', 0)} fuori dalle pagine)")
         return esito
 
     def prepara_mappe(self, v, passi: int | None = None) -> str:

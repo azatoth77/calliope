@@ -25,11 +25,20 @@ LARGO, ALTO = 297.0, 210.0
 MARGINE = 12.0
 TESTA = 30.0
 NODO_W = 46.0
-NODO_W_LUNGA = 80.0
+NODO_W_LUNGA = 88.0
 RIGA = 4.4
 FONT_NODO = 9
 # Lo spazio in fondo alla pagina che resta libero (il piede)
 PIEDE = 10.0
+
+
+def misure_nodo(concetti: int) -> tuple[float, int, float, float, int]:
+    """(larghezza, font, riga, margine, righe al più) del riquadro di un concetto. Una mappa lunga
+    (#385) è disposta su due colonne fitte: riquadri larghi, testo più piccolo su meno righe, così non
+    si sovrappongono fino al tetto di 30 (revisione della PR #389). Il testo intero è nell'elenco."""
+    if concetti <= TELA_NODI:
+        return NODO_W, FONT_NODO, RIGA, 4.0, 3
+    return NODO_W_LUNGA, 8, 3.6, 2.0, 2 if concetti <= 24 else 1
 
 
 def _data(iso) -> str:
@@ -124,15 +133,14 @@ def render(mappa: dict, nome: str, materia: str, data_verifica: str, pagine: dic
     # ── pagina 1: la mappa ──
     pdf.add_page()
     testa("la mappa")
-    # Una mappa lunga (#385) è disposta su due colonne fitte: riquadri larghi, testo su meno righe
-    nodo_w = NODO_W if len(nodi) <= TELA_NODI else NODO_W_LUNGA
+    nodo_w, font_nodo, riga, margine, righe_max = misure_nodo(len(nodi))
     x0, y0 = MARGINE + nodo_w / 2, TESTA + 10
     larga, alta = LARGO - 2 * MARGINE - nodo_w, ALTO - TESTA - MARGINE - 20
-    pdf.set_font(fam, "", FONT_NODO)
+    pdf.set_font(fam, "", font_nodo)
     box = {}
     for n in nodi:
-        righe = _taglia(pdf, testo_di(n), nodo_w - 4, 3, puntini)
-        h = len(righe) * RIGA + 4
+        righe = _taglia(pdf, testo_di(n), nodo_w - 4, righe_max, puntini)
+        h = len(righe) * riga + margine
         cx = x0 + float(n.get("x") or 0.5) * larga
         cy = y0 + float(n.get("y") or 0.5) * alta
         box[int(n["id"])] = (cx, cy, nodo_w, h, righe)
@@ -161,7 +169,7 @@ def render(mappa: dict, nome: str, materia: str, data_verifica: str, pagine: dic
             pdf.set_fill_color(255, 255, 255)
             pdf.set_xy(mx - w / 2, my - 2.4)
             pdf.cell(w, 4.8, vb, align="C", fill=True)
-    pdf.set_font(fam, "", FONT_NODO)
+    pdf.set_font(fam, "", font_nodo)
     for nid, (cx, cy, w, h, righe) in box.items():
         n = per_id[nid]
         pdf.set_fill_color(234, 240, 250) if n.get("da") is not None else pdf.set_fill_color(
@@ -169,8 +177,8 @@ def render(mappa: dict, nome: str, materia: str, data_verifica: str, pagine: dic
         pdf.set_draw_color(40, 70, 140)
         pdf.rect(cx - w / 2, cy - h / 2, w, h, style="DF", round_corners=True, corner_radius=2)
         for i, r in enumerate(righe):
-            pdf.set_xy(cx - w / 2 + 2, cy - h / 2 + 2 + i * RIGA)
-            pdf.cell(w - 4, RIGA, r, align="C")
+            pdf.set_xy(cx - w / 2 + 2, cy - h / 2 + margine / 2 + i * riga)
+            pdf.cell(w - 4, riga, r, align="C")
     pdf.set_xy(MARGINE, ALTO - MARGINE - 5)
     pdf.set_font(fam, "", 8)
     pdf.cell(0, 5, pulito("Azzurro: i concetti del quadro · arancio chiaro: i concetti aggiunti. "

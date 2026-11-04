@@ -62,7 +62,8 @@ richiesta mirata** (`messaggi_copertura`) con le sue sole pagine; le triple nuov
 stesso `scheletro` insieme alle prime. Se resta fuori la pagina lo dice: mai un concetto scritto dal
 codice. Le mappe delle parti si leggono soltanto: chi legge non può «tenere» una voce, e le voci con
 un ordine o da una pagina con istruzioni non ci entrano (`solo_studiabili`). `rete` è il giro
-intero, lo stesso nel lettore e nel banco.
+intero, lo stesso nel lettore e nel banco. Dalla revisione della PR #389 fuori dalla parte anche
+ciò che non sta nelle pagine e i legami deboli: nessuno può «tenerli».
 """
 
 from __future__ import annotations
@@ -270,18 +271,25 @@ _COPPIE_PLURALE = frozenset(frozenset(x) for x in ("ae", "oi", "ei", "ai"))
 PLURALE_MIN = 5
 
 
-# Un verbo di una tripla: «chiama», «manda», «ignora» sono anche la terza persona («Waldseemüller chiama
-# il continente America»: il banco del 04/11 toglieva così metà della mappa di una parte). È un ordine
-# solo se dice a chi legge qualcosa sull'assistente, sulle regole o sulle risposte; un indirizzo o un
-# annuncio restano un ordine sempre
-_VERBO_ORDINE = re.compile(r"\b(istruzion\w*|regol\w*|tool|memoria|assistente|sistema|soluzion\w*|"
-                           r"rispost\w*|prompt|precedent\w*|calliope)\b", re.I)
+# Un verbo di una tripla: «chiama», «manda», «invia» sono anche la terza persona («Waldseemüller chiama
+# il continente America»: il banco del 04/11 toglieva così metà della mappa di una parte). L'avviso cade
+# solo se il verbo è **per intero** una di queste parole, più al massimo una preposizione o una locuzione
+# chiusa; tutto il resto che comincia come un ordine resta un ordine, in italiano e in inglese («chiama
+# il numero…», «manda i soldi a», «ignora la verifica»; revisione della PR #389). Non ci sono «ignora»,
+# «dimentica», «cancella»: da soli, davanti al concetto dopo, si leggono come un ordine
+_VERBI_ANCHE_TERZA = frozenset(("chiama", "manda", "invia"))
+_PREPOSIZIONI = frozenset("""a al allo alla ai agli alle di del dello della dei degli delle da dal dallo
+dalla dai dagli dalle in nel nello nella nei negli nelle su sul sullo sulla sui sugli sulle con col per
+verso""".split())
+_LOCUZIONI = frozenset(("in onore di", "in ricordo di", "col nome di", "con il nome di"))
 
 
 def _forma_verbo(testo) -> tuple[str | None, list[str]]:
     verbo, avvisi = G.forma_testo(testo, M.VERBO_MAX)
-    if verbo and avvisi and not (A._INDIRIZZO.search(verbo) or A._ANNUNCIO.search(verbo)
-                                 or _VERBO_ORDINE.search(verbo)):
+    if not verbo or not avvisi:
+        return verbo, avvisi
+    prima, _sep, resto = M.chiave(verbo).partition(" ")
+    if prima in _VERBI_ANCHE_TERZA and (not resto or resto in _PREPOSIZIONI or resto in _LOCUZIONI):
         return verbo, []
     return verbo, avvisi
 
@@ -865,8 +873,9 @@ def pagine_pulite(pagine: list[dict]) -> set[int]:
 def copertura(nodi: list[dict], coll: list[dict], argomenti: list[dict],
               pagine: list[dict]) -> dict:
     """Quali argomenti del piano ha davvero la mappa, deciso dal codice. Un argomento è **coperto**
-    se c'è un concetto che ne parla (l'argomento detto dalla tripla, e una pagina citata che è sua;
-    oppure il concetto è il suo titolo), buono (tenuto da una persona, o senza avvisi: un concetto
+    se c'è un concetto che ne parla (cita una sua pagina, e la tripla dice quell'argomento o il concetto
+    è il suo titolo: un titolo su una pagina di un altro argomento non vale), buono (tenuto da una
+    persona, o senza avvisi: un concetto
     fuori dalle pagine o da una pagina con istruzioni non copre niente) e legato alla mappa da un
     collegamento vero (un debole del codice non è nelle pagine). Con un concetto solo, basta lui.
     La radice copre solo col titolo: ha gli argomenti di tutte le sue triple, e varrebbe per tutti.
@@ -890,6 +899,10 @@ def copertura(nodi: list[dict], coll: list[dict], argomenti: list[dict],
             continue
 
         def parla(n: dict) -> bool:
+            # Il concetto scritto a mano ha l'argomento scelto da una persona; quello del modello
+            # deve citare una pagina dell'argomento, anche quando è il suo titolo
+            if n.get("autore") == "modello" and not pag & {int(x) for x in n.get("pagine") or ()}:
+                return False
             if M.uguale(a.get("titolo"), n.get("testo")):
                 return True
             if int(n["id"]) == centro and n.get("autore") == "modello":
@@ -897,10 +910,7 @@ def copertura(nodi: list[dict], coll: list[dict], argomenti: list[dict],
             detti = {int(x) for x in n.get("argomenti") or () if x is not None}
             if n.get("argomento") is not None:
                 detti.add(int(n["argomento"]))
-            # Il concetto scritto a mano ha l'argomento scelto da una persona; quello del modello
-            # deve anche citare una pagina dell'argomento
-            return aid in detti and (n.get("autore") != "modello"
-                                     or bool(pag & {int(x) for x in n.get("pagine") or ()}))
+            return aid in detti
         out["coperti" if any(parla(n) for n in buoni) else "scoperti"].append(aid)
     return out
 
@@ -931,30 +941,40 @@ def messaggi_copertura(v: dict, rif, arif, nodi: list[dict], scoperti: list[int]
 
 
 def solo_studiabili(nodi: list[dict], coll: list[dict], titolo=None
-                    ) -> tuple[list[dict], list[dict], int]:
+                    ) -> tuple[list[dict], list[dict], int, int]:
     """Una mappa da leggere (una parte): via i collegamenti con un ordine o da una pagina con
-    istruzioni, i concetti che sono loro stessi un ordine e quelli rimasti senza collegamenti. Nello
-    scheletro restano con l'avviso e decide la persona («Tieni»); qui nessuno decide, e un annuncio
-    scritto su una pagina non deve arrivare a un minore come una cosa da studiare. L'avviso su un
+    istruzioni, i concetti che sono loro stessi un ordine, ciò che non sta nelle pagine
+    (`da_controllare`, col collegamento che ne dipende) e i concetti rimasti senza collegamenti. Nello
+    scheletro restano con l'avviso e decide la persona («Tieni»); qui nessuno decide, e chi studia non
+    deve leggere un annuncio scritto su una pagina né ciò che le pagine non dicono. L'avviso duro su un
     concetto può venire da una sola tripla cattiva (`scheletro` segna i due capi): se ha ancora un
-    collegamento buono e il suo testo è pulito resta, senza quell'avviso, altrimenti un messaggio
-    su una pagina si porterebbe via il centro e tutta la mappa. (concetti, collegamenti, quante voci
-    tolte); `disponi` a chi chiama."""
-    prima = len(nodi) + len(coll)
-    n_ok = [n for n in nodi if TESTO_ORDINE not in G.forma_testo(n.get("testo"), M.NODO_MAX)[1]]
+    collegamento buono e il suo testo è pulito resta, senza quell'avviso, altrimenti un messaggio su
+    una pagina si porterebbe via il centro e tutta la mappa. Il titolo dell'argomento resta anche con
+    `da_controllare`: l'ha confermato la persona, ed è il centro. Se la mappa perde la connessione resta
+    così (lo misura il banco). (concetti, collegamenti, voci tolte per un ordine o una pagina con
+    istruzioni, voci tolte perché non stanno nelle pagine); `disponi` a chi chiama."""
+    def e_titolo(n) -> bool:
+        return bool(titolo) and M.uguale(titolo, n.get("testo"))
+    n_ok = [n for n in nodi if TESTO_ORDINE not in G.forma_testo(n.get("testo"), M.NODO_MAX)[1]
+            and (DA_CONTROLLARE not in (n.get("avvisi") or ()) or e_titolo(n))]
     ids = {int(n["id"]) for n in n_ok}
-    c_ok = [c for c in coll if not set(c.get("avvisi") or ()) & set(AVVISI_DURI)
+    c_ok = [c for c in coll if not set(c.get("avvisi") or ()) & {*AVVISI_DURI, DA_CONTROLLARE}
             and int(c["da"]) in ids and int(c["a"]) in ids]
     legati = {int(x) for c in c_ok for x in (c["da"], c["a"])}
     n_ok = [n for n in n_ok if int(n["id"]) in legati]
+    tenuti_n, tenuti_c = {int(n["id"]) for n in n_ok}, {int(c["id"]) for c in c_ok}
+    tolte = [n for n in nodi if int(n["id"]) not in tenuti_n] + [
+        c for c in coll if int(c["id"]) not in tenuti_c]
+    dure = sum(bool(set(x.get("avvisi") or ()) & set(AVVISI_DURI)) for x in tolte)
     for n in n_ok:
         n.pop("radice", None)
-        n["avvisi"] = [x for x in n.get("avvisi") or () if x not in AVVISI_DURI]
+        n["avvisi"] = [x for x in n.get("avvisi") or ()
+                       if x not in AVVISI_DURI and not (x == DA_CONTROLLARE and e_titolo(n))]
     r = M.radice(n_ok, c_ok, titolo)
     for n in n_ok:
         if int(n["id"]) == r:
             n["radice"] = True
-    return n_ok, c_ok, prima - len(n_ok) - len(c_ok)
+    return n_ok, c_ok, dure, len(tolte) - dure
 
 
 # Quante volte si chiede di unire le isole: il banco del 04/11 ne lasciava in una mappa su quattro
@@ -969,7 +989,8 @@ def rete(chiedi, v: dict, rif, arif, nodi_max: int, titolo=None, parte: bool = F
     max_token)` → il testo, None se il modello gira in tondo fino a `max_token`; le sue eccezioni
     (ceduta, server giù) passano. La prima richiesta (rifatta una volta se gira in tondo); con la
     generale la richiesta mirata per gli argomenti rimasti fuori; le voci non studiabili via, se è
-    una parte; la seconda passata per le isole, e i collegamenti deboli per quelle che restano.
+    una parte; la seconda passata per le isole, e nella generale i collegamenti deboli per quelle
+    che restano.
     {nodi, coll, forma (solo conti), rotto: JSON illeggibile}. Una richiesta dopo la prima che non
     si legge lascia ciò che c'è."""
     testo = None
@@ -997,9 +1018,9 @@ def rete(chiedi, v: dict, rif, arif, nodi_max: int, titolo=None, parte: bool = F
             if g2:
                 nodi, coll = scheletro(grezzi + g2, rif, arif, nodi_max, titolo=titolo,
                                        misure=forma, riserva_isole=True)
-    esclusi = 0
+    esclusi = fuori = 0
     if parte:
-        nodi, coll, esclusi = solo_studiabili(nodi, coll, titolo)
+        nodi, coll, esclusi, fuori = solo_studiabili(nodi, coll, titolo)
     forma["prima"] = len(M.componenti(nodi, coll))
     if forma["prima"] > 1:
         conn: dict = {}
@@ -1016,13 +1037,15 @@ def rete(chiedi, v: dict, rif, arif, nodi_max: int, titolo=None, parte: bool = F
             for k, x in giro.items():
                 conn[k] = conn.get(k, 0) + x
             if parte:
-                nodi, coll, tolte = solo_studiabili(nodi, coll, titolo)
-                esclusi += tolte
+                nodi, coll, dure, altre = solo_studiabili(nodi, coll, titolo)
+                esclusi, fuori = esclusi + dure, fuori + altre
             # Niente di nuovo: un altro giro darebbe lo stesso (temperatura 0)
             if g3 is None or not uniti or len(M.componenti(nodi, coll)) <= 1:
                 break
         forma["connessione"] = conn
-        forma["deboli"] = len(collega_isole(nodi, coll, nodi_max))
-    forma["esclusi"] = esclusi
+        # Nella generale un legame debole, da decidere; in una parte nessuno decide, e non è nelle
+        # pagine: le isole restano isole
+        forma["deboli"] = 0 if parte else len(collega_isole(nodi, coll, nodi_max))
+    forma["esclusi"], forma["fuori"] = esclusi, fuori
     disponi(nodi, coll)
     return {"nodi": nodi, "coll": coll, "forma": forma, "rotto": False}

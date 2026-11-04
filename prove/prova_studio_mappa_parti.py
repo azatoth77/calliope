@@ -103,6 +103,15 @@ PARTE = {"triple": [
     tripla("Il Portogallo e la rotta africana", "comincia con", "Enrico il Navigatore", "A1", "P1"),
     tripla("Il Portogallo e la rotta africana", "porta a", "Vasco da Gama", "A1", "P1"),
     tripla("Vasco da Gama", "arriva in", "India", "A1", "P1")]}
+# Le altre due, dalle loro pagine: ciò che non sta nelle pagine in una parte non entra
+P_A = {"triple": [
+    tripla("Perché gli europei partirono", "nasce dalla", "Caduta di Costantinopoli", "A1", "P1"),
+    tripla("Perché gli europei partirono", "cerca", "Spezie", "A1", "P1"),
+    tripla("Spezie", "vengono da", "Oriente", "A1", "P1")]}
+P_C = {"triple": [
+    tripla("Cristoforo Colombo e il Nuovo Mondo", "comincia a", "Palos", "A1", "P1"),
+    tripla("Cristoforo Colombo e il Nuovo Mondo", "arriva a", "San Salvador", "A1", "P1"),
+    tripla("San Salvador", "è isola delle", "Bahamas", "A1", "P1")]}
 
 
 # ═══════════════════════════ 1. la copertura ═══════════════════════════
@@ -145,7 +154,19 @@ r = MG.copertura(N, [c_(1, 1, 2), c_(2, 1, 3, debole=True)], AA, PP)
 verifica("contrario: legato solo da un collegamento debole non copre", r["scoperti"] == [20], r)
 r = MG.copertura([n_(1, "Centro", 10, [1]), n_(2, "Spezie", 10, [1]), n_(3, "Gli effetti", None, [])],
                  [c_(1, 1, 2), c_(2, 1, 3)], AA, PP)
-verifica("il concetto che è il titolo dell'argomento lo copre", r["scoperti"] == [], r)
+verifica("contrario: il titolo senza una pagina sua non copre", r["scoperti"] == [20], r)
+r = MG.copertura([n_(1, "Centro", 10, [1]), n_(2, "Spezie", 10, [1]), n_(3, "Gli effetti", None, [2])],
+                 [c_(1, 1, 2), c_(2, 1, 3)], AA, PP)
+verifica("il concetto che è il titolo, con una pagina sua, lo copre", r["scoperti"] == [], r)
+r = MG.copertura([n_(1, "Centro", 10, [1]), n_(2, "Spezie", 10, [1]), n_(3, "Gli effetti", None, [1])],
+                 [c_(1, 1, 2), c_(2, 1, 3)], AA, PP)
+verifica("contrario: il titolo su una pagina di un altro argomento non copre", r["scoperti"] == [20], r)
+r = MG.copertura([{**n_(1, "Centro", 10, [1, 2]), "argomenti": [10, 20]}, n_(2, "Spezie", 10, [1])],
+                 [c_(1, 1, 2)], AA, PP)
+verifica("contrario: la radice ha gli argomenti di tutte le sue triple, e non ne copre nessuno",
+         r["scoperti"] == [20] and MG.copertura(
+             [{**n_(1, "Gli effetti", 20, [2]), "radice": True}, n_(2, "Spezie", 10, [1])],
+             [c_(1, 1, 2)], AA, PP)["scoperti"] == [], r)
 r = MG.copertura([n_(1, "Centro", 10, [1], autore="persona", stato="tenuto"),
                   n_(2, "Mio", 20, [], autore="persona", stato="tenuto")], [c_(1, 1, 2)], AA, PP)
 verifica("scritto a mano: conta l'argomento scelto, anche senza pagine", r["scoperti"] == [], r)
@@ -324,6 +345,7 @@ testi = {n["testo"] for n in r["nodi"]}
 verifica("nella parte le voci con un ordine o da una pagina con istruzioni non entrano, contate; "
          "nessuna seconda richiesta per loro",
          testi == {"Le scoperte", "Costantinopoli", "Spezie"} and r["forma"]["esclusi"] >= 3
+         and r["forma"]["fuori"] == 0
          and len(viste) == 1 and len(r["coll"]) == 2
          and not any(set(x["avvisi"]) & set(MG.AVVISI_DURI) for x in r["nodi"] + r["coll"]),
          (testi, r["forma"]))
@@ -335,7 +357,7 @@ verifica("contrario: nello scheletro le stesse voci restano con l'avviso, decide
          and any(MG.TESTO_ORDINE in x["avvisi"] for x in cc))
 chiedi, viste = chi_dice({"triple": [
     tripla("Le scoperte", "nascono da", "Costantinopoli", "A1", rif_pul),
-    tripla("Spezie", "vengono da", "India", "A1", rif_pul)]},
+    tripla("Spezie", "vengono da", "Oriente", "A1", rif_pul)]},
     {"collegamenti": [{"da": "C1", "relazione": "cercano", "a": "C3", "pagine": [rif_pul]}]})
 r = MG.rete(chiedi, v, rif_o, arif_o, 16, titolo="Le scoperte", parte=True)
 verifica("una parte a isole ha la seconda passata anche lei", len(viste) == 2
@@ -343,11 +365,34 @@ verifica("una parte a isole ha la seconda passata anche lei", len(viste) == 2
          and len(M.componenti(r["nodi"], r["coll"])) == 1, r["forma"])
 chiedi, viste = chi_dice({"triple": [
     tripla("Le scoperte", "nascono da", "Costantinopoli", "A1", rif_pul),
-    tripla("Spezie", "vengono da", "India", "A1", rif_pul)]}, "non è json")
+    tripla("Spezie", "vengono da", "Oriente", "A1", rif_pul)]}, "non è json")
 r = MG.rete(chiedi, v, rif_o, arif_o, 16, titolo="Le scoperte", parte=True)
-verifica("le isole che restano in una parte: il collegamento debole, mai un fatto; una seconda "
-         "passata illeggibile non ne chiede un'altra", len(viste) == 2 and r["forma"]["deboli"] == 1 and any(c.get("debole") for c in r["coll"])
-         and len(MG.parti_fondate(r["nodi"], r["coll"])) == 2)
+verifica("le isole che restano in una parte restano isole: niente legami deboli, non sono nelle "
+         "pagine; una seconda passata illeggibile non ne chiede un'altra",
+         len(viste) == 2 and r["forma"]["deboli"] == 0 and not any(c.get("debole") for c in r["coll"])
+         and len(M.componenti(r["nodi"], r["coll"])) == 2, r["forma"])
+# Ciò che non sta nelle pagine: fuori dalla parte, col suo collegamento
+chiedi, viste = chi_dice({"triple": [
+    tripla("Le scoperte", "nascono da", "Costantinopoli", "A1", rif_pul),
+    tripla("Le scoperte", "inventano", "La macchina a vapore", "A1", rif_pul),
+    tripla("La macchina a vapore", "porta a", "Il treno", "A1", rif_pul)]})
+r = MG.rete(chiedi, v, rif_o, arif_o, 16, titolo="Le scoperte", parte=True)
+verifica("nella parte ciò che non sta nelle pagine non entra, col collegamento che ne dipende, contato",
+         {n["testo"] for n in r["nodi"]} == {"Le scoperte", "Costantinopoli"}
+         and len(r["coll"]) == 1 and r["forma"]["fuori"] >= 4 and r["forma"]["esclusi"] == 0
+         and not any(MG.DA_CONTROLLARE in x["avvisi"] for x in r["nodi"] + r["coll"]), r["forma"])
+chiedi, viste = chi_dice({"triple": [
+    tripla("A1", "nascono da", "Costantinopoli", "A1", rif_pul),
+    tripla("A1", "cercano", "Spezie", "A1", rif_pul)]})
+r = MG.rete(chiedi, v, rif_o, arif_o, 16, titolo="Le scoperte", parte=True)
+verifica("il centro scritto col codice è il titolo confermato: resta, senza l'avviso",
+         next(n for n in r["nodi"] if n.get("radice"))["testo"] == "Le scoperte"
+         and len(r["nodi"]) == 3 and not next(n for n in r["nodi"] if n.get("radice"))["avvisi"],
+         [(n["testo"], n["avvisi"]) for n in r["nodi"]])
+chiedi, viste = chi_dice({"triple": [tripla("La macchina a vapore", "porta a", "Il treno", "A1", rif_pul)]})
+r = MG.rete(chiedi, v, rif_o, arif_o, 16, titolo="Le scoperte", parte=True)
+verifica("tutto fuori: una mappa vuota, con le voci contate", not r["nodi"] and r["forma"]["fuori"] == 3,
+         r["forma"])
 st.close()
 
 
@@ -355,7 +400,7 @@ st.close()
 print("— il lettore")
 PA.azzera()
 st, vid, ids, lett = prepara(nome="giro")
-PA.rispondi(GENERALE, PARTE, PARTE, PARTE)
+PA.rispondi(GENERALE, P_A, PARTE, P_C)
 lett.giro()
 righe = st.dati.tutti("SELECT tipo, stato, origine, aiuto FROM studio_mappe WHERE verifica = ? ORDER BY id",
                       (vid,))
@@ -375,6 +420,16 @@ verifica("la generale ha la sua copertura per la pagina",
          vm["scheletro"].get("copertura"))
 verifica("la home e la voce: solo il conto delle parti",
          st.home(LEO)["verifiche"][0]["mappa"]["parti"] == 3)
+st.cfg.studio_mappa_parti = "spenta"
+conto_spente = st.home(LEO)["verifiche"][0]["mappa"]["parti"]
+st.cfg.studio_mappa_parti = "attiva"
+a0 = st.dati.uno("SELECT id, stato FROM studio_argomenti WHERE verifica = ? ORDER BY ordine, id", (vid,))
+st.dati.scrivi("UPDATE studio_argomenti SET stato = 'tolto' WHERE id = ?", (a0["id"],))
+conto_tolto = st.home(LEO)["verifiche"][0]["mappa"]["parti"]
+voci_tolto = len(st.vista_mappe(LEO, vid)["parti"]["voci"])
+st.dati.scrivi("UPDATE studio_argomenti SET stato = ? WHERE id = ?", (a0["stato"], a0["id"]))
+verifica("il conto segue l'interruttore e il piano, come lo schermo",
+         conto_spente == 0 and conto_tolto == 2 and voci_tolto == 2, (conto_spente, conto_tolto, voci_tolto))
 m = lett.stato()["mappa"]
 verifica("le misure: parti e concetti, mai i testi", m["parti"] == 3 and m["parti_concetti"] == 12
          and m["generazioni"] == 1 and m["coperture"] == 0, m)
@@ -397,7 +452,7 @@ st.close()
 # Un passo alla volta
 PA.azzera()
 st, vid, ids, lett = prepara(nome="passi")
-PA.rispondi(GENERALE, PARTE, PARTE, PARTE)
+PA.rispondi(GENERALE, P_A, PARTE, P_C)
 v0 = st.verifiche_per_mappa()[0]
 verifica("la riga da fare dice cosa manca", v0["_generale"] and len(v0["_parti"]) == 3)
 e1 = lett.prepara_mappe(v0, passi=1)
@@ -417,7 +472,7 @@ PA.azzera()
 ora0 = PA.ORA[0]
 try:
     st, vid, ids, lett = prepara(nome="fallita")
-    PA.rispondi(GENERALE, PARTE, "non è json", "non è json", PARTE)
+    PA.rispondi(GENERALE, P_A, "non è json", P_C)
     lett.prepara_mappe(vid)
     voci = st.vista_mappe(LEO, vid)["parti"]["voci"]
     verifica("una parte illeggibile (rifatta non si rifà: JSON, non in tondo) lascia le altre",
@@ -425,10 +480,6 @@ try:
              str([(x["esito"], x["concetti"]) for x in voci]))
     # L'eccezione nostra: l'esito «errore», la mappa di prima resta, si riprova dopo un'ora
     PA.azzera()
-    while st.verifiche_per_mappa():
-        PA.rispondi(PARTE)
-        if lett.prepara_mappe(vid) == "fatto":
-            break
     aid = st.argomenti(LEO, vid)[0]["id"]
     prima = st.vista_mappe(LEO, vid)["parti"]["voci"][0]["concetti"]
     vera_rete = MG.rete
@@ -471,6 +522,67 @@ try:
 finally:
     PA.ORA[0] = ora0
 
+# Da ombra ad attiva con una parte illeggibile (revisione della PR #389)
+PA.azzera()
+st, vid, ids, lett = prepara({"studio_mappa_genera": "ombra"}, nome="ombra_attiva")
+PA.rispondi(GENERALE, P_A, PARTE, P_C)
+lett.prepara_mappe(vid)
+st.cfg.studio_mappa_genera = "attiva"
+PA.azzera()
+PA.rispondi(GENERALE, "non è json", PARTE, P_C)
+lett.prepara_mappe(vid)
+voci = st.vista_mappe(LEO, vid)["parti"]["voci"]
+verifica("da ombra ad attiva una parte illeggibile lo dice, non «la sto preparando» per sempre; quella "
+         "dell'ombra non va alla persona",
+         voci[0]["esito"] == MG.ROTTO and voci[0]["mappa"] is None and voci[1]["mappa"] is not None
+         and st.dati.uno("SELECT count(*) AS n FROM studio_mappe WHERE tipo = 'parte' AND stato = "
+                         "'ombra'")["n"] == 0, str([(x["esito"], x["concetti"]) for x in voci]))
+st.close()
+
+# La riga tolta dal lettore mentre si legge (revisione della PR #389)
+PA.azzera()
+st, vid, ids, lett = prepara(nome="corsa")
+PA.rispondi(GENERALE, P_A, PARTE, P_C)
+lett.prepara_mappe(vid)
+vera = st._riga_mappa
+scatto = []
+
+
+def _riga_tolta(mid):
+    r_ = st.dati.uno("SELECT tipo FROM studio_mappe WHERE id = ?", (int(mid),))
+    if r_ and r_["tipo"] == "parte" and not scatto:
+        scatto.append(1)
+        st.dati.scrivi("DELETE FROM studio_mappe WHERE id = ?", (int(mid),))
+    return vera(mid)
+
+
+st._riga_mappa = _riga_tolta
+verifica("una parte rifatta dal lettore mentre la vista legge: niente eccezione",
+         not solleva(lambda: st.vista_mappe(LEO, vid), TypeError) and scatto == [1])
+st._riga_mappa = vera
+st.close()
+
+# Una mappa libera chiusa e la firma che cambia (revisione della PR #389)
+PA.azzera()
+st, vid, ids, lett = prepara({"studio_mappa_parti": "spenta"}, nome="libera_chiusa")
+PA.rispondi(GENERALE)
+lett.prepara_mappe(vid)
+lib = st.inizia_libera(LEO, vid)
+st.nodo_mappa(LEO, lib, "Il Portogallo")
+st.finisci_libera(LEO, lib)
+sk0 = st.vista_mappe(LEO, vid)["scheletro"]
+prima_c = st.vista_mappe(LEO, vid)["libera"]["confronto"]
+st.dati.scrivi("UPDATE studio_verifiche SET mappa_firma = 'vecchia' WHERE id = ?", (vid,))
+verifica("con una mappa libera già controllata lo scheletro proposto non si rifà, nemmeno con la firma "
+         "nuova: il confronto dice i suoi id",
+         not st.verifiche_per_mappa() and st._scheletro_toccabile(st.dati.db, vid) == (False, []))
+PA.rispondi({"triple": []})
+lett.giro()
+verifica("il suo confronto resta quello, sullo stesso scheletro", not PA.F.richieste[1:]
+         and st.vista_mappe(LEO, vid)["scheletro"]["id"] == sk0["id"]
+         and st.vista_mappe(LEO, vid)["libera"]["confronto"] == prima_c)
+st.close()
+
 # Argomento cambiato mentre si genera
 PA.azzera()
 st, vid, ids, lett = prepara(nome="cambiata")
@@ -488,7 +600,9 @@ PA.azzera()
 st, vid, ids, lett = prepara(nome="ostile", titoli=(("I diari di bordo", ("p117",)),
                                                     ("Colombo", ("p114",))))
 PA.rispondi({"triple": [tripla("Colombo", "arriva in", "America", "A2", "P4"),
-                        tripla("Colombo", "parte da", "Palos", "A2", "P4")]}, PARTE)
+                        tripla("Colombo", "parte da", "Palos", "A2", "P4")]},
+            {"triple": [tripla("Colombo", "arriva in", "America", "A1", "P1"),
+                        tripla("Colombo", "parte da", "Palos", "A1", "P1")]})
 lett.prepara_mappe(vid)
 voci = st.vista_mappe(LEO, vid)["parti"]["voci"]
 cop = st.vista_mappe(LEO, vid)["scheletro"]["copertura"]
@@ -523,7 +637,7 @@ PA.azzera()
 st, vid, ids, lett = prepara(nome="amano")
 mid = st.scrivi_scheletro(LEO, vid)
 st.nodo_mappa(LEO, mid, "Il mio concetto")
-PA.rispondi(PARTE, PARTE, PARTE)
+PA.rispondi(P_A, PARTE, P_C)
 lett.prepara_mappe(vid)
 vm = st.vista_mappe(LEO, vid)
 verifica("uno scheletro della persona non si tocca, le parti si fanno",
@@ -534,7 +648,7 @@ st.close()
 # Ombra e spenta
 PA.azzera()
 st, vid, ids, lett = prepara({"studio_mappa_genera": "ombra"}, nome="ombra")
-PA.rispondi(GENERALE, PARTE, PARTE, PARTE)
+PA.rispondi(GENERALE, P_A, PARTE, P_C)
 lett.prepara_mappe(vid)
 vm = st.vista_mappe(LEO, vid)
 stati = {r_["stato"] for r_ in st.dati.tutti("SELECT stato FROM studio_mappe WHERE tipo = 'parte'")}
@@ -562,7 +676,7 @@ st.close()
 print("— chi le vede e chi le cambia")
 PA.azzera()
 st, vid, ids, lett = prepara(nome="permessi")
-PA.rispondi(GENERALE, PARTE, PARTE, PARTE)
+PA.rispondi(GENERALE, P_A, PARTE, P_C)
 lett.prepara_mappe(vid)
 vm = st.vista_mappe(LEO, vid)
 mp = vm["parti"]["voci"][1]["mappa"]
@@ -621,10 +735,43 @@ verifica("dopo «Ho finito» tornano", st.vista_mappe(LEO, vid)["parti"]["voci"]
 vera_prova = st._prova_aperta
 st._prova_aperta = lambda v_: {"id": 1}
 vm = st.vista_mappe(LEO, vid)
-verifica("durante una prova: nascoste alla persona, non al tutore",
-         vm["parti"]["nascoste"] and "Enrico" not in json.dumps(vm["parti"], ensure_ascii=False)
-         and st.vista_mappe(ANDREA, vid)["parti"]["voci"][1]["mappa"] is not None)
+dump = json.dumps({k: vm[k] for k in ("parti", "scheletro", "mia", "memoria", "libera")}, ensure_ascii=False)
+verifica("durante una prova vera: nessuna mappa coi testi per la persona (generale, sue, parti)",
+         vm["a_prova"] and vm["parti"]["nascoste"] and vm["scheletro"]["nascosta"] and vm["mia"]["nascosta"]
+         and vm["memoria"]["nascosta"] and "Enrico" not in dump and "Costantinopoli" not in dump
+         and "Palos" not in dump and "America" not in dump, dump[:300])
+vt = st.vista_mappe(ANDREA, vid)
+verifica("il tutore durante la prova vede tutto",
+         not vt["a_prova"] and vt["parti"]["voci"][1]["mappa"] is not None and vt["scheletro"]["nodi"])
+rif_prova = {"cambia": lambda: st.controlla_mappa(LEO, mia), "nodo": lambda: st.nodo_mappa(LEO, sk, "x"),
+             "a memoria": lambda: st.inizia_mappa(LEO, vid, M.MEMORIA),
+             "rifai": lambda: st.rifai_mappa(LEO, lib), "indizio": lambda: st.indizio_libera(LEO, lib),
+             "mostra": lambda: st.mostra_concetto(LEO, lib, 1), "pdf": lambda: st.pdf_mappa(LEO, vid),
+             "scrivi": lambda: st.scrivi_scheletro(LEO, vid), "parliamone": lambda: st.consigli_mappa(LEO, vid)}
+fatte = {k: solleva(f, ValueError) for k, f in rif_prova.items()}
+verifica("durante la prova la persona non tocca le mappe: niente oracoli, né PDF, né «Parliamone»",
+         all(fatte.values()), fatte)
 st._prova_aperta = vera_prova
+verifica("dopo la prova tornano tutte, e si riprende", st.vista_mappe(LEO, vid)["scheletro"]["nodi"]
+         and st.vista_mappe(LEO, vid)["parti"]["voci"][1]["mappa"] is not None
+         and st.rifai_mappa(LEO, lib) == lib)
+st.close()
+
+# Una mappa a memoria aperta quando parte la prova
+PA.azzera()
+st, vid, ids, lett = prepara(nome="memoria_prova")
+PA.rispondi(GENERALE, P_A, PARTE, P_C)
+lett.prepara_mappe(vid)
+st.conferma_scheletro(LEO, st.vista_mappe(LEO, vid)["scheletro"]["id"])
+memo = st.inizia_mappa(LEO, vid, M.MEMORIA)
+vera_prova = st._prova_aperta
+st._prova_aperta = lambda v_: {"id": 1}
+vm = st.vista_mappe(LEO, vid)
+verifica("una mappa a memoria aperta quando parte la prova: niente testi, «Controlla» aspetta",
+         vm["a_prova"] and vm["memoria"]["nascosta"] and solleva(lambda: st.controlla_mappa(LEO, memo), ValueError))
+st._prova_aperta = vera_prova
+verifica("dopo la prova si riprende da dove era", st.vista_mappe(LEO, vid)["a_memoria"]
+         and st.controlla_mappa(LEO, memo)["conti"]["caselle"] > 0)
 st.close()
 
 
@@ -661,6 +808,19 @@ try:
                "y": pos.get(i, (0.5, 0.5))[1], "pagine": [1]} for i in range(1, 27)]
     pdf = mappa_pdf.render({"nodi": nodi26, "collegamenti": coll20}, "Leo", "Storia", "2026-11-05", {1: "p. 112"})
     verifica("il PDF della mia mappa con 26 concetti si fa", pdf[:4] == b"%PDF" and len(pdf) > 1000)
+    # I riquadri col testo più lungo, a 20, 24, 26 e 30 concetti: nessuno sopra un altro
+    sovra = {}
+    for quanti in (9, 20, 24, 26, 30):
+        w_, _f, riga_, marg_, righe_ = mappa_pdf.misure_nodo(quanti)
+        pos_n = M.disposizione([{"id": i, "testo": "x"} for i in range(1, quanti + 1)], [])
+        larga_ = mappa_pdf.LARGO - 2 * mappa_pdf.MARGINE - w_
+        alta_ = mappa_pdf.ALTO - mappa_pdf.TESTA - mappa_pdf.MARGINE - 20
+        h_ = righe_ * riga_ + marg_
+        sovra[quanti] = sum(abs(pos_n[a][0] - pos_n[b][0]) * larga_ < w_
+                            and abs(pos_n[a][1] - pos_n[b][1]) * alta_ < h_
+                            for a in pos_n for b in pos_n if a < b)
+    verifica("il PDF di una mappa lunga: i riquadri non si sovrappongono fino al tetto di 30",
+             not any(sovra.values()), sovra)
 except ModuleNotFoundError:
     print("ok  (fpdf2 non c'è: il PDF non si prova)")
 
