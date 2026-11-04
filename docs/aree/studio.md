@@ -181,7 +181,7 @@ banco sono usciti solo conti e struttura). Decisione: 0035 punto 55.
    era la frase pronta «non la trovo», che chiude il turno; in più il modello aveva scritto `verifica: 1`
    prima che esistesse. Ora: `_verifica` con un id inventato e la materia vale la materia, per tutti i tool;
    `_nessuna_verifica` (interroga, carte, ascolta, studio) con una materia detta non ha frase pronta e dà la
-   strada verso «crea» e le verifiche che ci sono; la descrizione dice che l'interrogazione vera è «crea» e
+   strada verso «crea»; la descrizione dice che l'interrogazione vera è «crea» e
    che `materia` si passa solo se nominata. Col modello 3/3, nello stesso turno, con la prova giusta. Senza
    materia resta lo stesso «non la trovo» di una verifica di un altro. Vista scrivendo le prove: su una
    verifica in bozza l'interrogazione diceva «è chiusa», falso; ora dice cosa manca.
@@ -210,6 +210,44 @@ sulla DGX gira ancora il codice di prima, e `studio_domande_genera` e `studio_pr
 
 Prove: `prova_studio_giro.py` (nuova, a secco, ogni punto coi contrari), tre casi in `prova_studio_ollama.py`.
 `prova_studio_modalita` confrontava l'orologio vero con una data scritta e cadeva dal 04/11: corretta.
+
+### 04/11: correzioni dopo la revisione della PR #388
+
+- **Il paragrafo al tetto**: `fino_alla_frase` tagliava sui punti dei decimali e delle sigle («è 2.7 g…»
+  diventava «è 2.», senza avvisi: un dato falso). Ora la fine di frase è un segno seguito da uno spazio,
+  mai dopo un'abbreviazione o una lettera sola, e con almeno `FRASE_MIN` caratteri; se no il paragrafo si
+  scarta. *[storico: «taglia all'ultima frase intera» qui sopra valeva con qualunque punto]*
+- **Il «sì» con `giorno`**: la proposta è già nella forma di `ToolSpec.prepara`, la chiamata no, e la domanda
+  tornava. `tools.registry.forma_argomenti` è il punto unico, usato da `ToolRegistry.call` e da
+  `Brain._domanda_non_vale`.
+- **Una verifica che manca, per azione**: la strada verso «crea» solo per letture, interrogazione, carte e
+  ascolto; il richiamo solo con una verifica sola, senza materia. Con `archivia`, `conclusa` e le altre
+  azioni che cambiano qualcosa: dillo in breve o chiedi quale. Nessuna materia scritta dalla persona in
+  `cosa_fare`.
+- **La copertura**: dopo un taglio `Lettore._chiedi_lista` richiede i soli argomenti scoperti, con gli stessi
+  codici, al più `SECONDE_MAX` (2). Ciò che resta scoperto dopo il controllo sta in
+  `studio_verifiche.scoperti` (migrazione 16, solo id, anche `valori_persi` per reazioni e misure).
+- **L'effetto 3**: solo a modalità aperta, come dice il documento; il turno che apre la modalità con un tool
+  può ancora dire la riga dello sviluppo. `sviluppo_taciuto_studio` scatta solo se c'era da dire
+  (`Sviluppi.riga_dovuta`). In modalità il modello riceve `SVILUPPO_IN_STUDIO` al posto di `SVILUPPO_MSG`.
+- **`studio_dal_nome`**: solo un valore che è per intero una data, solo da un campo che dice la data
+  della verifica (`_CHIAVE_DATA`: mai `da`, `vecchia`, `nota`), e con due date non si sceglie.
+- **`_arg`**: «A1 e A2», «A1-A3», «A1.2» non sono un codice: valeva per la mappa (`mappa_genera`, senza
+  `enum`), che con la prima versione di questa PR prendeva il primo; corretto in `genera.py`.
+- **Le carte**: la regola viene da `quante_per_argomento`, `maxItems` 30 come il tetto.
+- **Le domande a scelta senza opzioni**: `opzioni` era facoltativo, e in un giro del banco 15 domande su 25
+  sono state scartate dal controllo. Ora è obbligatorio, vuoto per gli altri tipi.
+- **Budget della preparazione**: 8000. Misura forzando il caso peggiore sul materiale del giro (3 paragrafi per
+  argomento, almeno 550 caratteri): 5366 token per 11 lezioni e 33 paragrafi da 537 caratteri; 12 lezioni al
+  tetto con reazioni e misure sono stimate sotto gli 8000.
+
+Misure dopo le correzioni (DGX, sola lettura). Sul materiale del giro: domande 4 giri, 23–27 su 11 argomenti (fine
+«stop», 35–43 s, 21–23 senza avvisi); preparazione 2 giri, 11 lezioni su 11, 14–15 paragrafi senza avvisi su 18–19,
+0 scartati, tutti finiti a una frase; carte 2 giri, 22–24 su 11 argomenti. Taglio forzato a 900 token: domande 6
+voci, la seconda richiesta chiede i soli 8 argomenti scoperti e li copre tutti; preparazione 5 lezioni, poi le altre
+6. Banco di fantasia: prove 30 domande per verifica con 0 ostili; preparazione 8–10 lezioni su tutte, chimica 3
+reazioni e 3 misure su 3. `prova_studio_ollama.py 3`: 19 su 19, misurata prima dell'ultimo ritocco, che tocca solo lo
+schema delle domande. Mutanti di `prova_studio_giro`: 39 su 39 cadono, compresi i 5 sopravvissuti alla revisione.
 
 ## Il nome inventato `studio_verifica_crea` (31/10, issue #373, ramo `issue-373-studio-nome-inventato`)
 

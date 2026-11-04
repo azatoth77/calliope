@@ -505,6 +505,18 @@ class Ceduta(Exception):
     """La lettura ha ceduto il passo (un lavoro dell'agente): la pagina torna «da leggere»."""
 
 
+# Quante richieste in più per gli argomenti rimasti scoperti da un taglio (#388)
+SECONDE_MAX = 2
+
+
+def _unisci(prime, altre):
+    """Le voci di due risposte: una lista, o le tre liste della preparazione."""
+    if not isinstance(prime, dict):
+        return list(prime) + list(altre)
+    return {k: list(prime.get(k) or []) + list(altre.get(k) or [])
+            for k in ("lezioni", "reazioni", "misure")}
+
+
 class Lettore:
     """Il thread della lettura. `cliente`: un client dell'agente con `chat(body, controlla=…)`
     (ClienteOpenAI, di solito avvolto in ClienteCedevole); `guardia`: `Guardia` o un oggetto
@@ -1294,8 +1306,9 @@ class Lettore:
         t0 = time.monotonic()
         grezzi = None
         try:
-            grezzi = self._chiedi_lista(G.corpo(self.modello, v, rif, arif), m, vid, "carte",
-                                       G.leggi, G.parziale)
+            grezzi, _finita = self._chiedi_lista(
+                lambda ar: G.corpo(self.modello, v, rif, ar), arif, m, vid, "carte", G.leggi,
+                G.parziale)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: carte, ceduto il passo a un lavoro dell'agente")
@@ -1334,6 +1347,7 @@ class Lettore:
             m["rotte"] += 1
             self._registra(f"verifica {vid}: carte illeggibili ({s:.1f} s)")
             return "rotto"
+        self._copertura(vid, "carte", arif, {c["argomento"] for c in proposte})
         m["carte"] += n
         if modo == G.OMBRA:
             m["ombra"] += n
@@ -1348,12 +1362,13 @@ class Lettore:
                        + ")")
         return "proposte"
 
-    def _chiedi_lista(self, corpo: dict, m: dict, vid: int, cosa: str, leggi, parziale):
-        """Una richiesta che risponde con una lista di voci (carte, domande, lezioni) → ciò che
-        `leggi` o `parziale` ne tirano fuori, o None. Giro vero del 03/11 (#383): 35 domande buone
-        e diverse tagliate a `max_tokens`, buttate, e la stessa richiesta rifatta a temperatura 0
-        per lo stesso taglio (93,5 s). Una risposta tagliata non è un giro in tondo: si tengono le
-        voci intere, che passano dallo stesso controllo; si richiede solo se non ce n'è nessuna."""
+    def _una_lista(self, corpo: dict, m: dict, vid: int, cosa: str, leggi, parziale):
+        """Una richiesta che risponde con una lista di voci (carte, domande, lezioni) → (ciò che
+        `leggi` o `parziale` ne tirano fuori o None, tagliata). Giro vero del 03/11 (#383): 35
+        domande buone e diverse tagliate a `max_tokens`, buttate, e la stessa richiesta rifatta a
+        temperatura 0 per lo stesso taglio (93,5 s). Una risposta tagliata non è un giro in tondo: si
+        tengono le voci intere, che passano dallo stesso controllo; si richiede solo se non ce n'è
+        nessuna."""
         for prova in range(2):
             r = self._chiedi_corpo(corpo)
             m["token_in"] += int(r.get("prompt") or 0)
@@ -1364,17 +1379,51 @@ class Lettore:
             self._riprova_dopo = 0.0
             self._risposte_ok += 1
             if r.get("fine") != "length":
-                return leggi(r.get("content") or "")
+                return leggi(r.get("content") or ""), False
             voci = parziale(r.get("content") or "")
             if voci:
                 m["tagliate"] = m.get("tagliate", 0) + 1
                 n = len(voci["lezioni"] if isinstance(voci, dict) else voci)
                 self._registra(f"verifica {vid}: {cosa} tagliate a max_tokens, tengo le {n} voci "
                                "intere")
-                return voci
+                return voci, True
             self._registra(f"verifica {vid}: {cosa} tagliate a max_tokens senza una voce intera"
                            + (", richiedo" if not prova else ""))
-        return None
+        return None, True
+
+    def _chiedi_lista(self, corpo_di, arif: list, m: dict, vid: int, cosa: str, leggi, parziale):
+        """→ (le voci o None, finita): `_una_lista` e, dopo un taglio, una richiesta per i soli
+        argomenti rimasti senza una voce, con gli stessi codici, al più `SECONDE_MAX` (revisione
+        della PR #388: con un taglio dopo A3 gli altri 8 argomenti restavano scoperti e l'esito era
+        pieno). `finita`: una risposta è arrivata in fondo, con reazioni e misure. Ciò che resta
+        scoperto lo scrive chi chiama (`_copertura`)."""
+        from . import genera as G
+        voci, tagliata = self._una_lista(corpo_di(arif), m, vid, cosa, leggi, parziale)
+        finita = not tagliata
+        giri = 0
+        while voci is not None and tagliata and giri < SECONDE_MAX:
+            lista = voci["lezioni"] if isinstance(voci, dict) else voci
+            mancano = G.scoperti(lista, arif)
+            if not mancano:
+                break
+            giri += 1
+            self._registra(f"verifica {vid}: {cosa}, richiedo {len(mancano)} argomenti scoperti")
+            altre, tagliata = self._una_lista(corpo_di(mancano), m, vid, cosa, leggi, parziale)
+            if altre is None:
+                break
+            voci = _unisci(voci, altre)
+            finita = finita or not tagliata
+        return voci, finita
+
+    def _copertura(self, vid: int, cosa: str, arif: list, coperti, finita: bool = True):
+        """Scrive cosa è rimasto scoperto dopo il controllo del codice (`Studio.segna_scoperti`:
+        gli argomenti senza una voce, e `valori` se reazioni e misure si sono perse): la vedrà chi
+        mostra questi materiali (#384). Solo id e conti, mai testo."""
+        ids = [int(a["id"]) for _r, a in arif if int(a["id"]) not in set(coperti)]
+        self.studio.segna_scoperti(vid, cosa, ids, valori_persi=not finita)
+        if ids or not finita:
+            self._registra(f"verifica {vid}: {cosa}, {len(ids)} argomenti scoperti"
+                           + ("; reazioni e misure perse" if not finita else ""))
 
     def genera_domande(self, v: dict) -> str:
         """Le domande delle prove di una verifica aperta (`Studio.verifiche_per_domande`, passo
@@ -1392,8 +1441,9 @@ class Lettore:
         t0 = time.monotonic()
         grezzi = None
         try:
-            grezzi = self._chiedi_lista(DG.corpo(self.modello, v, rif, arif), m, vid, "domande",
-                                       DG.leggi, DG.parziale)
+            grezzi, _finita = self._chiedi_lista(
+                lambda ar: DG.corpo(self.modello, v, rif, ar), arif, m, vid, "domande", DG.leggi,
+                DG.parziale)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: domande, ceduto il passo a un lavoro dell'agente")
@@ -1430,6 +1480,7 @@ class Lettore:
             m["rotte"] += 1
             self._registra(f"verifica {vid}: domande illeggibili ({s:.1f} s)")
             return "rotto"
+        self._copertura(vid, "domande", arif, {d["argomento"] for d in proposte})
         m["domande"] += n
         if modo == DG.OMBRA:
             m["ombra"] += n
@@ -1497,8 +1548,9 @@ class Lettore:
         t0 = time.monotonic()
         grezzo = None
         try:
-            grezzo = self._chiedi_lista(PR.corpo(self.modello, v, rif, arif), m, vid, "preparazione",
-                                       PR.leggi, PR.parziale)
+            grezzo, finita = self._chiedi_lista(
+                lambda ar: PR.corpo(self.modello, v, rif, ar), arif, m, vid, "preparazione",
+                PR.leggi, PR.parziale)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: preparazione, ceduto il passo a un lavoro "
@@ -1536,6 +1588,7 @@ class Lettore:
             m["rotte"] += 1
             self._registra(f"verifica {vid}: preparazione illeggibile ({s:.1f} s)")
             return "rotto"
+        self._copertura(vid, "preparazione", arif, {lz["argomento"] for lz in ris["lezioni"]}, finita)
         val = ris["valori"]
         m["lezioni"] += len(ris["lezioni"])
         m["reazioni"] += len(val["reazioni"])

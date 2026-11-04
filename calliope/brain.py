@@ -1227,6 +1227,10 @@ EST_ELENCO_MSG = ("Dati del turno: le estensioni che ci sono adesso, tutte: {ele
 # La modalità sviluppo (08/10, calliope/sviluppo.py): lo sviluppo aperto di chi parla, la sua
 # fase e cosa si fa adesso (Sviluppi.dati_turno, SVILUPPO_MSG); senza uno aperto, gli sviluppi
 # sospesi solo se la frase parla di riprendere o di sviluppo. Rete `modalita_sviluppo`
+# I dati del turno al posto di SVILUPPO_MSG con la modalità studio aperta (effetto 3, revisione della
+# PR #388)
+SVILUPPO_IN_STUDIO = ("Chi parla sta studiando (modalità studio) e ha uno sviluppo aperto: non "
+                      "nominarlo e non tornarci. Se è lui a parlarne, sviluppo_passo con «stato».")
 SVILUPPO_RIPRENDI = re.compile(r"(?<![a-zà-ù])(riprend|svilupp|continu)", re.I)
 
 # Tool i cui risultati non restano nella storia oltre la risposta (03/10): i riservati
@@ -4591,8 +4595,13 @@ class Brain:
     def _sviluppi(self):
         return getattr(getattr(self.tool_ctx, "lavori", None), "sviluppi", None)
 
+    def _in_modalita_studio(self) -> bool:
+        """La modalità studio è aperta su questo satellite (`Ciclo._modalita_turno`)."""
+        return bool(getattr(getattr(self.tool_ctx, "speaker_ctx", None), "in_modalita_studio", False))
+
     def _sviluppo_turno(self, testo: str) -> str | None:
         """I dati del turno della modalità sviluppo per chi parla, o None."""
+        from .sviluppo import TOOL_SVILUPPO
         if not self._net("modalita_sviluppo"):
             return None
         svs = self._sviluppi()
@@ -4601,6 +4610,12 @@ class Brain:
             return None
         try:
             sv = svs.corrente(chi)
+            if sv is not None and self._in_modalita_studio() and not any(
+                    t.get("nome") in TOOL_SVILUPPO for t in getattr(self, "last_tools", None) or ()):
+                # L'effetto 3 vale anche per ciò che il modello dice con parole sue: niente fase né
+                # «cosa fare» dello sviluppo. Se è lui a parlarne, il tool c'è (e al turno dopo i
+                # dati tornano interi)
+                return SVILUPPO_IN_STUDIO
             if sv is not None:
                 # Con gli argomenti (10/10, § 13, eventi attivi) passare ad altro non è
                 # bloccato: lo sviluppo va in pausa da solo
@@ -4707,16 +4722,12 @@ class Brain:
         said = (last.get("content") or "").strip() if last.get("role") == "assistant" else ""
         if not said or said.endswith("?"):
             return None
-        from .studio.modalita import TOOL as TOOL_STUDIO
         from .sviluppo import TOOL_SVILUPPO
         nomi = [t.get("nome") for t in getattr(self, "last_tools", None) or ()]
         dello_sviluppo = any(n in TOOL_SVILUPPO for n in nomi)
         # L'effetto 3 della modalità studio (giro vero del 03/11, #383): chi sta studiando su questo
-        # dispositivo non sente gli sviluppi aperti; il promemoria non si consuma e resta per dopo.
-        # Vale anche il turno che apre la modalità: si apre a fine turno
-        studia = not dello_sviluppo and (
-            getattr(getattr(self.tool_ctx, "speaker_ctx", None), "in_modalita_studio", False)
-            or any(n in TOOL_STUDIO for n in nomi))
+        # dispositivo non sente gli sviluppi aperti; il promemoria non si consuma e resta per dopo
+        studia = not dello_sviluppo and self._in_modalita_studio()
         try:
             if level == "amministra":
                 promemoria = svs.promemoria_giorno(chi)
@@ -4739,7 +4750,9 @@ class Brain:
                     r"svilupp|collaud|revision|analisi|estension|programm|agente", basso):
                 return None                  # il modello l'ha già ricordato con parole sue
             if studia:
-                self._rule("sviluppo_taciuto_studio")
+                # Solo se ci sarebbe stato qualcosa da dire: la riga non si segna come detta
+                if svs.riga_dovuta(sv):
+                    self._rule("sviluppo_taciuto_studio")
                 return None
             riga = svs.riga_fuori_tema(sv)
             if not riga:
@@ -7654,6 +7667,10 @@ class Brain:
         if (getattr(self, "turn_pending_tool", None) != nome or p.get("tool") != nome
                 or not p.get("politica") or getattr(self, "_sfida_args", None) is not None):
             return False
+        # Nella forma della proposta, che ha già passato ToolRegistry.call (revisione della PR #388:
+        # `giorno` al posto di `data`, e il «sì» rifaceva la domanda)
+        from .tools.registry import forma_argomenti
+        args = forma_argomenti(spec, self.tool_ctx, args)
         if not valore.stessa_chiamata(nome, args, p.get("args"), spec, self.tool_ctx):
             self._rule("valore_chiamata_diversa")
             return True

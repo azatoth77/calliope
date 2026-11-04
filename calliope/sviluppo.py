@@ -2117,14 +2117,19 @@ class Sviluppi:
                          + _e([NOMI[f] for f in mancano]))
         return out + (": " + "; ".join(parti) if parti else "")
 
+    def riga_dovuta(self, sv: Sviluppo) -> bool:
+        """La riga del fuori tema si direbbe adesso? Non la segna come detta."""
+        ft = sv.fuori_tema or {}
+        return not (ft.get("fase") == sv.fase
+                    and time.time() - float(ft.get("quando") or 0) < FUORI_TEMA_S)
+
     def riga_fuori_tema(self, sv: Sviluppo) -> str:
         """La riga in coda dopo un fuori tema, o "" se è già stata detta nella stessa fase da
         meno di FUORI_TEMA_S (12/10: nei log 56 risposte con la coda «Siamo ancora in fase di
         collaudo…», e cinque turni di fila per una luce con la stessa riga)."""
-        ora = time.time()
-        ft = sv.fuori_tema or {}
-        if ft.get("fase") == sv.fase and ora - float(ft.get("quando") or 0) < FUORI_TEMA_S:
+        if not self.riga_dovuta(sv):
             return ""
+        ora = time.time()
         with self._lock:
             sv.fuori_tema = {"fase": sv.fase, "quando": ora}
         self._salva()

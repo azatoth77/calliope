@@ -183,6 +183,14 @@ def _data_detta(testo, oggi: datetime.date) -> datetime.date | None:
     return None
 
 
+def data_intera(valore, oggi: datetime.date) -> bool:
+    """Il valore è per intero una data che `_data_detta` capisce («2026-11-20 porta il libro» no)."""
+    if not isinstance(valore, str) or _data_detta(valore, oggi) is None:
+        return False
+    v = valore.strip()
+    return not v[:1].isdigit() or re.fullmatch(r"\d{4}-\d{2}-\d{2}", v) is not None
+
+
 _MESI_RX = "|".join(MESI)
 _MATERIE_RX = "matematica|italiano|storia|geografia|scienze|inglese|francese|spagnolo|tedesco|" \
               "tecnologia|arte|musica|fisica|chimica|latino|filosofia|diritto|economia|informatica|" \
@@ -374,25 +382,34 @@ def _verifica(svc, ctx, chi, verifica=None, materia=None, anche_passate=False) -
         return None
 
 
-def _nessuna_verifica(svc, chi, verifica, materia) -> dict:
+def _nessuna_verifica(svc, chi, verifica, materia, azione=None) -> dict:
     """Non c'è la verifica chiesta. Con una materia detta è una verifica che manca, non un errore:
     niente frase pronta, così il modello la crea (#318: «giovedì ho anche la verifica di matematica»
     → stato; 03/11, #383: «venerdì ho l'interrogazione su biologia» → studio_interroga, «non la
-    trovo» e il turno chiuso). Se ha altre verifiche le nomina: la materia può averla scelta il
-    modello («su quello che ho studiato» → materia «tutto», con una sola verifica aperta). Senza
-    materia, come sempre: lo stesso «non la trovo» di una verifica di un altro."""
+    trovo» e il turno chiuso). Senza materia, come sempre: lo stesso «non la trovo» di una verifica
+    di un altro. `azione`: quella di `studio`; None per interrogazione, carte e ascolto.
+    La strada verso «crea» e il richiamo valgono solo per chi legge o studia: un'azione che cambia
+    qualcosa non si rifà su un'altra verifica («ho finito con tutto» → `conclusa` su Storia,
+    revisione della PR #388). Il richiamo è senza materia e solo con una verifica sola: così i nomi
+    scritti dalla persona non entrano qui fuori busta."""
     if materia:
-        ci_sono = list(dict.fromkeys(str(v["materia"]) for v in svc.home(chi)["verifiche"]))[:4]
-        altre = (f"Le verifiche aperte sono di: {', '.join(ci_sono)}. Se chi parla non ha nominato "
-                 "una materia nuova, richiama subito con una di queste, senza chiederglielo. "
-                 if ci_sono else "")
-        return {"ok": False, "errore": f"nessuna verifica di {materia} nello Studio",
+        errore = f"nessuna verifica di {materia} nello Studio"
+        if azione is not None and azione not in LETTURE:
+            return {"ok": False, "errore": errore,
+                    "cosa_fare": "Non farlo su un'altra verifica. Dillo in breve; se non è chiaro "
+                                 "quale verifica intende, chiediglielo."}
+        aperte = len(svc.home(chi)["verifiche"])
+        altre = ("C'è una sola verifica aperta: se chi parla non ha nominato una materia nuova, "
+                 "richiama subito senza materia, senza chiederglielo. " if aperte == 1 else
+                 "Se non è chiaro di quale verifica parla, chiediglielo. " if aperte else "")
+        return {"ok": False, "errore": errore,
                 "cosa_fare": f"Non dire che non la trovi. {altre}Se chi parla ha detto che ha una "
                              "verifica o un'interrogazione di questa materia con una data, è "
                              "nuova: chiama subito studio con azione «crea», la materia, la data "
-                             "detta e prova «interrogazione» se è un'interrogazione. Se non ha "
-                             "detto quando, chiediglielo: per studiare serve prima la verifica, "
-                             "con le pagine."}
+                             "detta e prova «interrogazione» se è un'interrogazione. "
+                             + ("Se non ha detto quando, chiediglielo: per studiare serve prima la "
+                                "verifica, con le pagine." if azione is None else
+                                "Altrimenti dillo in breve.")}
     return _f(NON_CE if verifica else
               "Non hai verifiche aperte nello Studio. Dimmi quando è la prossima.", ok=False)
 
@@ -1214,7 +1231,7 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
                                      "ha detto una verifica con una materia e una data, è una "
                                      "verifica nuova: chiama studio con azione «crea», con la "
                                      "materia e la data dette da lei; altrimenti chiedile quale."}
-            return _nessuna_verifica(svc, chi, verifica, materia)
+            return _nessuna_verifica(svc, chi, verifica, materia, azione)
         if azione == "stato":
             return _stato(ctx, svc, chi, v)
         if azione == "piano":
@@ -2075,9 +2092,10 @@ def senza_mascherati(ctx, argomenti: dict) -> dict:
         out["data"] = out.pop("giorno")
     # `tipo` è un valore di azione, ma il modello lo scrive anche per «crea» al posto di `prova`
     # (misura del 04/11, #383: una passata in più, e il tipo perso alla seconda)
-    if str(out.get("azione") or "").strip().lower() == "crea" and out.get("tipo") \
-            and not out.get("prova"):
-        out["prova"] = out.pop("tipo")
+    if str(out.get("azione") or "").strip().lower() == "crea" and "tipo" in out:
+        tipo = out.pop("tipo")
+        if tipo and not out.get("prova"):
+            out["prova"] = tipo
     if len(out) != len(argomenti or {}):
         note_rule(ctx, "studio_mascherato_non_dato")
     return out

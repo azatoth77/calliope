@@ -46,7 +46,8 @@ SISTEMA = A.SISTEMA
 REGOLE = (
     "Prepara le domande di una verifica di prova sugli argomenti confermati. Regole:\n"
     "- ogni domanda viene dalle pagine: la risposta deve stare nelle pagine che citi;\n"
-    "- tipo «scelta» (3 o 4 opzioni, una sola giusta, la risposta è il testo dell'opzione giusta),"
+    "- tipo «scelta» (3 o 4 opzioni, una sola giusta, la risposta è il testo dell'opzione giusta; "
+    "per gli altri tipi le opzioni sono vuote),"
     " «vero_falso» (risposta «vero» o «falso»), «numero» (risposta un numero con l'unità se c'è)"
     ", «parole» (risposta breve e da 1 a 3 parole chiave prese dalle pagine) o «aperta» (una "
     "domanda di ragionamento con la risposta che ti aspetti, breve);\n"
@@ -64,7 +65,9 @@ SCHEMA = {"type": "object", "properties": {
         "risposta": {"type": "string", "maxLength": RS.ATTESA_MAX},
         "parole_chiave": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
         "pagine": {"type": "array", "items": {"type": "string"}, "minItems": 1}},
-        "required": ["argomento", "tipo", "domanda", "risposta", "pagine"]}}},
+        # `opzioni` sempre, vuote per gli altri tipi (banco del 04/11, revisione della PR #388: in un
+        # giro su due 15 domande a scelta senza opzioni, scartate dal controllo)
+        "required": ["argomento", "tipo", "domanda", "opzioni", "risposta", "pagine"]}}},
     "required": ["domande"]}
 TEMPERATURA = 0
 PRESENCE = 0

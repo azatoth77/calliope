@@ -51,10 +51,11 @@ PRONTE = "pronte"
 ESITI = (PRONTE, G.VUOTO, G.ROTTO, G.ERRORE)
 QUIETE_S = 120.0
 
-# 12 lezioni di 3 paragrafi brevi, più reazioni e misure (giro vero del 03/11, #383: 11 lezioni di 2
-# paragrafi in 2992 token). Un paragrafo oltre il tetto lo chiude lo schema a metà di una frase (a
-# 400 caratteri 5 paragrafi su 22, il 03/11): il tetto è largo, e il codice taglia alla frase
-TEMPERATURA, PRESENCE, MAX_TOKENS = 0, 0, 6000
+# Il caso peggiore ci sta: 12 lezioni da 3 paragrafi al tetto sono circa 190 token a paragrafo (3,7
+# caratteri a token e le chiavi, misura del 03/11, #383), più reazioni e misure: ~7700. Il solito è
+# molto meno (11 lezioni in 1900). Un paragrafo oltre il tetto lo chiude lo schema a metà di una frase
+# (a 400 caratteri 5 paragrafi su 22, il 03/11): il tetto è largo, e il codice taglia alla frase
+TEMPERATURA, PRESENCE, MAX_TOKENS = 0, 0, 8000
 PARAGRAFI_MAX, PARAGRAFO_MAX = 4, 600
 REAZIONI_MAX, MISURE_MAX = 6, 8
 FORMULA_MAX = 12
@@ -140,19 +141,46 @@ def leggi(testo: str) -> dict | None:
 
 
 def parziale(testo) -> dict | None:
-    """Le lezioni intere di una risposta tagliata (`genera.oggetti_completi`), o None se non ce
-    n'è: reazioni e misure, che vengono dopo, restano fuori."""
+    """Le voci intere di una risposta tagliata (`genera.oggetti_completi`), o None senza una
+    lezione: le lezioni vengono prima, e senza nemmeno una si richiede."""
     lezioni = G.oggetti_completi(testo, "lezioni")
-    return {"lezioni": lezioni} if lezioni else None
+    if not lezioni:
+        return None
+    return {"lezioni": lezioni, "reazioni": G.oggetti_completi(testo, "reazioni"),
+            "misure": G.oggetti_completi(testo, "misure")}
 
 
-def fino_alla_frase(testo: str) -> str | None:
-    """Un paragrafo arrivato al tetto (lo schema l'ha chiuso a metà): fino all'ultima frase finita,
-    o None se non ce n'è una."""
-    if len(testo) < PARAGRAFO_MAX:
-        return testo
-    fine = max(testo.rfind(c) for c in ".!?")
-    return testo[:fine + 1] if fine > 0 else None
+# La fine di una frase: un segno seguito da uno spazio. Il punto di «2.7» non ha lo spazio; il punto
+# prima di un'iniziale o di una sigla non chiude niente («J. Watt», «a.C.», «il sig. Bianchi»)
+_FINE_FRASE = re.compile(r"[.!?](?=\s)")
+_ABBREVIAZIONI = frozenset("sig sigg dott prof ing avv arch geom rag on ecc es cfr pag pagg vol cap "
+                           "fig tab art nr num tel ca cioè".split())
+# Sotto questa lunghezza ciò che resta non è una frase di una lezione («1.», «Il sig.», «Il pH è 7.»)
+FRASE_MIN = 25
+
+
+def _chiude(testo: str, i: int) -> bool:
+    """Il segno in `i` chiude davvero una frase? Il punto no dopo un'abbreviazione o una lettera
+    sola."""
+    if testo[i] != ".":
+        return True
+    parola = re.search(r"[^\W\d_]+$", testo[:i])
+    return parola is None or (len(parola.group(0)) > 1
+                              and parola.group(0).lower() not in _ABBREVIAZIONI)
+
+
+def fino_alla_frase(testo) -> str | None:
+    """Il paragrafo del modello, una riga. Arrivato al tetto, lo schema l'ha chiuso a metà: fino
+    all'ultima frase finita (revisione della PR #388: «è 2.7 g…» diventava «è 2.», un dato falso a
+    chi studia). La fine del testo tagliato non conta: «2.» può essere la metà di «2.7». None se non
+    ce n'è una abbastanza lunga: meglio niente di un pezzo."""
+    t = " ".join(str(testo if testo is not None else "").split())
+    if len(t) < PARAGRAFO_MAX:
+        return t
+    fine = [m.start() for m in _FINE_FRASE.finditer(t[:PARAGRAFO_MAX]) if _chiude(t, m.start())]
+    if not fine or fine[-1] + 1 < FRASE_MIN:
+        return None
+    return t[:fine[-1] + 1]
 
 
 # ─────────────────────────── i valori: reazioni e misure ───────────────────────────
@@ -388,8 +416,7 @@ def valida(grezzo: dict, rif, arif) -> dict:
             if not isinstance(p, dict) or not isinstance(p.get("testo"), str):
                 scartati += 1
                 continue
-            t, avvisi = G.forma_testo(p["testo"], PARAGRAFO_MAX)
-            t = fino_alla_frase(t) if t is not None else None
+            t, avvisi = G.forma_testo(fino_alla_frase(p["testo"]), PARAGRAFO_MAX)
             if t is None:
                 scartati += 1
                 continue
@@ -444,6 +471,29 @@ class Preparazioni:
 
     def preparazione_modo(self) -> str:
         return modo(self.cfg)
+
+    def segna_scoperti(self, vid, cosa: str, argomenti: list[int], valori_persi: bool = False):
+        """Cosa ha lasciato scoperto l'ultima generazione di `cosa` (carte, domande, preparazione);
+        niente scoperto toglie la voce. Vale per tutte e tre: stanno sulla stessa verifica."""
+        with self.dati.lock:
+            r = self.dati.uno("SELECT scoperti FROM studio_verifiche WHERE id = ?", (int(vid),))
+            if r is None:
+                return
+            tutti = self.scoperti_di(vid)
+            if argomenti or valori_persi:
+                tutti[cosa] = {"argomenti": list(argomenti), "valori_persi": bool(valori_persi)}
+            else:
+                tutti.pop(cosa, None)
+            self.dati.scrivi("UPDATE studio_verifiche SET scoperti = ? WHERE id = ?",
+                             (json.dumps(tutti) if tutti else None, int(vid)))
+
+    def scoperti_di(self, vid) -> dict:
+        r = self.dati.uno("SELECT scoperti FROM studio_verifiche WHERE id = ?", (int(vid),))
+        try:
+            x = json.loads(r["scoperti"] or "{}") if r is not None else {}
+        except ValueError:
+            x = {}
+        return x if isinstance(x, dict) else {}
 
     def _misure_prep(self) -> dict:
         return self.misure.setdefault("preparazione", {

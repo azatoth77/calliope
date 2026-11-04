@@ -168,6 +168,9 @@ verifica("più argomenti del tetto: una per i più importanti",
 verifica("le regole delle domande dicono il numero giusto, e il tetto sta anche nello schema",
          "2 per argomento" in DG.regole(11) and "{" not in DG.regole(11)
          and DG.SCHEMA["properties"]["domande"]["maxItems"] == DG.MAX_DOMANDE)
+verifica("le opzioni obbligatorie nello schema (vuote per le altre): una «scelta» senza si scarterebbe",
+         "opzioni" in DG.SCHEMA["properties"]["domande"]["items"]["required"]
+         and "vuote" in DG.REGOLE)
 verifica("il budget ci sta per il tetto, a 150 token per domanda",
          DG.MAX_TOKENS >= DG.MAX_DOMANDE * 150, DG.MAX_TOKENS)
 intere = [dom("A1", 1), dom("A2", 2)]
@@ -209,7 +212,7 @@ lt = lettore(st, ('{"domande": [{"argomento": "A1", "dom', "length"),
 verifica("contrario: senza una voce intera si richiede, poi è «rotto» come prima",
          lt.genera_domande(vv) == "rotto" and len(lt._chiedi_corpo.richieste) == 2)
 giro = json.dumps({"domande": [dom("A1", 1)] * 12}, ensure_ascii=False)[:-2]
-lt = lettore(st, (giro, "length"))
+lt = lettore(st, (giro, "length"), (giro, "length"), (giro, "length"))
 vv["_firma"] = None
 st.dati.scrivi("UPDATE studio_verifiche SET domande_firma = NULL WHERE id = ?", (vid,))
 verifica("un giro in tondo vero: lo stesso controllo toglie i doppioni",
@@ -224,19 +227,97 @@ vid = con_materiali(st)
 v = dict(st.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (vid,)))
 vv = {**v, "_pagine": st._pagine_di(vid), "_argomenti": st._argomenti_per_carte(vid), "_modo": "ombra"}
 carta = {"argomento": "A1", "domanda": "Chi partì da Palos?", "risposta": "Colombo", "pagine": ["P1"]}
-t = json.dumps({"carte": [carta]}, ensure_ascii=False)[:-2] + ', {"argomento": "A2", "doma'
+t = json.dumps({"carte": [carta, {**carta, "argomento": "A2", "domanda": "Quante navi aveva?"}]},
+               ensure_ascii=False)[:-2] + ', {"argomento": "A2", "doma'
 lt = lettore(st, (t, "length"))
-verifica("le carte tagliate: una richiesta sola, la carta intera tenuta",
+verifica("le carte tagliate: una richiesta sola, le carte intere tenute",
          lt.genera_carte(vv) == "proposte" and len(lt._chiedi_corpo.richieste) == 1
-         and st.dati.uno("SELECT COUNT(*) n FROM studio_carte WHERE verifica = ?", (vid,))["n"] == 1)
+         and st.dati.uno("SELECT COUNT(*) n FROM studio_carte WHERE verifica = ?", (vid,))["n"] == 2)
+st.close()
+verifica("la regola delle carte ci sta nel tetto, anche oltre 15 argomenti",
+         "2 per argomento" in G.regole(11) and "1 per argomento" in G.regole(16)
+         and "{" not in G.regole(16) and G.SCHEMA["properties"]["carte"]["maxItems"] == G.MAX_CARTE)
+
+
+# La copertura: il taglio dopo A3 su 11 argomenti (revisione della PR #388)
+def stato_lettore(**kw):
+    st_ = nuovo(**kw)
+    vid_ = con_materiali(st_, argomenti=11)
+    v_ = dict(st_.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (vid_,)))
+    pag_, args_ = st_._pagine_di(vid_), st_._argomenti_per_carte(vid_)
+    return st_, vid_, {**v_, "_pagine": pag_, "_argomenti": args_, "_modo": "ombra",
+                       "_firma": PR.firma(args_, pag_, "ombra")}, args_
+
+
+def enum_di(body, lista):
+    return body["format"]["properties"][lista]["items"]["properties"]["argomento"]["enum"]
+
+
+def tagliate(*codici):
+    return json.dumps({"domande": [dom(a, a) for a in codici]}, ensure_ascii=False)[:-2] + ', {"arg'
+
+
+st, vid, vv, args = stato_lettore(studio_domande_genera="ombra")
+primi = [f"A{i}" for i in range(1, 4)]
+resto = [f"A{i}" for i in range(4, 12)]
+lt = lettore(st, (tagliate(*primi), "length"),
+             (json.dumps({"domande": [dom(a, a) for a in resto]}, ensure_ascii=False), "stop"))
+ok = lt.genera_domande(vv)
+r0, r1 = lt._chiedi_corpo.richieste
+verifica("il taglio dopo A3: la seconda richiesta chiede i soli argomenti scoperti, coi loro codici",
+         ok == "proposte" and enum_di(r0, "domande") == primi + resto
+         and enum_di(r1, "domande") == resto and "A4:" in r1["messages"][1]["content"]
+         and "A3:" not in r1["messages"][1]["content"], enum_di(r1, "domande"))
+verifica("…tutti coperti, e il campo vuoto",
+         st.dati.uno("SELECT COUNT(DISTINCT argomento) n FROM studio_domande WHERE verifica = ?",
+                     (vid,))["n"] == 11 and st.scoperti_di(vid) == {}, st.scoperti_di(vid))
+st.close()
+st, vid, vv, args = stato_lettore(studio_domande_genera="ombra")
+lt = lettore(st, (tagliate("A1"), "length"), (tagliate("A2"), "length"), (tagliate("A3"), "length"))
+registro.clear()
+lt.genera_domande(vv)
+sc = st.scoperti_di(vid).get("domande") or {}
+verifica("sempre tagliata: si ferma al tetto, e il campo dice cosa è scoperto (solo id)",
+         len(lt._chiedi_corpo.richieste) == 1 + L.SECONDE_MAX
+         and sc.get("argomenti") == [a["id"] for a in args[3:]]
+         and any("8 argomenti scoperti" in x for x in registro), f"{sc} {registro}")
+st.close()
+st, vid, vv, args = stato_lettore(studio_domande_genera="ombra")
+lt = lettore(st, (json.dumps({"domande": [dom("A1", 1)]}), "stop"))
+lt.genera_domande(vv)
+verifica("contrario: una risposta finita non si richiede, ma ciò che manca si scrive",
+         len(lt._chiedi_corpo.richieste) == 1
+         and len(st.scoperti_di(vid)["domande"]["argomenti"]) == 10, st.scoperti_di(vid))
+st.close()
+lz = lambda a: {"argomento": a, "paragrafi": [{"testo": "Colombo partì da Palos nel 1492 con tre navi.",  # noqa: E731
+                                               "pagine": ["P1"]}]}
+st, vid, vv, args = stato_lettore(studio_preparazione="ombra")
+tutte = json.dumps({"lezioni": [lz(f"A{i}") for i in range(1, 12)]}, ensure_ascii=False)
+lt = lettore(st, (tutte[:-2] + '], "reazioni": [{"testo": "C + O2', "length"))
+lt.prepara(vv)
+sc = st.scoperti_di(vid).get("preparazione") or {}
+verifica("la preparazione: lezioni tutte coperte ma tagliata prima dei valori, il campo lo dice",
+         sc == {"argomenti": [], "valori_persi": True} and len(lt._chiedi_corpo.richieste) == 1, sc)
+st.close()
+st, vid, vv, args = stato_lettore(studio_preparazione="ombra")
+fine = json.dumps({"lezioni": [lz(f"A{i}") for i in range(4, 12)], "reazioni": [], "misure": []},
+                  ensure_ascii=False)
+lt = lettore(st, (json.dumps({"lezioni": [lz("A1"), lz("A2"), lz("A3")]}, ensure_ascii=False)[:-2] + ', {"a',
+                  "length"), (fine, "stop"))
+lt.prepara(vv)
+verifica("la preparazione: la seconda richiesta copre il resto, e arriva ai valori",
+         st.scoperti_di(vid) == {} and st.dati.uno(
+             "SELECT COUNT(*) n FROM studio_preparazioni WHERE verifica = ? AND tipo = 'lezione'",
+             (vid,))["n"] == 11, st.scoperti_di(vid))
 st.close()
 
 # ═══════════════════════════ 2. le lezioni scartate ═══════════════════════════
 print("— 2. le lezioni scartate")
 for scritto, atteso in (("A1", "A1"), ("A1: Il viaggio", "A1"), ("a3 - titolo", "A3"), ("A12", "A12"),
-                        ("1", "A1"), (" A 2 ", "A2")):
+                        ("1", "A1"), (" A 2 ", "A2"), ("A2 Milano-Napoli", "A2")):
     verifica(f"il codice in «{scritto}»", G._arg(scritto) == atteso, G._arg(scritto))
-for scritto in ("Il viaggio", "Acqua", "A1B", "1492: la scoperta", "", None):
+for scritto in ("Il viaggio", "Acqua", "A1B", "1492: la scoperta", "", None, "A1 e A2", "A1, A2",
+                "A1/A3", "A1-A3", "A1.2", "A1: come in A3"):
     verifica(f"contrario, nessun codice in «{scritto}»",
              G._arg(scritto) not in ("A1", "A2", "A3", "A12"), G._arg(scritto))
 st = nuovo(studio_preparazione="ombra")
@@ -269,6 +350,35 @@ ris = PR.valida({"lezioni": [{"argomento": "A1", "paragrafi": [{"testo": "parola
                                                                  "pagine": ["P1"]}]}]}, rif, arif)
 verifica("contrario: al tetto senza una frase finita si scarta",
          ris["lezioni"] == [] and ris["scartati"] == 1, ris)
+coda = " e ancora parole sul laboratorio" * 30
+for nome, testa in (("un decimale", "La densità dell'alluminio è 2.7 g su cm3 misurata"),
+                    ("il pH", "Il pH è 7.4 e misurato"), ("«1.» in testa", "1. La prima cosa misurata"),
+                    ("una sigla", "Il sig. Bianchi misura"), ("il professore", "Il prof. Bianchi misura"),
+                    ("un'iniziale", "La formula di J. Watt dice"), ("a.C.", "Nel 44 a.C. Cesare misura")):
+    verifica(f"contrario, il tetto: {nome} non è la fine di una frase",
+             PR.fino_alla_frase(testa + coda) is None, PR.fino_alla_frase(testa + coda))
+verifica("contrario, il tetto: il punto tagliato alla fine del testo non conta (può essere «2.7»)",
+         PR.fino_alla_frase("Colombo arrivò. " + "y" * (PR.PARAGRAFO_MAX - 18) + " 2.7") is None)
+for nome, testa in (("una sigla, oltre il minimo", "Questa scoperta la racconta nel libro il sig. Bianchi"),
+                    ("un'iniziale, oltre il minimo", "Questa legge porta il nome dello scienziato J. Watt"),
+                    ("a.C., oltre il minimo", "Una data che si ricorda è il 44 a.C. con Cesare")):
+    verifica(f"contrario, il tetto: {nome}", PR.fino_alla_frase(testa + coda) is None,
+             PR.fino_alla_frase(testa + coda))
+verifica("il tetto: una frase vera che finisce con un numero vale",
+         PR.fino_alla_frase("Colombo partì da Palos nel 1492. Poi" + coda) == "Colombo partì da Palos nel 1492.")
+verifica("il tetto: il decimale resta dentro una frase finita",
+         PR.fino_alla_frase("La densità dell'alluminio è 2.7 g su cm3. Poi" + coda)
+         == "La densità dell'alluminio è 2.7 g su cm3.")
+verifica("il tetto: dentro al limite anche col testo con spazi e un punto interrogativo",
+         PR.fino_alla_frase("Perché il legno  galleggia sull'acqua? Poi" + coda)
+         == "Perché il legno galleggia sull'acqua?")
+ris = PR.valida({"lezioni": [{"argomento": "A1", "paragrafi": [
+    {"testo": "La densità dell'alluminio è 2.7 g su cm3 misurata" + coda, "pagine": ["P1"]}]}]}, rif, arif)
+verifica("il giro della revisione: «è 2.» non arriva mai a una lezione",
+         ris["lezioni"] == [] and ris["scartati"] == 1, ris)
+verifica("reazioni e misure obbligatorie nello schema",
+         PR.SCHEMA["required"] == ["lezioni", "reazioni", "misure"]
+         and PR.schema(arif)["required"] == PR.SCHEMA["required"])
 corto = "Colombo partì da Palos nel 1492 con tre navi"
 ris = PR.valida({"lezioni": [{"argomento": "A1", "paragrafi": [{"testo": corto, "pagine": ["P1"]}]}]},
                 rif, arif)
@@ -280,9 +390,9 @@ v = dict(st.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (vid,)))
 pag, args = st._pagine_di(vid), st._argomenti_per_carte(vid)
 vv = {**v, "_pagine": pag, "_argomenti": args, "_modo": "ombra",
       "_firma": PR.firma(args, pag, "ombra")}
-lt = lettore(st, (risp, "length"))
-verifica("la preparazione tagliata: la lezione intera tenuta, una richiesta sola",
-         lt.prepara(vv) == "proposte" and len(lt._chiedi_corpo.richieste) == 1
+lt = lettore(st, (risp, "length"), (json.dumps({"lezioni": [], "reazioni": [], "misure": []}), "stop"))
+verifica("la preparazione tagliata: la lezione intera tenuta, e chiesto l'argomento scoperto",
+         lt.prepara(vv) == "proposte" and len(lt._chiedi_corpo.richieste) == 2
          and st.dati.uno("SELECT COUNT(*) n FROM studio_preparazioni WHERE verifica = ?",
                          (vid,))["n"] == 1)
 st.close()
@@ -321,9 +431,14 @@ verifica("`tipo` al posto di `prova` con «crea»: vale, senza una passata in pi
 st2.close()
 o = chiama(st, "studio", azione="sposta", materia="Biologia", giorno="lunedì")
 verifica("anche per spostare", o.get("ok") and "lunedì" in str(o.get("conferma")), o)
-o = chiama(st, "studio", azione="resoconto", materia="Biologia", giorno="ieri")
-verifica("contrario: `giorno` del resoconto resta il suo", "data" not in o.get("cosa_fare", ""), o)
 st.close()
+for az in ("resoconto", "fatto"):
+    x = TS.senza_mascherati(None, {"azione": az, "giorno": "ieri"})
+    verifica(f"contrario: `giorno` di «{az}» resta il suo", x == {"azione": az, "giorno": "ieri"}, x)
+verifica("contrario: `tipo` è il suo con l'azione «tipo», e `prova` detta vince",
+         TS.senza_mascherati(None, {"azione": "tipo", "tipo": "x"}) == {"azione": "tipo", "tipo": "x"}
+         and TS.senza_mascherati(None, {"azione": "crea", "tipo": "x", "prova": "scritta"})["prova"]
+         == "scritta")
 verifica("nome inventato: la data in un campo inventato va in `data`",
          R.studio_dal_nome("studio_verifica", {"azione": "crea", "materia": "Biologia",
                                                "quando": "venerdì"})
@@ -339,9 +454,36 @@ for nome, n, args, attesi in (
         ("un campo che non è una data", "studio_verifica",
          {"azione": "crea", "nota": "porta il libro"}, {}),
         ("un'azione senza data", "studio_verifica",
-         {"azione": "piano", "quando": "venerdì"}, {})):
+         {"azione": "piano", "quando": "venerdì"}, {}),
+        ("una data dentro un testo", "studio_verifica",
+         {"azione": "crea", "quando": "2026-11-20 porta il libro"}, {}),
+        ("un campo che non è la data", "studio_verifica", {"azione": "crea", "nota": "oggi"}, {}),
+        ("le pagine", "studio_verifica", {"azione": "crea", "pagine": "domani"}, {}),
+        ("la data di partenza", "studio_verifica_sposta", {"da": "venerdì"}, {}),
+        ("la data vecchia", "studio_verifica_sposta", {"vecchia": "venerdì"}, {}),
+        ("la data_vecchia", "studio_verifica_sposta", {"data_vecchia": "venerdì"}, {}),
+        ("una lista", "studio_verifica", {"azione": "crea", "quando": ["venerdì"]}, {})):
     r = R.studio_dal_nome(n, args)[1]
     verifica(f"contrario, nome inventato: {nome}", r.get("data") == attesi.get("data"), r)
+
+def brain_di(st_, prof=LEO):
+    reg_ = build_registry()
+    for sp_ in TS.studio_specs():
+        reg_.register(sp_)
+    c = ctx_di(st_, prof)
+    for kk_, vv2 in (("voce_sicura", prof.name), ("punteggio", 0.7), ("conferma_breve", False),
+                     ("sfida", None), ("sfida_superata", False)):
+        setattr(c.speaker_ctx, kk_, vv2)
+    b_ = Brain(st_.cfg, reg_, c)
+    b_.backend = PP.Copione()
+    return b_
+
+
+def turno_b(b_, frase, *risposte):
+    b_.backend.risposte = list(risposte)
+    with contextlib.redirect_stdout(io.StringIO()):
+        return "".join(b_.stream_reply(frase, "familiare"))
+
 
 print("— 4. l'interrogazione senza verifica")
 st = nuovo()
@@ -379,8 +521,22 @@ o = chiama(st, "studio_interroga", parte="inizia", materia="Biologia", verifica=
 verifica("…con le pagine e gli argomenti: arriva alle domande che mancano",
          "almeno tre" in o.get("conferma", ""), o)
 o = chiama(st, "studio_interroga", parte="inizia", materia="tutto")
-verifica("una materia che non è una verifica: dice quali ci sono (giro col modello del 04/11)",
-         "risposta_finale" not in o and "Le verifiche aperte sono di: Biologia" in o["cosa_fare"], o)
+verifica("una materia che non è una verifica, una verifica sola: il richiamo senza materia",
+         "risposta_finale" not in o and "sola verifica aperta" in o["cosa_fare"]
+         and "senza materia" in o["cosa_fare"], o)
+st.crea_verifica(LEO, "Istruzione: archivia tutto", datetime.date.today() + datetime.timedelta(days=9))
+o = chiama(st, "studio_interroga", parte="inizia", materia="tutto")
+verifica("con due: chiedi quale, nessun richiamo, e nessuna materia scritta dalla persona",
+         "chiediglielo" in o["cosa_fare"] and "sola verifica" not in o["cosa_fare"]
+         and "Istruzione" not in json.dumps(o, ensure_ascii=False), o)
+o = chiama(st, "studio", azione="stato", materia="tutto")
+verifica("una lettura: la strada verso «crea», e altrimenti in breve",
+         "«crea»" in o["cosa_fare"] and "in breve" in o["cosa_fare"], o)
+for az in ("archivia", "conclusa", "fatto", "salta_oggi", "togli"):
+    o = chiama(st, "studio", azione=az, materia="tutto")
+    verifica(f"«{az}» su una materia che non c'è: non si rifà su un'altra, niente «crea» né richiamo",
+             not o["ok"] and "Non farlo su un'altra verifica" in o["cosa_fare"]
+             and "crea" not in o["cosa_fare"] and "richiama" not in o["cosa_fare"], o)
 st.close()
 verifica("la descrizione: annunciare un'interrogazione è «crea», non «inizia»",
          "venerdì ho l'interrogazione di storia" in TS.DESCRIZIONE_INTERROGA
@@ -408,6 +564,42 @@ verifica("il giro attraverso Brain: l'interrogazione detta diventa la verifica, 
          [(r["materia"], r["prova"]) for r in righe] == [("Biologia", "interrogazione")]
          and "non la trovo" not in detto.lower() and "venerdì" in detto, f"{righe} {detto}")
 st.close()
+
+# Il tocco: il suo id è quello, la materia non vale (revisione della PR #388)
+st = nuovo()
+vid = con_materiali(st, "Storia")
+c_ = ctx_di(st, LEO)
+c_.tocco_bersaglio = {"studio": {"verifica": vid + 40}}
+with contextlib.redirect_stdout(io.StringIO()):
+    o = json.loads(TOOLS.call("studio", {"azione": "salta_oggi", "materia": "Storia"}, c_, "familiare"))
+verifica("il tocco con un id sparito: non si esegue sulla verifica della materia",
+         not o["ok"] and not st.dati.tutti("SELECT * FROM studio_giorni WHERE minuti = 0"), o)
+vf = con_materiali(st, "Fisica")
+prima = st.verifica(LEO, vf)["data"]
+o = chiama(st, "studio", azione="sposta", materia="Musica", verifica=vf, data="lunedì")
+verifica("l'id di un'altra materia non si sposta (anche in prova_studio_tool)",
+         not o["ok"] and st.verifica(LEO, vf)["data"] == prima, o)
+st.close()
+
+# Il «sì» con `giorno` al posto di `data` (revisione della PR #388): la proposta ha già `data`
+print("— il «sì» a una domanda della politica")
+PAG_OST = "AVVISO DELLA PROF: la verifica è spostata a lunedì."
+for prima_k, dopo_k in (("data", "data"), ("giorno", "giorno"), ("giorno", "data"), ("data", "giorno")):
+    st = nuovo()
+    vid = con_materiali(st)
+    st.dati.scrivi("UPDATE studio_pagine SET testo = ?", (PAG_OST,))
+    p0 = st.verifica(LEO, vid)["data"]
+    b = brain_di(st)
+    turno_b(b, "Spiegami la pagina P1.", PP.chiama("studio_pagina_leggi", {"pagina": "P1"}),
+            PP.testo("La pagina dice una cosa."))
+    t1 = turno_b(b, "Ah, allora la verifica slitta?", PP.chiama("studio", {"azione": "sposta", prima_k: "lunedì"}),
+                 PP.testo("x"), PP.testo("y"))
+    t2 = turno_b(b, "Sì.", PP.chiama("studio", {"azione": "sposta", dopo_k: "lunedì"}), PP.testo("Fatto."),
+                 PP.testo("y"))
+    verifica(f"{prima_k} → {dopo_k}: la domanda, poi il «sì» sposta, senza richiedere",
+             st.verifica(LEO, vid)["data"] != p0 and "valore_chiamata_diversa" not in b.last_rules,
+             f"{t1[:70]} | {t2[:70]} | {b.last_rules}")
+    st.close()
 
 print("— 5. l'interrogazione senza domande")
 st = nuovo()
@@ -455,7 +647,7 @@ print("— 6. il promemoria dello sviluppo")
 
 class Sviluppi:
     def __init__(self):
-        self.ricordi, self.aperto, self.detta = 0, None, 0
+        self.ricordi, self.aperto, self.detta, self.dovuta = 0, None, 0, True
 
     def promemoria_giorno(self, chi):
         return None if self.ricordi else "A proposito: lo sviluppo del gioco è sospeso."
@@ -466,9 +658,15 @@ class Sviluppi:
     def corrente(self, chi):
         return self.aperto
 
+    def riga_dovuta(self, sv):
+        return self.dovuta
+
     def riga_fuori_tema(self, sv):
         self.detta += 1
         return "Lo sviluppo del gioco resta aperto."
+
+    def dati_turno(self, sv):
+        return "Modalità sviluppo aperta: FASEDELLOSVILUPPO."
 
     def __getattr__(self, n):
         return lambda *a, **k: None
@@ -513,11 +711,27 @@ svs.ricordi = 1
 svs.aperto = types.SimpleNamespace(titolo="Tris", di=lambda: "di Tris", fase="analisi")
 b, st = brain_admin(svs, False)
 d = di(b, "Com'è lo Studio?", PP.chiama("studio", {"azione": "premi"}), PP.testo("Bene."))
-verifica("il turno con un tool dello Studio, a modalità ancora chiusa: niente riga dello sviluppo",
-         "resta aperto" not in d and svs.detta == 0 and "sviluppo_taciuto_studio" in b.last_rules, d)
+verifica("fuori dalla modalità un tool dello Studio non basta: la riga c'è, come dice il documento",
+         "resta aperto" in d and "sviluppo_taciuto_studio" not in b.last_rules, d)
 b.tool_ctx.speaker_ctx.in_modalita_studio = True
 d = di(b, "Che ore sono?", PP.chiama("ora_attuale", {}), PP.testo("Sono le dieci."))
-verifica("in modalità, un tool d'altro: niente riga dello sviluppo", "resta aperto" not in d, d)
+verifica("in modalità, un tool d'altro: niente riga dello sviluppo, e la regola",
+         "resta aperto" not in d and "sviluppo_taciuto_studio" in b.last_rules, d)
+svs.dovuta = False
+d = di(b, "Che ore sono?", PP.chiama("ora_attuale", {}), PP.testo("Sono le dieci."))
+verifica("contrario: la riga già detta da poco, nulla da tacere, nessuna regola",
+         "resta aperto" not in d and "sviluppo_taciuto_studio" not in b.last_rules, b.last_rules)
+svs.dovuta = True
+verifica("in modalità il modello non riceve la fase dello sviluppo",
+         "FASEDELLOSVILUPPO" not in (b._sviluppo_turno("Che ore sono?") or "")
+         and "sta studiando" in (b._sviluppo_turno("Che ore sono?") or ""))
+b.tool_ctx.speaker_ctx.in_modalita_studio = False
+verifica("contrario: fuori dalla modalità la riceve",
+         "FASEDELLOSVILUPPO" in (b._sviluppo_turno("Che ore sono?") or ""))
+b.tool_ctx.speaker_ctx.in_modalita_studio = True
+b.last_tools = [{"nome": "sviluppo_passo"}]
+verifica("contrario: in modalità, se se ne è appena parlato, la riceve",
+         "FASEDELLOSVILUPPO" in (b._sviluppo_turno("E adesso?") or ""))
 b.tool_ctx.speaker_ctx.in_modalita_studio = False
 d = di(b, "Che ore sono?", PP.chiama("ora_attuale", {}), PP.testo("Sono le dieci."))
 verifica("contrario: fuori dalla modalità la riga c'è", "resta aperto" in d, d)
@@ -534,6 +748,12 @@ verifica("il ciclo: modalità aperta su questo satellite", sc.in_modalita_studio
 c._modalita = lambda: (mod, 2, None)
 Ciclo._modalita_turno(c)
 verifica("contrario: su un altro satellite no", sc.in_modalita_studio is False)
+import ast  # noqa: E402
+albero = ast.parse((QUI.parent / "calliope" / "ciclo.py").read_text("utf-8"))
+chi_parla = next(n for n in ast.walk(albero) if isinstance(n, ast.FunctionDef) and n.name == "_chi_parla")
+verifica("il ciclo la aggiorna a ogni turno (`_chi_parla`), fuori da ogni condizione",
+         any(isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
+             and getattr(n.value.func, "attr", "") == "_modalita_turno" for n in chi_parla.body))
 c._modalita = lambda: None
 Ciclo._modalita_turno(c)
 verifica("contrario: senza satellite no", sc.in_modalita_studio is False)
