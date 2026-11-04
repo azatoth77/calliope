@@ -2308,6 +2308,15 @@ class Config:
     studio_preparazione: str = "ombra"
     # Da quanti secondi la voce dev'essere ferma (arbitro_memoria.quiete) perché si prepari
     studio_preparazione_quiete_s: int = 120
+    # Il riassunto da ascoltare (04/11, #386, calliope/studio/riassunto.py): a pagine lette il lettore
+    # scrive un copione in proporzione al materiale, dove ogni frase cita le frasi della pagina da cui
+    # viene; il codice le confronta con quelle, un giudizio del modello e il guardiano fanno il resto, e
+    # il ripasso lo dice con la voce di Calliope. Se si perde troppo si leggono le pagine, dicendolo.
+    # Nessuna persona lo valida prima che lo studente lo senta: la sicurezza sta nei controlli. «ombra»
+    # di serie, come le altre generazioni: si scrive e si misura, nessuno lo sente. «attiva» lo sentono
+    # tutti, minore compreso: si accende quando il banco passa il criterio della decisione 0035, punto
+    # 57. «spenta» niente. Le pagine si chiedono sempre a voce e con un tasto
+    studio_riassunto: str = "ombra"
     # I premi dello Studio (31/10, issue #296, calliope/studio/premi.py): un rinforzo positivo e
     # al minimo, calcolato dal codice dai soli dati della pratica (sessioni misurate fra «Inizia»
     # e «Fatto», carte ripassate, prove consegnate, esiti decisi dal codice o dal tutore), mai
@@ -3654,7 +3663,7 @@ SEZIONI: dict[str, list[str]] = {
                 "studio_importa_max_mb", "studio_importa_file_max", "studio_importa_voce_max_mb",
                 "studio_importa_totale_max_mb", "studio_importa_passo_s",
                 "studio_importa_tempo_max_s", "studio_importa_coda", "studio_esercizi",
-                "studio_preparazione", "studio_preparazione_quiete_s"],
+                "studio_preparazione", "studio_preparazione_quiete_s", "studio_riassunto"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -4285,6 +4294,8 @@ _MODI_NUOVI = {
     # La preparazione dietro le quinte (31/10, #297, parte 3)
     "studio_preparazione": _modi("studio_preparazione", ("spenta", "ombra", "attiva"),
                                  falso="spenta"),
+    # Il riassunto da ascoltare (04/11, #386)
+    "studio_riassunto": _modi("studio_riassunto", ("spenta", "ombra", "attiva"), falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},

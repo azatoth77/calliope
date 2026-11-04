@@ -108,6 +108,7 @@ def cfg_nuova(nome, prep="attiva"):
     c.studio_argomenti = False
     c.studio_carte_genera = c.studio_mappa_genera = c.studio_domande_genera = "spenta"
     c.studio_preparazione = prep
+    c.studio_riassunto = "spenta"
     c.studio_preparazione_quiete_s = 0
     return c
 

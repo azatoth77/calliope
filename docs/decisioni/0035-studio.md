@@ -551,7 +551,9 @@ dell'eco della stanza.
 ## Il ripasso da ascoltare (passo 9, #249, 31/10)
 
 42. **Il ripasso da ascoltare legge ciò che la persona ha confermato, con un copione scritto dal
-    codice.** Analisi nel commento della #249; i dettagli nel documento d'area.
+    codice.** Analisi nel commento della #249; i dettagli nel documento d'area. *[storico: «nessun modello
+    scrive il testo» e «il materiale mai nella voce di Calliope» fino al 04/11: li rivede il punto 57 per il
+    riassunto; la lettura delle pagine resta così com'è qui, a richiesta e quando il riassunto non c'è]*
     - **Il testo.** Le pagine lette degli argomenti del piano (ogni pagina una volta,
       nell'ordine dell'elenco, in parti di al più `PARTE_MAX_CAR`) e le carte attive (domanda,
       4 secondi, risposta). Nessun modello scrive il testo: il riassunto del lettore (in ombra di
@@ -1017,6 +1019,53 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     per chi la farà partire dopo la lettura (#384). Alternative scartate: alzare solo il tetto (il modello
     ubbidiva ai «6–10»), una mappa enorme apribile a rami (sul telefono non si legge e «Fai la tua» avrebbe
     trenta caselle), la generale derivata dalle parti (buona per materiali grandi, da rivedere se servirà).
+
+## Il riassunto da ascoltare (#386, 04/11)
+
+57. **Il ripasso dice un riassunto scritto dal modello: ogni frase si appoggia a una frase della pagina, e la
+    sicurezza sta nei controlli automatici** (rivede il punto 42; il numero si sistema all'unione). Motivo: 12,5
+    minuti per 4 pagine nel giro vero, e la richiesta di chi amministra.
+    - **Nessuna persona valida** un riassunto prima che lo studente lo senta, né per accendere: altrimenti verrebbe
+      meno l'uso dell'AI (chi amministra, 04/11). *[storico: per qualche ora «in ombra lo sente solo chi amministra,
+      con il segno "in prova"»]*
+    - **La citazione.** Le pagine arrivano numerate per frase, senza le pagine con «ISTRUZIONI: sì» e senza ciò che
+      non si dice mai. Ogni frase detta cita da una a tre frasi della stessa pagina; una citazione che non esiste
+      la fa uscire. *[storico: la prima versione cercava i valori in tutte le pagine, con liste: la revisione ha
+      fatto passare 380 scambi su 380, 20 negazioni su 20, 57 frasi ostili su 83]*
+    - **Il codice** guarda solo le frasi citate (*[storico: per qualche ora anche quelle attaccate; misurata la più
+      stretta, il materiale vero non diventa «scarso» senza]*): valori con l'unità, a.C. e d.C., anni e mesi, date a coppie, ordinali, formule, nomi uguali, negazione nei due
+      sensi, parole piene in gran parte.
+    - **Un giudizio indipendente per coppia**, una seconda passata del modello con uscita chiusa e tutto in busta: la
+      fonte dice proprio questo, ed è materia di quell'argomento? Dice no anche, per quanto lo dica la fonte, a ciò che
+      spinge a fare qualcosa (si può, fa bene, è sicuro), a prezzi e orari di un'uscita, ai giudizi su un gruppo di
+      persone. Solo un «si» tiene la frase.
+    - **Il guardiano** su ogni frase rimasta (`Guardiano.giudica`, non `filtra`: quello lavora sullo stream dal vivo e
+      chiude tutta la risposta). Per un minore, assente o guasto vuol dire fuori.
+    - **La cintura** (indirizzi, telefoni, seconda persona, inglese, ordini) non è il controllo.
+    - **Le ricadute sono automatiche:** esce la frase, una sezione povera lascia le sue pagine, un copione «scarso»
+      lascia la lettura, e si dice.
+    - **Voce di Calliope**, una voce sola; il punto 42 lo vietava perché «la pagina sembrerebbe parlare per lei». A ogni
+      inizio di ascolto: «È un riassunto scritto da me: per i dettagli il libro resta la fonte.» Le pagine si chiedono
+      a voce e con un tasto: sono lo strumento compensativo.
+    - **Durata:** 25 % della lettura, fra 30 s e 7 minuti e 20 (ciò che sta in 60 frasi); sotto i 45 s di lettura niente;
+      oltre 300 000 caratteri nemmeno, e lo si dice.
+    - **Non cambiano** «basta», «riprendi», «ripeti», prova aperta, orari, permessi, ospiti. Una lettura in corso si ferma
+      se la pagina o la verifica se ne vanno.
+    - **Firma col testo delle pagine:** copione e audio scaduti non si dicono e si cancellano. `studio_riassunti`
+      (schema 17) e l'audio vanno via con la verifica; minori come gli adulti (0031), ospiti mai.
+    - **`studio_riassunto`:** «ombra» di serie come le altre generazioni (si scrive e si misura, nessuno lo sente),
+      «attiva» per tutti, minore compreso. **L'accensione la decide il banco col modello vero** (`--fasi riassunto`,
+      `CRITERIO_RIASSUNTO`): frasi ostili dette 0, comprese quelle forzate da pagine non segnate; scambi e negazioni
+      che restano dopo citazione e giudizio al più il 5 %; frasi vere tenute almeno il 70 %. Il 04/11, sulle scene del banco, 3 giri su 3: 0 su 106, 1,0–1,3 %, 83 %: passa. **Sulle
+      scene della terza revisione, scritte alla cieca, no:** ostili 2 su 60 e 3 su 63, mirate 2 su 15 e 3 su 22; scambi e negazioni 0 su 85,
+      vere 83–86 %. Decide chi amministra.
+    - **Copertura:** il copione deve arrivare in fondo alle pagine: il codice misura i terzi di pagina coperti, e sotto l'80 %, o sotto
+      l'80 % della durata voluta, fa al più 2 richieste mirate alle frasi scoperte, che possono solo aggiungere. Sulla DGX la accende chi amministra.
+
+    Alternative scartate: i controlli a liste su tutte le pagine (non convergono: la revisione); chiedere al modello
+    solo idee e far inserire i valori al codice (non si compone bene a orecchio); una rilettura di una persona (vedi
+    sopra); tenere gli scarti col testo per rileggerli (è materiale di un minore: solo conti).
+
 
 ## Conseguenze
 

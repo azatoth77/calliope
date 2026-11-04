@@ -1817,7 +1817,7 @@ DOVE_ASCOLTA = ("Il ripasso da ascoltare lo trovi nello Studio sul telefono o su
 
 
 def _ascolta(ctx: ToolContext, azione: str = "", cosa: str = "", numero=None, verifica=None,
-             materia: str = "", per: str = "") -> dict:
+             materia: str = "", per: str = "", fonte: str = "") -> dict:
     svc = _svc(ctx)
     if svc is None:
         return _f(SPENTO, ok=False)
@@ -1874,7 +1874,9 @@ def _ascolta(ctx: ToolContext, azione: str = "", cosa: str = "", numero=None, ve
                     return {"ok": False, "errore": "manca il numero dell'argomento",
                             "cosa_fare": "Chiedi il numero dell'argomento, oppure usa cosa "
                                          "«oggi» o «tutto»."}
-            lett = svc.ascolto_prepara(chi, v["id"], cosa, n, "inizia")
+            lett = svc.ascolto_prepara(chi, v["id"], cosa, n, "inizia",
+                                       fonte="pagine" if str(fonte).strip().lower() == "pagine"
+                                       else None)
     except ProvaAperta:
         note_rule(ctx, "studio_ascolta_prova")
         # In terza persona: lo può chiedere anche il tutore del ragazzo che fa la prova
@@ -1901,15 +1903,17 @@ def _ascolta(ctx: ToolContext, azione: str = "", cosa: str = "", numero=None, ve
 
 DESCRIZIONE_ASCOLTA = (
     "Il ripasso da ascoltare dello Studio, letto ad alta voce («fammi ascoltare il ripasso», "
-    "«leggimi le pagine di oggi», «ripassiamo le carte ascoltando»): Calliope legge le pagine "
-    "lette dei suoi argomenti e le carte, da sola, dopo la tua risposta. azione «inizia» con cosa "
-    "«oggi» (le pagine di oggi del piano, di serie), «tutto», «argomento» (con numero = la "
-    "posizione nell'elenco) o «carte»; dopo «Calliope, basta»: «riprendi», «ripeti» (dall'inizio "
-    "del paragrafo) o «ferma» (chiude). verifica = l'id o materia; per = il nome del ragazzo se lo "
-    "chiede il tutore. Non leggere tu il testo: lo legge il codice.")
+    "«leggimi le pagine di oggi», «ripassiamo le carte ascoltando»): Calliope dice il riassunto delle "
+    "pagine, se è pronto, altrimenti le pagine lette dei suoi argomenti, e le carte, da sola, dopo la "
+    "tua risposta. azione «inizia» con cosa «oggi» (ciò che tocca oggi nel piano, di serie), «tutto», "
+    "«argomento» (con numero = la posizione nell'elenco) o «carte»; fonte «pagine» solo se la persona "
+    "vuole proprio sentire le pagine parola per parola; dopo «Calliope, basta»: «riprendi», «ripeti» "
+    "(dall'inizio del paragrafo) o «ferma» (chiude). verifica = l'id o materia; per = il nome del "
+    "ragazzo se lo chiede il tutore. Non leggere tu il testo: lo legge il codice.")
 PARAMETRI_ASCOLTA = {"type": "object", "properties": {
     "azione": {"type": "string", "enum": list(AZIONI_ASCOLTA)},
     "cosa": {"type": "string", "enum": ["oggi", "tutto", "argomento", "carte"]},
+    "fonte": {"type": "string", "enum": ["riassunto", "pagine"]},
     "numero": {"type": "integer"}, "verifica": {"type": "integer"},
     "materia": {"type": "string"}, "per": {"type": "string"}},
     "required": ["azione"]}

@@ -553,6 +553,12 @@ def _aggiungi(prime, altre, mancano: set, pulita=None):
     return buone + nuove + [x for x in vecchie if not pulita(x)]
 
 
+def C_forma_titolo_ok(titolo, nomi) -> bool:
+    """Il titolo di un argomento si può passare al giudizio del riassunto? (#386)"""
+    from . import riassunto_controllo as C
+    return C._vietata(str(titolo or "")) is None and not C.S.scarto(str(titolo or ""), nomi, True)
+
+
 class Lettore:
     """Il thread della lettura. `cliente`: un client dell'agente con `chat(body, controlla=…)`
     (ClienteOpenAI, di solito avvolto in ClienteCedevole); `guardia`: `Guardia` o un oggetto
@@ -826,7 +832,9 @@ class Lettore:
                 # anche la lettura), con la stessa guardia e in più la voce ferma da un po'
                 # (`arbitro_memoria.quiete`, la definizione unica). Senza la voce ferma si salta
                 # soltanto: il giro finisce e la pagina nuova che arriva sveglia il lettore.
-                esito = self._passo_preparazione()
+                esito = self._passo_riassunto()
+                if esito is None:
+                    esito = self._passo_preparazione()
                 if esito is None:
                     self.in_attesa = None
                     return {"fatte": fatte}
@@ -1577,6 +1585,24 @@ class Lettore:
             return esito
         return "fatta"
 
+    def _passo_riassunto(self) -> str | None:
+        """Un passo del riassunto da ascoltare (#386), come la preparazione: dopo tutte le pagine, con la
+        guardia e la voce ferma, perché pesa sul processo della voce e non ha fretta. Il momento vero lo
+        deciderà la #384."""
+        per = self.studio.verifiche_per_riassunto()
+        if not per:
+            return None
+        motivo = self.guardia.motivo() or self._voce_non_ferma()
+        if motivo is not None:
+            if motivo != self.in_attesa:
+                self._registra(f"riassunto in attesa: {motivo}")
+            self.in_attesa = motivo
+            self.misure["attese"] += 1
+            return motivo
+        self.in_attesa = None
+        esito = self.riassumi(per[0]["id"], per[0])
+        return esito if esito in ("ceduta", "giu", "errore", "errore_server") else "fatta"
+
     def _voce_non_ferma(self) -> str | None:
         """«voce non ferma» se la voce non è ferma da `studio_preparazione_quiete_s` secondi
         (la preparazione è il lavoro meno urgente: aspetta anche la voce, non solo vLLM)."""
@@ -1659,6 +1685,131 @@ class Lettore:
                        f"{len(val['reazioni'])} reazioni, {len(val['misure'])} misure, "
                        f"{ris['scartati']} scartati ({s:.1f} s)")
         return "proposte"
+
+    def riassumi(self, vid, v: dict | None = None) -> str:
+        """Il riassunto da ascoltare di una verifica a pagine lette (#386): il copione del modello
+        controllato dal codice (studio/riassunto.py). Si può chiamare da sola (`vid`, la #384 deciderà
+        quando): «niente» se non c'è da fare. Gli esiti delle altre generazioni, più «corto», «pronto»,
+        «scarso». Nel registro solo conti."""
+        from . import argomenti as A
+        from . import genera as G
+        from . import riassunto as R
+        v = v or self.studio.riassunto_richiesta(vid)
+        if v is None:
+            return "niente"
+        m = self.misure.setdefault("riassunto", {
+            "generazioni": 0, "pronti": 0, "scarsi": 0, "corti": 0, "rotte": 0, "cambiate": 0,
+            "cedute": 0, "frasi_proposte": 0, "frasi_tenute": 0, "non_trovati": 0, "giudizi": 0,
+            "giudizio_no": 0, "secondi": 0.0, "secondi_giudizi": 0.0, "token_in": 0, "token_out": 0,
+            "lunghi": 0})
+        vid, firma, nomi = int(v["id"]), v["_firma"], v["_nomi"]
+        rif = A.riferimenti(v["_pagine"])
+        arif = G.argomenti_rif(v["_argomenti"])
+        piano = R.piano(v["_argomenti"], v["_pagine"], nomi)
+        # Le frasi numerate e i loro valori una volta sola per giro (mai per ogni voce: CPU nel processo
+        # della voce)
+        M = R.materiale(rif, nomi, v.get("materia"))
+        if R.troppo_lungo(M):
+            m["lunghi"] += 1
+            self.studio.proponi_riassunto(vid, firma, None, R.LUNGO)
+            self._registra(f"verifica {vid}: riassunto no, {len(M.frasi)} frasi non stanno in una richiesta")
+            return "lungo"
+        if piano["corto"]:
+            m["corti"] += 1
+            self.studio.proponi_riassunto(vid, firma, None, R.CORTO)
+            self._registra(f"verifica {vid}: riassunto no, le pagine si leggono in "
+                           f"{piano['lettura_s']:.0f} s")
+            return "corto"
+        utili = R.argomenti_utili(arif, rif, M)
+        t0 = time.monotonic()
+        grezzi = None
+        # `_una_lista` azzera gli errori quando il copione arriva: un errore fisso nei giudizi girerebbe
+        # in tondo a pieno ritmo, copione compreso. Si azzerano solo a giro finito
+        errori_prima = self._errori_di_fila
+        try:
+            if utili:
+                grezzi, _finita = self._chiedi_lista(
+                    lambda ar: R.corpo(self.modello, v, rif, ar, piano, M), utili, m, vid, "riassunto",
+                    R.leggi, R.parziale,
+                    lambda voci: {s["argomento"] for s in
+                                  R.valida(voci, M, rif, arif, piano)["sezioni"]},
+                    lambda x: bool(R.valida([x], M, rif, arif, piano)["sezioni"]))
+            else:
+                grezzi = []
+            ris = None
+            t1 = time.monotonic()
+            if grezzi is not None:
+                # Il titolo è un dato che fa da leva al giudice: se non si direbbe, non si passa
+                titoli = {int(a["id"]): a["titolo"] for a in v["_argomenti"]
+                          if C_forma_titolo_ok(a["titolo"], nomi)}
+                ris = R.con_copertura(
+                    grezzi, M, rif, arif, piano,
+                    lambda mirata: self._una_lista(R.corpo_scoperte(self.modello, v, rif, mirata, M), m, vid,
+                                                   "riassunto", R.leggi, R.parziale)[0],
+                    lambda f: self._giudizio_frase(f, M, m, v, titoli.get(f.get("argomento"), "")))
+            m["secondi_giudizi"] = round(m["secondi_giudizi"] + time.monotonic() - t1, 2)
+        except Ceduta:
+            m["cedute"] += 1
+            self._registra(f"verifica {vid}: riassunto, ceduto il passo a un lavoro dell'agente")
+            return "ceduta"
+        except _Giu:
+            return "giu"
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            self._errori_di_fila = errori_prima
+            attesa = self._attendi_errore()
+            self._registra(f"verifica {vid}: riassunto, errore del server ({e}), riprovo fra "
+                           f"{attesa:.0f} s")
+            return "errore_server"
+        except Exception as e:  # noqa: BLE001
+            return self._errore_generazione("riassunto", vid, e, lambda: (
+                self.studio.proponi_riassunto(vid, firma, None, G.ERRORE)))
+        s = time.monotonic() - t0
+        try:
+            esito = G.ROTTO if ris is None else R.giudica(ris)
+            n = self.studio.proponi_riassunto(vid, firma, ris, esito)
+        except Exception as e:  # noqa: BLE001
+            return self._errore_generazione("riassunto", vid, e, lambda: (
+                self.studio.proponi_riassunto(vid, firma, None, G.ERRORE)))
+        if n is None:
+            m["cambiate"] += 1
+            self._registra(f"verifica {vid}: pagine o prova cambiate durante il riassunto")
+            return "cambiate"
+        m["generazioni"] += 1
+        m["secondi"] = round(m["secondi"] + s, 2)
+        if ris is None:
+            m["rotte"] += 1
+            self._registra(f"verifica {vid}: riassunto illeggibile ({s:.1f} s)")
+            return "rotto"
+        c = ris["conti"]
+        m["frasi_proposte"] += c["proposte"]
+        m["frasi_tenute"] += c["tenute"]
+        m["non_trovati"] += c["non_trovati"]
+        m["pronti" if esito == R.PRONTO else "scarsi"] += 1
+        motivi = ", ".join(f"{k} {x}" for k, x in sorted(c["motivi"].items()))
+        self._registra(f"verifica {vid}: riassunto {esito}{' in ombra' if self.studio.riassunto_modo() == R.OMBRA else ''}: "
+                       f"{c['tenute']} frasi su {c['proposte']}, {n} sezioni, {c['durata_s']:.0f} s "
+                       f"su {c['lettura_s']:.0f} s di pagine ({s:.1f} s"
+                       + (f"; fuori: {motivi}" if motivi else "") + ")")
+        if esito == R.PRONTO:
+            self.studio.riassunto_audio(vid)
+        return esito
+
+    def _giudizio_frase(self, f: dict, M, m: dict, v: dict, titolo: str) -> str | None:
+        """Il giudizio indipendente e il guardiano su una frase rimasta: None se resta, o il motivo. Una
+        risposta che non si legge è un no; il server giù risale (si riprova il giro: `riassumi`)."""
+        from . import riassunto as R
+        r = self._chiedi_corpo(R.corpo_giudizio(self.modello, f["testo"], M.testo_fonte(f["fonti"]),
+                                                v.get("materia") or "", titolo))
+        if not r.get("fine"):
+            raise ErroreServer("stream senza fine")     # come `_una_lista`: mai «scarso» per un guasto
+        m["token_in"] += int(r.get("prompt") or 0)
+        m["token_out"] += int(r.get("eval") or 0)
+        m["giudizi"] += 1
+        if not R.leggi_giudizio(r.get("content")):
+            m["giudizio_no"] += 1
+            return "giudizio"
+        return self.studio.riassunto_guardia(v["persona"], f["testo"])
 
     def _errore_generazione(self, cosa: str, vid: int, e: Exception, scrivi_errore) -> str:
         """Un errore nostro in una generazione (carte o mappa): l'esito «errore» con la firma, così

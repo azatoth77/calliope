@@ -224,6 +224,7 @@ def cfg_nuova(nome, modo="ombra", **kw):
     (TMP / nome).mkdir(parents=True, exist_ok=True)
     c.config_dir = str(TMP / nome)
     c.studio_modo = modo
+    c.studio_riassunto = "spenta"  # le generazioni si provano una alla volta
     c.studio_cartella = "studio"
     c.turn_log_dir = str(TMP / nome / "registro")
     c.agenti_enabled = False
