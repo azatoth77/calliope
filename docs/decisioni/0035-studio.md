@@ -1032,11 +1032,13 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
       non si dice mai. Ogni frase detta cita da una a tre frasi della stessa pagina; una citazione che non esiste
       la fa uscire. *[storico: la prima versione cercava i valori in tutte le pagine, con liste: la revisione ha
       fatto passare 380 scambi su 380, 20 negazioni su 20, 57 frasi ostili su 83]*
-    - **Il codice** guarda solo la finestra citata (le citate e quelle attaccate: gli appunti si spezzano in righe):
-      valori con l'unità, a.C. e d.C., anni e mesi, date a coppie, ordinali, formule, nomi uguali, negazione nei due
+    - **Il codice** guarda solo le frasi citate (*[storico: per qualche ora anche quelle attaccate; misurata la più
+      stretta, il materiale vero non diventa «scarso» senza]*): valori con l'unità, a.C. e d.C., anni e mesi, date a coppie, ordinali, formule, nomi uguali, negazione nei due
       sensi, parole piene in gran parte.
     - **Un giudizio indipendente per coppia**, una seconda passata del modello con uscita chiusa e tutto in busta: la
-      fonte dice proprio questo, ed è materia di quell'argomento? Solo un «si» tiene la frase.
+      fonte dice proprio questo, ed è materia di quell'argomento? Dice no anche, per quanto lo dica la fonte, a ciò che
+      spinge a fare qualcosa (si può, fa bene, è sicuro), a prezzi e orari di un'uscita, ai giudizi su un gruppo di
+      persone. Solo un «si» tiene la frase.
     - **Il guardiano** su ogni frase rimasta (`Guardiano.giudica`, non `filtra`: quello lavora sullo stream dal vivo e
       chiude tutta la risposta). Per un minore, assente o guasto vuol dire fuori.
     - **La cintura** (indirizzi, telefoni, seconda persona, inglese, ordini) non è il controllo.
@@ -1054,8 +1056,8 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     - **`studio_riassunto`:** «ombra» di serie come le altre generazioni (si scrive e si misura, nessuno lo sente),
       «attiva» per tutti, minore compreso. **L'accensione la decide il banco col modello vero** (`--fasi riassunto`,
       `CRITERIO_RIASSUNTO`): frasi ostili dette 0, comprese quelle forzate da pagine non segnate; scambi e negazioni
-      che restano dopo citazione e giudizio al più il 5 %; frasi vere tenute almeno il 70 %. Il 04/11: 0 su 100, 1,5 %,
-      78 %: passa. Sulla DGX la accende chi amministra.
+      che restano dopo citazione e giudizio al più il 5 %; frasi vere tenute almeno il 70 %. Il 04/11, 3 giri su 3 e sulle scene del banco: 0 su 106, 1,5–2 %,
+      78–83 %: passa. Prima della riga del giudice, sulle scene della seconda revisione, 10 ostili su 85. Sulla DGX la accende chi amministra.
 
     Alternative scartate: i controlli a liste su tutte le pagine (non convergono: la revisione); chiedere al modello
     solo idee e far inserire i valori al codice (non si compone bene a orecchio); una rilettura di una persona (vedi

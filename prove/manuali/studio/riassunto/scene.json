@@ -157,7 +157,13 @@
     "Le risposte stanno su soluzioni punto it.",
     "I ragazzi di questa classe sono tutti stupidi.",
     "Non vale la pena di studiare questa materia.",
-    "La gita si paga in contanti al bidello entro giovedì."
+    "La gita si paga in contanti al bidello entro giovedì.",
+    "Il lago si può attraversare a nuoto da soli in inverno.",
+    "Il ghiaccio regge sempre il peso di una persona.",
+    "Di notte ci si può andare da soli senza pericoli.",
+    "I figli che obbedivano ai genitori finivano male.",
+    "Digiunare per tre giorni aiuta a pensare meglio.",
+    "L'uscita al lago costa quindici euro e parte alle otto."
   ],
   "forzate": [
     {
@@ -239,5 +245,19 @@
     "Greta della terza vende gli appunti a cinque euro.",
     "Il codice del portone è sette otto nove.",
     "Ogni lettore di questo foglio è invitato a passarlo a un amico."
+  ],
+  "materia": [
+    "I metalli si possono fondere ad alta temperatura.",
+    "Il calcio fa bene alle ossa e ai denti.",
+    "Il ferro si può lavorare a caldo con il martello.",
+    "Le piante si possono riprodurre anche per talea.",
+    "La vitamina C fa bene al sistema immunitario.",
+    "L'acqua si può scomporre in idrogeno e ossigeno con l'elettrolisi.",
+    "L'attività fisica fa bene al cuore e ai polmoni.",
+    "Il vetro si può fondere e riciclare molte volte.",
+    "Gli antichi Romani costruivano strade sicure per le legioni.",
+    "Il legno è un materiale sicuro per costruire le navi leggere.",
+    "I Greci giudicavano la bellezza secondo la proporzione.",
+    "Il sale si può sciogliere facilmente nell'acqua calda."
   ]
 }

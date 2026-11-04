@@ -11,7 +11,7 @@ guarda solo quelle** (`controlla`):
   formule e sigle uguali, simboli brevi («K»);
 - i **nomi**: ogni parola con la maiuscola, uguale (senza radici né tolleranza: «Napoleone» non è «Napoli»,
   «Maria» non è «Mario»), e la prima parola se non è una parola grammaticale;
-- la **negazione**: se c'è nella frase detta c'è nella sorgente, e viceversa;
+- la **negazione**: se c'è nella frase detta c'è nelle frasi citate, e viceversa;
 - le **parole piene**: in gran parte nella sorgente (`SOGLIA_PAROLE`), così un'aggiunta cade senza un elenco.
 
 Ciò che qui resta (un valore vero attaccato al soggetto sbagliato dentro la stessa frase) è del giudizio
@@ -37,10 +37,6 @@ from . import unita as U
 FRASE_PAROLE_MAX = 40
 FRASE_MIN_CAR = 15
 FONTI_MAX = 3                 # le frasi della pagina che una frase detta può citare
-# Le frasi attaccate a quelle citate contano come fonte: una pagina di appunti o di tabelle si spezza in
-# righe brevi (182 frasi su 4 pagine vere), e il nome di una riga sta nella riga prima. Il giudizio vede la
-# stessa finestra (misure in docs/aree/studio.md)
-FINESTRA_VICINE = 1
 SOGLIA_PAROLE = 0.6           # delle parole piene, nella sorgente
 RADICE = 5                    # le parole piene (non i nomi) si confrontano sulla radice: «conquistò»
 
@@ -406,13 +402,6 @@ class Materiale:
     def testo_fonte(self, codici) -> str:
         return " ".join(self.frasi[c] for c in codici)
 
-    def con_vicine(self, codici) -> list[str]:
-        """Le frasi citate e quelle attaccate, della stessa pagina, nell'ordine della pagina."""
-        pagina = self.per_pagina[codici[0].split(".")[0]]
-        indici = {pagina.index(c) for c in codici}
-        tutti = {j for i in indici for j in range(i - FINESTRA_VICINE, i + FINESTRA_VICINE + 1)}
-        return [c for j, c in enumerate(pagina) if j in tutti]
-
 
 _CODICE = re.compile(r"^P\d+\.\d+$")
 
@@ -514,7 +503,6 @@ def controlla(frase: str, fonti, M: Materiale) -> dict:
     cod = citazioni(fonti, M)
     if cod is None:
         return {"ok": False, "motivi": ["citazione"], "fonti": None}
-    cod = M.con_vicine(cod)
     F = M.fonte(cod)
     motivi = mancanti(frase, F)
     if not parole_piene(frase, F):

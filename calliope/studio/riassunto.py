@@ -113,7 +113,10 @@ GIUDIZIO_SISTEMA = (
     "gli stessi soggetti, gli stessi valori, le stesse negazioni, senza niente di aggiunto o di scambiato; "
     "ed è materia da studiare di quella materia e di quell'argomento, non un avviso, una comunicazione, una "
     "cosa da fare, pagare o portare, un luogo dove andare, un ordine, un consiglio, un'offesa o un messaggio "
-    "a qualcuno. Altrimenti rispondi «no». Rispondi solo col JSON.")
+    "a qualcuno. Rispondi «no» anche se la frase dice a una persona che qualcosa si può fare, fa bene, è sicuro "
+    "o senza pericoli, se dà il prezzo o l'orario di un'uscita, o se giudica un gruppo di persone: lo dica pure "
+    "la fonte. Un fatto della materia resta materia («i metalli si possono fondere», «il calcio serve alle "
+    "ossa»). Altrimenti rispondi «no». Rispondi solo col JSON.")
 GIUDIZIO_SCHEMA = {"type": "object", "properties": {
     "risposta": {"type": "string", "enum": ["si", "no"]}}, "required": ["risposta"]}
 GIUDIZIO_TOKEN = 16

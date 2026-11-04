@@ -1362,85 +1362,104 @@ def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None, guardian
                 f"{riga['motivi']}, copione {riga['secondi']:.0f} s, giudizi {riga['secondi_giudizi']:.0f} s"
                 + (f", sintesi {riga['sintesi_s']} s per {riga['audio_s']} s" if "sintesi_s" in riga else ""))
 
-    # ── le scene, con le pagine ostili NON segnate: il caso peggiore ──
-    somma = {k: {"n": 0, "dopo_codice": 0, "dette": 0}
-             for k in ("scambi", "negazioni", "ostili", "ostili_nuove", "ostili_terze", "forzate", "vere")}
-    resti: dict = {k: [] for k in somma}
-    tempi_g.clear()
-    t_scene = time.monotonic()
+    def giro_scene():
+        # ── le scene, con le pagine ostili NON segnate: il caso peggiore ──
+        somma = {k: {"n": 0, "dopo_codice": 0, "dette": 0}
+                 for k in ("scambi", "negazioni", "ostili", "ostili_nuove", "ostili_terze", "forzate", "vere", "materia")}
+        resti: dict = {k: [] for k in somma}
+        tempi_g.clear()
+        t_scene = time.monotonic()
 
-    def passa(tipo, frase, fonti, M, ver_):
-        s = somma[tipo]
-        s["n"] += 1
-        e = C.controlla(frase, fonti, M)
-        if not e["ok"]:
-            resti.setdefault(tipo + "_codice", []).append(e["motivi"])
-            return False
-        s["dopo_codice"] += 1
-        if not giudice(frase, M.testo_fonte(e["fonti"]), ver_["materia"], ver_.get("argomento") or "") \
-                or not guarda(frase):
-            return False
-        s["dette"] += 1
-        resti[tipo].append(frase)
-        return True
+        def passa(tipo, frase, fonti, M, ver_):
+            s = somma[tipo]
+            s["n"] += 1
+            e = C.controlla(frase, fonti, M)
+            if not e["ok"]:
+                resti.setdefault(tipo + "_codice", []).append(e["motivi"])
+                return False
+            s["dopo_codice"] += 1
+            if not giudice(frase, M.testo_fonte(e["fonti"]), ver_["materia"], ver_.get("argomento") or "") \
+                    or not guarda(frase):
+                return False
+            s["dette"] += 1
+            resti[tipo].append(frase)
+            return True
 
-    mats = {vid: ver for vid, ver in tutte.items() if ver.get("argomenti")}
-    for vid, ver in mats.items():
-        _p, _a, rif, _ar = costruisci(ver, vid, False)
-        M = R.materiale(rif, NOMI_BANCO, ver["materia"])
-        for x in _scene_scambi(M):
-            passa("scambi", x["testo"], x["fonti"], M, ver)
-        for x in _scene_negazioni(M):
-            passa("negazioni", x["testo"], x["fonti"], M, ver)
-    # Le ostili dentro una pagina di fantasia non segnata, ognuna citata da sé stessa
-    ver = mats.get("geografia-ostile") or next(iter(mats.values()))
-    base = {p["id"]: p["testo"] for p in ver["pagine"]}
-    pid = ver["pagine"][0]["id"]
-    # (`ostili_terze` non sono servite a mettere a punto niente: dicono se regge su ciò che non ha visto;
-    # `ostili_nuove` lo erano, finché due non sono passate e il giudizio ha ricevuto materia e argomento)
-    for tipo in ("ostili", "ostili_nuove", "ostili_terze"):
-        for frase in scene[tipo]:
+        mats = {vid: ver for vid, ver in tutte.items() if ver.get("argomenti")}
+        for vid, ver in mats.items():
+            _p, _a, rif, _ar = costruisci(ver, vid, False)
+            M = R.materiale(rif, NOMI_BANCO, ver["materia"])
+            for x in _scene_scambi(M):
+                passa("scambi", x["testo"], x["fonti"], M, ver)
+            for x in _scene_negazioni(M):
+                passa("negazioni", x["testo"], x["fonti"], M, ver)
+        # Le ostili dentro una pagina di fantasia non segnata, ognuna citata da sé stessa
+        ver = mats.get("geografia-ostile") or next(iter(mats.values()))
+        base = {p["id"]: p["testo"] for p in ver["pagine"]}
+        pid = ver["pagine"][0]["id"]
+        # (`ostili_terze` non sono servite a mettere a punto niente: dicono se regge su ciò che non ha visto;
+        # `ostili_nuove` lo erano, finché due non sono passate e il giudizio ha ricevuto materia e argomento)
+        for tipo in ("ostili", "ostili_nuove", "ostili_terze"):
+            for frase in scene[tipo]:
+                testi = dict(base)
+                testi[pid] = base[pid] + "\n" + frase
+                _p, _a, rif, _ar = costruisci(ver, "scene", False, testi)
+                M = R.materiale(rif, NOMI_BANCO, ver["materia"])
+                cod = next((c for c, f in M.frasi.items() if f.strip() == frase.strip()), None)
+                if cod is None:
+                    somma[tipo]["n"] += 1    # la cintura l'ha tolta dalle fonti: non si può citare
+                    continue
+                passa(tipo, frase, [cod], M, ver)
+        for x in scene["forzate"]:
+            _p, _a, rif, _ar = costruisci(ver, "scene", False)
+            M = R.materiale(rif, NOMI_BANCO, ver["materia"])
+            passa("forzate", x["testo"], [next(iter(M.frasi))], M, ver)
+        for x in scene["vere"]:
+            v2 = mats.get(x["verifica"])
+            if v2 is None:
+                continue
+            _p, _a, rif, _ar = costruisci(v2, x["verifica"], False)
+            M = R.materiale(rif, NOMI_BANCO, v2["materia"])
+            cod = next((c for c, f in M.frasi.items() if x["fonte"] in f), None)
+            if cod is None:
+                somma["vere"]["n"] += 1
+                resti.setdefault("vere_senza_fonte", []).append(x["testo"])
+                continue
+            if not passa("vere", x["testo"], [cod], M, v2):
+                resti.setdefault("vere_perse", []).append(x["testo"])
+        # I fatti di materia con «si può», «fa bene»: la riga del giudice non li deve buttare
+        for frase in scene["materia"]:
             testi = dict(base)
-            testi[pid] = base[pid] + "\n" + frase
+            testi[pid] = frase
             _p, _a, rif, _ar = costruisci(ver, "scene", False, testi)
             M = R.materiale(rif, NOMI_BANCO, ver["materia"])
             cod = next((c for c, f in M.frasi.items() if f.strip() == frase.strip()), None)
             if cod is None:
-                somma[tipo]["n"] += 1    # la cintura l'ha tolta dalle fonti: non si può citare
-                continue
-            passa(tipo, frase, [cod], M, ver)
-    for x in scene["forzate"]:
-        _p, _a, rif, _ar = costruisci(ver, "scene", False)
-        M = R.materiale(rif, NOMI_BANCO, ver["materia"])
-        passa("forzate", x["testo"], [next(iter(M.frasi))], M, ver)
-    for x in scene["vere"]:
-        v2 = mats.get(x["verifica"])
-        if v2 is None:
-            continue
-        _p, _a, rif, _ar = costruisci(v2, x["verifica"], False)
-        M = R.materiale(rif, NOMI_BANCO, v2["materia"])
-        cod = next((c for c, f in M.frasi.items() if x["fonte"] in f), None)
-        if cod is None:
-            somma["vere"]["n"] += 1
-            resti.setdefault("vere_senza_fonte", []).append(x["testo"])
-            continue
-        if not passa("vere", x["testo"], [cod], M, v2):
-            resti.setdefault("vere_perse", []).append(x["testo"])
-    sc, ne, ve = somma["scambi"], somma["negazioni"], somma["vere"]
-    tasso = (sc["dette"] + ne["dette"]) / max(1, sc["n"] + ne["n"])
-    tenute_vere = ve["dette"] / max(1, ve["n"])
-    ostili_dette = sum(somma[k]["dette"] for k in ("ostili", "ostili_nuove", "ostili_terze", "forzate"))
-    riass = {"scene": somma, "scambi_negazioni_restano": round(tasso, 3), "vere_tenute": round(tenute_vere, 3),
-             "ostili_dette": ostili_dette, "giudizi": len(tempi_g),
-             "secondi_per_giudizio": round(sum(tempi_g) / max(1, len(tempi_g)), 2),
-             "secondi_scene": round(time.monotonic() - t_scene, 1),
+                somma["materia"]["n"] += 1
+                resti.setdefault("materia_persa", []).append(frase)
+            elif not passa("materia", frase, [cod], M, {"materia": "Scienze", "argomento": "La materia"}):
+                resti.setdefault("materia_persa", []).append(frase)
+        sc, ne, ve = somma["scambi"], somma["negazioni"], somma["vere"]
+        tasso = (sc["dette"] + ne["dette"]) / max(1, sc["n"] + ne["n"])
+        tenute_vere = ve["dette"] / max(1, ve["n"])
+        ostili_dette = sum(somma[k]["dette"] for k in ("ostili", "ostili_nuove", "ostili_terze", "forzate"))
+        riass = {"scene": somma, "scambi_negazioni_restano": round(tasso, 3), "vere_tenute": round(tenute_vere, 3),
+                 "ostili_dette": ostili_dette, "giudizi": len(tempi_g),
+                 "secondi_per_giudizio": round(sum(tempi_g) / max(1, len(tempi_g)), 2),
+                 "secondi_scene": round(time.monotonic() - t_scene, 1),
+                 "materia_tenuta": f"{somma['materia']['dette']}/{somma['materia']['n']}",
              "passa": ostili_dette <= CRITERIO_RIASSUNTO["ostili_dette"]
-             and tasso <= CRITERIO_RIASSUNTO["scambi_negazioni_max"]
-             and tenute_vere >= CRITERIO_RIASSUNTO["vere_min"]}
-    out["_scene"] = riass
-    with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
-        f.write(json.dumps({"fase": "riassunto_scene", **riass, "resti": resti}, ensure_ascii=False) + "\n")
-    log(f"[riassunto] SCENE {json.dumps(riass, ensure_ascii=False)}")
+                 and tasso <= CRITERIO_RIASSUNTO["scambi_negazioni_max"]
+                 and tenute_vere >= CRITERIO_RIASSUNTO["vere_min"]}
+        with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps({"fase": "riassunto_scene", **riass, "resti": resti}, ensure_ascii=False) + "\n")
+        log(f"[riassunto] SCENE {json.dumps(riass, ensure_ascii=False)}")
+        return riass
+
+    # Più giri: la temperatura 0 non dà la stessa risposta ogni volta. Passa solo se passano tutti
+    giri = [giro_scene() for _g in range(3)]
+    out["_scene"] = {"giri": giri, "passa": all(g["passa"] for g in giri)}
+    log(f"[riassunto] CRITERIO {'passa' if out['_scene']['passa'] else 'NON passa'} in tutti e 3 i giri")
     return out
 
 

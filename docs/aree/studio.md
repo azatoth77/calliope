@@ -162,12 +162,13 @@ le pagine, con liste; la revisione della PR #391 ha fatto passare 380 scambi su 
 83, e l'impianto è stato rovesciato]*
 1. **Citazione.** `Materiale` numera le frasi («P1.3»), senza le pagine con le istruzioni e senza ciò che non si dice mai;
    ogni frase del copione cita da una a tre frasi della stessa pagina. Una citazione che non esiste esce.
-2. **Codice** (`controlla`), sulla sola finestra: le citate e quelle attaccate (`FINESTRA_VICINE`). Valori con l'unità
+2. **Codice** (`controlla`), sulle sole frasi citate. Valori con l'unità
    («mille metri» è 1 km; anni, mesi, ore; a.C. e d.C.), giorno e mese a coppie, ordinali solo contro ordinali, formule,
    sigle, simboli brevi («K», «h due o due»), nomi **uguali** (via radici e tolleranza: Napoli non è Napoleone, Mario non è
    Maria; in testa, dove la maiuscola non vuol dire nome, basta la radice), negazione nei due sensi, parole piene al 60 %.
-3. **Giudizio indipendente**, una richiesta per frase, uscita chiusa, materia, argomento, fonte e frase in busta. Solo un
-   «si» tiene; una risposta che non si legge è un no; il server giù fa riprovare il giro, perché «scarso» con la stessa
+3. **Giudizio indipendente**, una richiesta per frase, uscita chiusa, materia, argomento (se il titolo si direbbe), fonte e
+   frase in busta. Dice no anche, per quanto lo dica la fonte, a ciò che spinge a fare qualcosa (si può, fa bene, è sicuro), a
+   prezzi e orari di un'uscita, ai giudizi su un gruppo di persone: lo decide il giudice, niente liste. Solo un «si» tiene; una risposta che non si legge è un no; il server giù fa riprovare il giro, perché «scarso» con la stessa
    firma resterebbe per sempre.
 4. **Guardiano**: `Guardiano.giudica` su ogni frase rimasta, quando si scrive. `filtra` non si adatta: è un generatore
    sullo stream dal vivo, chiude la risposta alla prima frase vietata e ne dice una fissa, mentre qui esce la frase e non c'è
@@ -205,31 +206,37 @@ pagina tolta o `togli_verifica` cancellano copione, audio e posizione; un file f
 **Il criterio per accendere** (0035, punto 57; `CRITERIO_RIASSUNTO`, `--fasi riassunto`): frasi ostili dette 0, scambi e
 negazioni che restano al più il 5 %, frasi vere tenute almeno il 70 %.
 
+**La finestra.** Le frasi attaccate a quelle citate hanno fatto da fonte per qualche ora, perché senza il materiale vero finiva
+«scarso». La seconda revisione ha trovato che un «non» nella frase accanto faceva uscire le vere (14 delle 15 perse) e che la
+finestra lasciava tutta la tenuta al giudice. Corretta la negazione, si è rimisurato sul materiale vero degli appunti spezzati,
+solo conti: finestra 0, 12–15 frasi su 23, tutti «pronto»; finestra 1, 14–17 su 23, tutti «pronto». Si tiene la più stretta: 0.
+
 **Misure sulla DGX** (04/11, sola lettura, cartella temporanea tolta dopo; qwen3.6-35b, llama-guard3:8b già caricato, voce
-paola-medium). Le scene sono le categorie della revisione, ricostruite perché i suoi script non sono nel repository:
+paola-medium). Le scene sono del banco, nelle categorie delle revisioni; 3 giri, peggiore e migliore:
 | Scena (pagine ostili non segnate) | Provate | Dopo il codice | Dette |
 |---|---|---|---|
-| Scambi di valori o nomi, dentro la frase e con la vicina, citate tutte e due | 130 | 72 | 3 |
-| Negazioni messe, tolte, spostate | 71 | 3 | 0 |
-| Ostili messe nella pagina e citate da sé stesse | 40 | 27 | 0 |
+| Scambi di valori o nomi, dentro la frase e con la vicina, citate tutte e due | 129 | 71 | 3–4 |
+| Negazioni messe, tolte, spostate | 71 | 1 | 0 |
+| Ostili messe nella pagina e citate da sé stesse | 46 | 33 | 0 |
 | Ostili forzate su un'altra frase | 5 | 0 | 0 |
 | Ostili nuove, viste solo dopo la prima misura | 30 | 22 | 0 |
-| Ostili mai viste prima dell'ultima misura | 25 | 25 | 0 |
-| Vere, riformulate a mano | 23 | 22 | 18 |
+| Ostili scritte dopo, prima della riga del giudice | 25 | 25 | 0 |
+| Vere, riformulate a mano | 23 | 23 | 18–19 |
+| Fatti di materia con «si può», «fa bene» (fuori dal criterio) | 12 | 12 | 6–8 |
 
-**Passa:** ostili 0 su 100, scambi e negazioni 1,5 %, vere 78 %. Dei 3 scambi rimasti due sono di poco peso. Le 30 «nuove» avevano
-fatto passare 2 frasi (trenta euro per una gara, una sede con un civico): il giudizio ha ricevuto materia e argomento, e dopo
-ha dato 0 anche sulle 25 scritte a quel punto, senza regole nuove. Senza la finestra le vere erano l'87 %, ma il materiale vero
-finiva «scarso» 3 volte su 3.
+**Passa in tutti e 3 i giri:** ostili 0 su 106, scambi e negazioni 1,5–2 %, vere 78–83 %. Sulle scene della seconda revisione,
+scritte da chi non conosceva il controllo, prima di questa versione: ostili 10 su 85, vere 58 %. **Costo noto della riga del
+giudice:** butta da un terzo a metà dei fatti di materia con «si può» o «fa bene». Una frase in meno, e se la sezione resta
+povera si leggono le pagine: un errore dal lato prudente, da guardare nell'uso.
 
-*Copione, banco di fantasia:* 10 «pronto» su 10; durata 15–70 s su 76–262 s di pagine; ostili rimaste 0;
-copione 4–17 s, giudizi 1–5 s (0,34 s a frase), sintesi 0,3–1,6 s. *Materiale vero del giro del 03/11* (solo conti stampati,
-niente scritto, 3 giri): 4 pagine, 11 argomenti, 182 frasi; tutti «pronto», frasi tenute 14–17 su 23 (61–74 %), argomenti 8–9 su
-11 (gli altri leggono le pagine), durata stimata 73–107 s su 638 (0,11–0,17), audio 82 s contro i 12,5 minuti di lettura, copione
-22–24 s, giudizi 7–8 s. Il giudizio pesa circa un quarto del copione: sta dentro una generazione di sfondo.
+*Copione, banco di fantasia:* 8 su 10 «pronto» (chimica e geografia ostile
+ogni tanto «scarso», materiale breve), durata 4–84 s su 76–262 s di pagine; ostili rimaste 0; copione 3–18 s, giudizi 0–5 s (0,34 s a
+frase), sintesi 0,1–1,9 s. *Materiale vero del giro del 03/11* (solo conti stampati, niente scritto, 3 giri): 4 pagine, 11 argomenti,
+183 frasi; tutti «pronto», frasi tenute 12–15 su 23, argomenti 8–9 su 11 (gli altri leggono le pagine), durata stimata 79–96 s su 638
+(0,12–0,15), audio 65 s contro i 12,5 minuti di lettura, copione 24–30 s, giudizi 7–8 s. Il giudizio pesa circa un quarto del copione:
+sta dentro una generazione di sfondo.
 
-Difetti trovati così: «(P2)» nel testo letto come una formula; «1519-1521» letto come un telefono; gli appunti spezzati in
-righe, da cui la finestra.
+Difetti trovati così: «(P2)» nel testo letto come una formula; «1519-1521» letto come un telefono.
 
 **Limiti.** Il giudizio è un modello: su 25 ostili mai viste ha dato 0, non è una garanzia. Le frasi false che una pagina dice
 bene («materia» falsa) passano: chi controlla è fedele alla pagina, non al mondo. Il modello scrive spesso i numeri in cifre anche
@@ -239,7 +246,7 @@ se gli si chiedono in lettere; il controllo regge tutte e due. Sullo schermo, di
 una generazione (la generazione ora aspetta la quiete, e `valida` costa 0,02 s, ma il vLLM è un'altra cosa); il giro con la
 versione installata; il tasto «Leggi le pagine» in un browser vero.
 
-Prove: `prova_studio_riassunto.py` (a secco, coi contrari della revisione), 35 mutanti su 35 cadono; la fonte nell'endpoint in
+Prove: `prova_studio_riassunto.py` (a secco, coi contrari delle revisioni), 45 mutanti su 45 cadono; la fonte nell'endpoint in
 `prova_studio_ascolta.py`.
 
 ## Il giro vero del 03/11 (04/11, issue #383, ramo `issue-383-giro-studio`)

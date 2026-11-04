@@ -119,12 +119,10 @@ verifica("un valore vero di un'altra frase non vale", "numero" in C.controlla(
 verifica("contrario: nella frase citata sì", C.controlla("Il monte Sereno è alto 2140 metri.", ["P2.1"], M2)["ok"])
 M3 = C.Materiale({"P1": "Il fiume Aurelio nasce sul monte.\nIl fiume sfocia nel lago Quieto.\n"
                         "La sua acqua è molto fredda.\nIl pescatore Bruno vive sulla riva."}, (), NOMI)
-verifica("la frase attaccata conta: gli appunti si spezzano in righe", "nome" not in C.controlla(
+verifica("il nome della frase accanto non vale, se non la si cita", "nome" in C.controlla(
     "Il fiume Aurelio sfocia nel lago Quieto.", ["P1.1"], M3)["motivi"])
-verifica("contrario: quella più lontana no", "nome" in C.controlla(
-    "Il fiume Aurelio nasce vicino al pescatore Bruno.", ["P1.1"], M3)["motivi"])
-verifica("la finestra è della stessa pagina, in ordine", M3.con_vicine(["P1.3"]) == ["P1.2", "P1.3", "P1.4"]
-         and M2.con_vicine(["P2.1"]) == ["P2.1"])
+verifica("contrario: citata sì", "nome" not in C.controlla(
+    "Il fiume Aurelio sfocia nel lago Quieto.", ["P1.1", "P1.2"], M3)["motivi"])
 
 print("— i valori con la loro unità")
 F = ("Colombo sbarcò il 12 ottobre 1492 con 90 uomini e tre caravelle dopo 1.500 chilometri, "
@@ -236,6 +234,14 @@ for frase, fonte in (("Il ferro galleggia nell'acqua.", "Il ferro non galleggia 
     verifica(f"contrario: «{frase}»", "negazione" in motivi(frase, fonte), str(motivi(frase, fonte)))
 verifica("contrario: negazione presente nei due", "negazione" not in motivi(
     "Il ferro non galleggia.", "Il ferro non galleggia nell'acqua."))
+Mneg = C.Materiale({"P1": "Il ferro galleggia nel mercurio.\nIl rame non galleggia nell'acqua.\n"
+                          "Il sughero galleggia nell'acqua."}, (), NOMI)
+verifica("seconda revisione: il «non» nella frase accanto non fa uscire", "negazione" not in C.controlla(
+    "Il ferro galleggia nel mercurio.", ["P1.1"], Mneg)["motivi"])
+verifica("contrario: la negazione aggiunta resta fuori anche con la vicina che ce l'ha", "negazione" in C.controlla(
+    "Il ferro non galleggia nel mercurio.", ["P1.1"], Mneg)["motivi"])
+verifica("contrario: la negazione tolta dalla frase citata", "negazione" in C.controlla(
+    "Il rame galleggia nell'acqua.", ["P1.2"], Mneg)["motivi"])
 
 print("— le parole piene")
 SERIA = "La fotosintesi trasforma la luce in zuccheri nelle foglie verdi."
@@ -243,6 +249,9 @@ for nome, frase in (("un'aggiunta", "La fotosintesi è una cosa stupida e inutil
                     ("altro argomento", "La droga distrugge i giovani con grande rapidità."),
                     ("un'offesa", "Questo ragazzo resta incapace e ignorante per sempre.")):
     verifica(f"contrario: {nome}", "parole" in motivi(frase, SERIA), str(motivi(frase, SERIA)))
+verifica("seconda revisione: la soglia, due parole piene su quattro non bastano", "parole" in motivi(
+    "La fotosintesi trasforma cavalli galoppanti.", SERIA), str(motivi(
+        "La fotosintesi trasforma cavalli galoppanti.", SERIA)))
 verifica("riformulata con le stesse parole", not motivi(
     "Nelle foglie verdi la luce si trasforma in zuccheri.", SERIA), str(motivi(
         "Nelle foglie verdi la luce si trasforma in zuccheri.", SERIA)))
@@ -392,7 +401,7 @@ ris = valida(("A1", BUONE_1), ("A2", BUONE_2))
 verifica("le frasi buone restano, con la loro pagina e le fonti",
          [s["argomento"] for s in ris["sezioni"]] == [11, 12] and ris["conti"]["tenute"] == 4
          and ris["sezioni"][0]["frasi"][0]["pagine"] == [1]
-         and "P1.1" in ris["sezioni"][0]["frasi"][0]["fonti"], str(ris["conti"]))
+         and ris["sezioni"][0]["frasi"][0]["fonti"] == ["P1.1"], str(ris["conti"]))
 verifica("pronto", R.giudica(ris) == R.PRONTO, str(ris["conti"]))
 ris2 = valida(("A1", BUONE_1 + [{"testo": "Colombo sbarcò nel millequattrocentonovantatre.", "fonti": ["P1.1"]}]),
               ("A2", BUONE_2))
@@ -448,6 +457,11 @@ dg = valida(("A1", BUONE_1), ("A2", BUONE_2))
 R.dopo_giudizi(dg, lambda f: "giudizio" if "Palos" in f["testo"] or "ferro" in f["testo"] else None, piano_)
 verifica("il giudizio toglie la frase, e la metà tiene la sezione", dg["conti"]["tenute"] == 2
          and dg["conti"]["motivi"]["giudizio"] == 2 and len(dg["sezioni"]) == 2)
+dg3 = valida(("A1", BUONE_1 + [{"testo": "Nel quindicesimo secolo i Portoghesi cercavano una via per le Indie.",
+                                "fonti": ["P1.3"]}]), ("A2", BUONE_2))
+R.dopo_giudizi(dg3, lambda f: None if "dodici ottobre" in f["testo"] or f["pagine"] == [2] else "giudizio", piano_)
+verifica("seconda revisione: una sezione sotto la metà dopo il giudizio esce intera",
+         [s["argomento"] for s in dg3["sezioni"]] == [12] and dg3["conti"]["sezioni_tolte"] == 1, str(dg3["conti"]))
 dg2 = valida(("A1", BUONE_1), ("A2", BUONE_2))
 R.dopo_giudizi(dg2, lambda f: "giudizio", piano_)
 verifica("tutte no: nessuna sezione, «scarso»", not dg2["sezioni"] and R.giudica(dg2) == R.SCARSO)
@@ -590,6 +604,15 @@ verifica("un giudizio per frase, ognuno con la sua fonte", len(lt._chiedi_corpo.
          and stato["conti"]["giudicate"] == 6 and "Palos" in json.dumps(
              lt._chiedi_corpo.giudizi[1], ensure_ascii=False))
 verifica("il guardiano le vede tutte", len(st.guardiano.viste) == 6)
+giudizio_1 = lt._chiedi_corpo.giudizi[0]["messages"][1]["content"]
+verifica("seconda revisione: il giudice riceve la fonte, non la frase due volte",
+         "sull'isola di Guanahani con tre caravelle" in giudizio_1 and "millequattrocentonovantadue" in giudizio_1)
+verifica("seconda revisione: il giudice riceve materia e argomento", "Storia" in giudizio_1
+         and "I viaggi di esplorazione" in giudizio_1)
+verifica("il giudice dice no a ciò che spinge a fare qualcosa", "senza pericoli" in R.GIUDIZIO_SISTEMA
+         and "giudica un gruppo" in R.GIUDIZIO_SISTEMA and "prezzo" in R.GIUDIZIO_SISTEMA)
+verifica("un titolo che non si direbbe non va al giudice", not L.C_forma_titolo_ok("Telefona al 333 1234567", NOMI)
+         and L.C_forma_titolo_ok("I viaggi di esplorazione", NOMI))
 verifica("fatto una volta: la stessa firma non si rifà", st.verifiche_per_riassunto() == []
          and lt.riassumi(vid) == "niente" and len(lt._chiedi_corpo.richieste) == 1)
 verifica("i conti scritti non hanno testo", stato["esito"] == R.PRONTO and stato["conti"]["tenute"] == 6
@@ -637,6 +660,39 @@ stg6 = studio(cfg_nuova("guasto.db"))
 stg6.guardiano = GuardianoRotto()
 vidg6, _i, _a = verifica_storia(stg6)
 verifica("per un minore, col guardiano guasto niente frasi", lettore(stg6).riassumi(vidg6) == R.SCARSO)
+class GuardianoSolleva(GuardianoSi):
+    def giudica(self, *a, **k):
+        raise RuntimeError("giù")
+
+
+stge = studio(cfg_nuova("eccezione.db"))
+stge.guardiano = GuardianoSolleva()
+videg, _i, _a = verifica_storia(stge)
+verifica("seconda revisione: guardiano che solleva, per un minore niente frasi", lettore(stge).riassumi(videg) == R.SCARSO)
+stge2 = studio(cfg_nuova("eccezione2.db"))
+stge2.guardiano = GuardianoSolleva()
+videg2, _i, _a = verifica_storia(stge2, ANDREA)
+verifica("contrario: per un adulto si tiene", lettore(stge2).riassumi(videg2) == R.PRONTO)
+stg6b = studio(cfg_nuova("guasto_adulto.db"))
+stg6b.guardiano = GuardianoRotto()
+vidg6b, _i, _a = verifica_storia(stg6b, ANDREA)
+verifica("seconda revisione: guardiano guasto, per un adulto si tiene", lettore(stg6b).riassumi(vidg6b) == R.PRONTO)
+stf = studio(cfg_nuova("senza_fine.db"))
+vidf, _i, _a = verifica_storia(stf)
+ltf = lettore(stf)
+ltf._attendi_errore = lambda: 0
+orig_f = ltf._chiedi_corpo
+
+
+def senza_fine(body):
+    if "risposta" in json.dumps(body.get("format") or {}):
+        return {"content": '{"risposta": "si"}'}
+    return orig_f(body)
+
+
+ltf._chiedi_corpo = senza_fine
+verifica("seconda revisione: un giudizio senza `fine` è un errore del server, mai «scarso»",
+         ltf.riassumi(vidf) == "errore_server" and stf._riga_riassunto(vidf) is None)
 stg7 = studio(cfg_nuova("giu.db"))
 vidg7, _i, _a = verifica_storia(stg7)
 ltg7 = lettore(stg7)
@@ -653,6 +709,13 @@ def giu_ai_giudizi(body):
 ltg7._chiedi_corpo = giu_ai_giudizi
 verifica("il server giù durante i giudizi: niente esito scritto, si riprova",
          ltg7.riassumi(vidg7) == "errore_server" and stg7._riga_riassunto(vidg7) is None)
+del ltg7._attendi_errore
+ltg7.attesa_s = 0.0
+ltg7._errori_di_fila = 0
+for _x in range(3):
+    ltg7.riassumi(vidg7)
+verifica("seconda revisione: un errore fisso nei giudizi fa crescere l'attesa, non gira in tondo",
+         ltg7._errori_di_fila == 3, str(ltg7._errori_di_fila))
 
 print("— la guardia, la quiete, per_modello")
 st2 = studio(cfg_nuova("giro.db"))
@@ -942,6 +1005,10 @@ verifica("la firma cambia col testo, con gli argomenti, con una pagina tolta",
               R.firma(args_l, [pagina(1, LUNGO + " Altro."), *pag_lunghe[1:]]),
               R.firma(args_l[:2], pag_lunghe),
               R.firma(args_l, [pagina(1, LUNGO, stato="tolta"), *pag_lunghe[1:]])}) == 4)
+verifica("seconda revisione: la firma cambia con gli avvisi di una pagina", R.firma(args_l, pag_lunghe) != R.firma(
+    args_l, [pagina(1, LUNGO, avvisi=AVV_I), *pag_lunghe[1:]]))
+verifica("seconda revisione: «la musica.» chiude la frase, «ca.» no", A.frasi("Le piace la musica. Va a scuola.")
+         == ["Le piace la musica.", "Va a scuola."] and len(A.frasi("Pesa ca. Dieci chili.")) == 1)
 st12 = studio(cfg_nuova("scade.db"))
 vid12, ids12, _a = verifica_storia(st12)
 lt12 = lettore(st12)

@@ -206,7 +206,8 @@ def frasi(paragrafo: str) -> list[str]:
     pezzi, corrente = [], ""
     for p in _TAGLIO.split(paragrafo):
         corrente = f"{corrente} {p}".strip() if corrente else p
-        if not corrente.endswith(_ABBREV):
+        # La parola intera: «la musica.» e «il paes.» non sono «ca.» ed «es.»
+        if corrente.rsplit(None, 1)[-1].lstrip("(«\"“") not in _ABBREV:
             pezzi.append(corrente)
             corrente = ""
     if corrente:

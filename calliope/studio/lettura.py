@@ -553,6 +553,12 @@ def _aggiungi(prime, altre, mancano: set, pulita=None):
     return buone + nuove + [x for x in vecchie if not pulita(x)]
 
 
+def C_forma_titolo_ok(titolo, nomi) -> bool:
+    """Il titolo di un argomento si può passare al giudizio del riassunto? (#386)"""
+    from . import riassunto_controllo as C
+    return C._vietata(str(titolo or "")) is None and not C.S.scarto(str(titolo or ""), nomi, True)
+
+
 class Lettore:
     """Il thread della lettura. `cliente`: un client dell'agente con `chat(body, controlla=…)`
     (ClienteOpenAI, di solito avvolto in ClienteCedevole); `guardia`: `Guardia` o un oggetto
@@ -1717,6 +1723,9 @@ class Lettore:
         utili = R.argomenti_utili(arif, rif, M)
         t0 = time.monotonic()
         grezzi = None
+        # `_una_lista` azzera gli errori quando il copione arriva: un errore fisso nei giudizi girerebbe
+        # in tondo a pieno ritmo, copione compreso. Si azzerano solo a giro finito
+        errori_prima = self._errori_di_fila
         try:
             if utili:
                 grezzi, _finita = self._chiedi_lista(
@@ -1730,7 +1739,9 @@ class Lettore:
             ris = R.valida(grezzi, M, rif, arif, piano) if grezzi is not None else None
             t1 = time.monotonic()
             if ris is not None:
-                titoli = {int(a["id"]): a["titolo"] for a in v["_argomenti"]}
+                # Il titolo è un dato che fa da leva al giudice: se non si direbbe, non si passa
+                titoli = {int(a["id"]): a["titolo"] for a in v["_argomenti"]
+                          if C_forma_titolo_ok(a["titolo"], nomi)}
                 R.dopo_giudizi(ris, lambda f: self._giudizio_frase(
                     f, M, m, ris, v, titoli.get(f.get("argomento"), "")), piano)
             m["secondi_giudizi"] = round(m["secondi_giudizi"] + time.monotonic() - t1, 2)
@@ -1742,6 +1753,7 @@ class Lettore:
             return "giu"
         except ErroreServer as e:
             self.misure["errori_server"] += 1
+            self._errori_di_fila = errori_prima
             attesa = self._attendi_errore()
             self._registra(f"verifica {vid}: riassunto, errore del server ({e}), riprovo fra "
                            f"{attesa:.0f} s")
@@ -1786,6 +1798,8 @@ class Lettore:
         from . import riassunto as R
         r = self._chiedi_corpo(R.corpo_giudizio(self.modello, f["testo"], M.testo_fonte(f["fonti"]),
                                                 v.get("materia") or "", titolo))
+        if not r.get("fine"):
+            raise ErroreServer("stream senza fine")     # come `_una_lista`: mai «scarso» per un guasto
         m["token_in"] += int(r.get("prompt") or 0)
         m["token_out"] += int(r.get("eval") or 0)
         m["giudizi"] += 1
