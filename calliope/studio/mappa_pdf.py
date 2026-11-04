@@ -18,6 +18,7 @@ from __future__ import annotations
 import datetime
 import math
 
+from . import mappa as M
 from .mappa import TELA_NODI
 
 # La pagina (mm) e la mappa dentro
@@ -34,11 +35,21 @@ PIEDE = 10.0
 
 def misure_nodo(concetti: int) -> tuple[float, int, float, float, int]:
     """(larghezza, font, riga, margine, righe al più) del riquadro di un concetto. Una mappa lunga
-    (#385) è disposta su due colonne fitte: riquadri larghi, testo più piccolo su meno righe, così non
+    (#385) è disposta a righe (`posizioni`): riquadri larghi, testo più piccolo su meno righe, così non
     si sovrappongono fino al tetto di 30 (revisione della PR #389). Il testo intero è nell'elenco."""
     if concetti <= TELA_NODI:
         return NODO_W, FONT_NODO, RIGA, 4.0, 3
     return NODO_W_LUNGA, 8, 3.6, 2.0, 2 if concetti <= 24 else 1
+
+
+def posizioni(nodi: list[dict], coll: list[dict]) -> dict[int, tuple[float, float]]:
+    """id → (x, y) sulla pagina. Fino a `TELA_NODI` concetti quelle salvate, come sempre. Oltre si
+    ricalcolano (`mappa.disposizione`): il PDF è una copia da stampare e il disegno non deve coincidere
+    con lo schermo, mentre quelle salvate possono venire da un giro fatto per pochi concetti, dai concetti
+    aggiunti dalla persona (`mappa.libero`) o da una mappa di prima (seconda revisione della PR #389)."""
+    if len(nodi) > TELA_NODI:
+        return M.disposizione(nodi, coll)
+    return {int(n["id"]): (float(n.get("x") or 0.5), float(n.get("y") or 0.5)) for n in nodi}
 
 
 def _data(iso) -> str:
@@ -138,11 +149,12 @@ def render(mappa: dict, nome: str, materia: str, data_verifica: str, pagine: dic
     larga, alta = LARGO - 2 * MARGINE - nodo_w, ALTO - TESTA - MARGINE - 20
     pdf.set_font(fam, "", font_nodo)
     box = {}
+    dove = posizioni(nodi, coll)
     for n in nodi:
         righe = _taglia(pdf, testo_di(n), nodo_w - 4, righe_max, puntini)
         h = len(righe) * riga + margine
-        cx = x0 + float(n.get("x") or 0.5) * larga
-        cy = y0 + float(n.get("y") or 0.5) * alta
+        cx = x0 + dove[int(n["id"])][0] * larga
+        cy = y0 + dove[int(n["id"])][1] * alta
         box[int(n["id"])] = (cx, cy, nodo_w, h, righe)
     # Prima le frecce (sotto), poi i riquadri
     pdf.set_draw_color(60, 60, 60)

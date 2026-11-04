@@ -980,10 +980,11 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
       documento d'area)]* Le parti sono nascoste anche a chi fa una mappa senza guardare.
     - **Una mappa libera già controllata ferma la rigenerazione dello scheletro** (estende il punto 38, che la
       fermava solo aperta): il suo confronto dice gli id di quello scheletro.
-    - Un verbo come «chiama» è anche una terza persona: l'avviso cade solo se è per intero «chiama», «manda» o
-      «invia», più al massimo una preposizione o una locuzione chiusa; il resto resta un ordine, in italiano e in
-      inglese (principio 10, coi contrari in `prova_testo.py`). Prima la sicurezza: a dover scegliere, una voce
-      buona in meno.
+    - Un verbo come «chiama» è anche una terza persona: l'avviso cade solo se sono forme chiuse tutti e due, il
+      verbo (per intero «chiama», «manda» o «invia», più al massimo una preposizione o una locuzione chiusa) e il
+      concetto di arrivo (un nome proprio con le maiuscole e senza cifre); il resto resta un ordine, in italiano e
+      in inglese, anche spezzato fra verbo e concetto (principio 10, coi contrari in `prova_testo.py`). Prima la
+      sicurezza: a dover scegliere, una voce buona in meno.
     `studio_mappa_parti`, attiva di serie, segue `studio_mappa_genera`; `Lettore.prepara_mappe` è l'ingresso
     per chi la farà partire dopo la lettura (#384). Alternative scartate: alzare solo il tetto (il modello
     ubbidiva ai «6–10»), una mappa enorme apribile a rami (sul telefono non si legge e «Fai la tua» avrebbe

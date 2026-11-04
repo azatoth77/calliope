@@ -240,30 +240,39 @@ scheletro, come le carte), non al tutore.
 **nessuna** mappa coi testi, la generale e le sue comprese, e non ne cambia nessuna: né «Controlla», né PDF,
 né «Fai la tua», né «Un indizio» (`_mappe_in_prova`, `PROVA_APERTA`); la pagina lo dice e basta. Una mappa a
 memoria o da zero aperta quando parte la prova aspetta, e dopo la consegna riprende da dove era. Il tutore
-continua a vedere tutto. Vedi le voci storiche della sezione delle prove.
+continua a vedere tutto. Se la prova parte da un altro schermo con la mappa aperta, al primo tocco il server
+risponde «prova aperta» e la pagina la ricarica: i testi spariscono (fino a quel tocco restano a schermo, la
+pagina non lo sa da sola). Vedi le voci storiche della sezione delle prove.
 
 **Una mappa libera già controllata** ferma la rigenerazione dello scheletro (revisione della PR #389): il suo
 confronto dice gli id dello scheletro di allora, e su quello nuovo «Il Portogallo» diventava un altro concetto.
 Con la firma «v2» sarebbe scattato su ogni verifica aperta. Sulla DGX, contate in sola lettura il 04/11: nessuna
-riga così (0 mappe libere controllate).
+riga così (0 mappe libere controllate). Il prezzo, accettato: con una libera chiusa lo scheletro del modello resta
+quello anche se cambiano le pagine o gli argomenti, finché nessuno lo riscrive; le parti invece si rifanno.
 
 **Un falso allarme trovato dal banco.** «Martin Waldseemüller — chiama — America» era `testo_ordine` perché
-«chiama» è anche un imperativo, e la mappa di Vespucci perdeva 6 voci. Ora l'avviso cade solo se il verbo è **per
-intero** «chiama», «manda» o «invia», più al massimo una preposizione o una locuzione chiusa («chiama in onore
-di»); tutto il resto resta un ordine, in italiano e in inglese (`_forma_verbo`, principio 10, contrari in
-`prova_testo.py`). *[storico fino alla revisione della PR #389: l'ordine era riconosciuto dalle parole
-«istruzioni», «regole», «risposte»…, e «chiama il numero 3331234567», «manda i soldi a», «ignora la verifica»
-passavano puliti]* «ignora», «dimentica», «cancella» restano ordini anche da soli. Sull'uscita vera del banco
-le 6 voci di Vespucci si recuperano tutte.
+«chiama» è anche un imperativo, e la mappa di Vespucci perdeva 6 voci. Ora l'avviso cade solo se sono forme chiuse
+tutti e due: il verbo, per intero e minuscolo, è «chiama», «manda» o «invia» più al massimo una preposizione o una
+locuzione chiusa, e il concetto di arrivo è un nome proprio con le maiuscole e senza cifre (`_forma_verbo`,
+`_nome_proprio`, principio 10, contrari in `prova_testo.py`). Tutto il resto resta un ordine, in italiano e in
+inglese. *[storico, due revisioni della PR #389: prima l'ordine si riconosceva dalle parole «istruzioni», «regole»…,
+e «manda i soldi a», «ignora la verifica» passavano; poi dal solo verbo, e passava lo spezzato: «manda a» → «la
+password», «chiama» → «3331234567»]* Il prezzo si accetta: «manda → le navi» e «chiama nel → 1507» sono ordini, una
+voce buona in meno; nell'uscita vera di Vespucci delle 6 voci se ne recuperano 4 (restano fuori «chiama nel» e
+«1507»). Nella generale queste voci restano proposte con l'avviso: la conferma non le tiene e nelle copie non ci
+sono. «ignora», «dimentica», «cancella» restano ordini anche da soli.
 
 **Il telefono.** La scheda «Le parti»: un tasto per argomento coi concetti, che si apre e si richiude;
 dentro «Schema» (dalla radice in giù, rientrato per livello, i verbi) e «Mappa». Oltre 8 concetti la
 disposizione è a righe (`mappa._a_righe`: due per riga, dalla radice) e la pagina allunga il disegno: sul
 telefono il giro attorno al centro non ci stava (due riquadri da 210 su 456 di largo); la parte non
 pronta dice perché, anche quando è vuota perché tutto è stato tolto. La generale dice quanti argomenti ha. Il
-PDF con una mappa lunga ha riquadri larghi, testo più piccolo e meno righe (`mappa_pdf.misure_nodo`): nessuna
-sovrapposizione fino a 30 concetti col testo più lungo, guardato a 20 (oltre 24 una riga sola, troncata:
-l'elenco delle pagine dopo ha il testo intero). Pagina **v42**. **L'ingresso** per la #384: `Lettore.prepara_mappe(v o id, passi=None)`
+PDF oltre gli 8 concetti **ricalcola la disposizione** (`mappa_pdf.posizioni`): è una copia da stampare e il
+disegno non deve coincidere con lo schermo, mentre le posizioni salvate possono venire da un giro per pochi
+concetti, dai concetti aggiunti dalla persona o da una mappa di prima; riquadri larghi, testo più piccolo e meno
+righe (`misure_nodo`; oltre 24 una riga sola, troncata: l'elenco delle pagine dopo ha il testo intero). Nessuna
+sovrapposizione col testo più lungo in 8+1, 8+6, 12 a giro, 12+6, 20, 20+6, 24, 30, dalla copia vera. Fino a 8
+concetti come prima. Pagina **v42**. **L'ingresso** per la #384: `Lettore.prepara_mappe(v o id, passi=None)`
 fa la generale e le parti che mancano, guardando la guardia; il giro del lettore la chiama con `passi=1`,
 al solito posto (dopo le carte): il momento in cui parte non è cambiato.
 
@@ -277,25 +286,26 @@ argomenti non facoltativi, i criteri delle domande nei concetti e nei verbi).
 | coperti dal codice (sul ricalcolo) | 7 su 8 | 5 su 7 | 7 su 9 |
 | dalla verità: argomenti, domande | 5/6, 1/10 | 4/5, 2/10 | 7/8, 1/10 |
 | secondi | 7 | 9 | 9 |
-| **Dopo** (14:49, con la revisione), generale: concetti, collegamenti | 20, 19 | 19, 26 | 20, 19 |
-| coperti dal codice (fuori prima della mirata) | 8 su 8 (0) | 7 su 7 (2) | 9 su 9 (1) |
-| dalla verità: argomenti, domande | 4/6, 2/10 | 5/5, 4/10 | 8/8, 3/10 |
+| **Dopo** (15:50, con le due revisioni), generale: concetti, collegamenti | 20, 19 | 17, 21 | 20, 19 |
+| coperti dal codice (fuori prima della mirata) | 8 su 8 (1) | 7 su 7 (2) | 7 su 9 (2) |
+| dalla verità: argomenti, domande | 6/6, 2/10 | 4/5, 4/10 | 7/8, 4/10 |
 | parti connesse, deboli | 1, 0 | 1, 0 | 1, 0 |
-| secondi | 28 | 30 | 19 |
-| **Parti**: mappe, concetti per mappa | 8/8, 3–16 | 7/8, 6–24 | 9/10, 6–16 |
-| concetti nelle pagine | 95/95 | 95/95 | 104/104 |
-| voci tolte perché fuori dalle pagine | 27 | 17 | 22 |
-| una parte connessa sola, voci con un ordine tolte | 8/8, 0 | 7/7, 0 | 9/9, 0 |
+| secondi | 20 | 23 | 42 |
+| **Parti**: mappe, concetti per mappa | 8/8, 2–16 | 7/8, 6–23 | 9/10, 6–16 |
+| concetti nelle pagine | 91/91 | 95/95 | 103/103 |
+| voci tolte: fuori dalle pagine o dipendenti | 44 | 21 | 30 |
+| voci tolte con un ordine | 0 | 0 | 1 |
+| una parte connessa sola | 8/8 | 6/7 | 8/9 |
 | doppioni, voci ostili | 0, 0 | 0, 0 | 0, 0 |
-| dalla verità: argomenti, domande | 6/6, **4/10** | 5/5, **9/10** | 8/8, **9/10** |
-| secondi | 96 | 92 | 102 |
+| dalla verità: argomenti, domande | 6/6, **4/10** | 5/5, **9/10** | 8/8, **8/10** |
+| secondi | 102 | 96 | 109 |
 
-Togliere i `da_controllare` non ha rotto la connessione né la copertura delle domande rispetto al giro prima
-della revisione (92/101, 100/107, 111/117 nelle pagine; domande 4, 9, 10 su 10; una mappa non connessa in
-scienze). La mappa che manca è un argomento su pagine con istruzioni (non si chiede). Le domande di matematica
-restano 4/10: i loro criteri sono risultati di esercizi, che in una mappa non ci sono né devono esserci. La
-generale di matematica ha 4/6 argomenti dalla verità con 8/8 dal codice: le chiavi del banco cercano parole
-che qui il modello ha detto in un altro modo. Il banco varia da un giro all'altro anche a temperatura 0 (la
+Togliere i `da_controllare` costa poco: prima della revisione 92/101, 100/107 e 111/117 nelle pagine, domande 4, 9
+e 10 su 10; le mappe non connesse restano così, ora senza legami deboli. La regola più stretta sui verbi perde
+pochissimo: nel banco una sola voce tolta come ordine. I criteri di matematica A3 e A6 sono stati allargati
+(«trasporto termini», «cambio segno», «verifica soluzione»): erano coperti, ma con altre parole. In storia, in
+questo giro, due argomenti restano fuori dal conto del codice anche dopo la mirata, e la pagina lo dice. La mappa che manca è un argomento su pagine con istruzioni (non si chiede). Le domande di matematica
+restano 4/10: i loro criteri sono risultati di esercizi, che in una mappa non ci sono né devono esserci. Il banco varia da un giro all'altro anche a temperatura 0 (la
 generale di matematica 10–20 concetti in cinque giri, una parte sola 67–100 %). Tutto insieme circa due minuti a
 verifica, a DGX libera. Le uscite in `/tmp/banco-385/` sulla DGX, non conservate.
 

@@ -2236,7 +2236,7 @@
   function corpoParte(x) {
     const m = x.mappa;
     // Vuota perché tutto è stato tolto: non sono le pagine che non bastano
-    if (!m && x.esito === "vuoto" && Number(x.esclusi) + Number(x.fuori) > 0) return [nodo("p", "studio-h-nota", "Ho tolto tutte le voci che avevo: non stavano nelle pagine o venivano da un messaggio per un assistente. Questa parte guardala sul libro.")];
+    if (!m && x.esito === "vuoto" && Number(x.esclusi) + Number(x.fuori) > 0) return [nodo("p", "studio-h-nota", "Ho tolto tutte le voci che avevo: non stavano nelle pagine, dipendevano da ciò che non ci sta o venivano da un messaggio per un assistente. Questa parte guardala sul libro.")];
     if (!m) return [nodo("p", "studio-h-nota", ESITI_PARTE[x.esito] || "La sto ancora preparando.")];
     const out = [];
     const viste = nodo("div", "studio-m-schede");
@@ -2256,7 +2256,7 @@
       out.push(elencoMappa(m, false));
     }
     if (Number(x.saltate)) out.push(nodo("p", "studio-h-nota", nn(x.saltate, "pagina non usata: ha", "pagine non usate: hanno") + " un messaggio per un assistente. Guardala sul libro."));
-    if (Number(x.fuori)) out.push(nodo("p", "studio-h-nota", nn(x.fuori, "voce tolta: non sta", "voci tolte: non stanno") + " nelle pagine."));
+    if (Number(x.fuori)) out.push(nodo("p", "studio-h-nota", nn(x.fuori, "voce tolta perché non sta nelle pagine o dipendeva da ciò che non ci sta", "voci tolte perché non stanno nelle pagine o dipendevano da ciò che non ci sta") + "."));
     if (Number(x.esclusi)) out.push(nodo("p", "studio-h-nota", nn(x.esclusi, "voce non messa: viene", "voci non messe: vengono") + " da una pagina con un messaggio per un assistente o sembra un ordine."));
     return out;
   }
@@ -2576,6 +2576,13 @@
     mappa.attesa = false;
     if (!r.ok) {
       mappa.esito = String(r.dati.errore || "Non ci sono riuscita: riprova tra poco.");
+      // Una prova partita da un altro schermo: la mappa aperta qui non deve restare leggibile
+      if (r.dati.prova_aperta && dati !== undefined) {
+        mappa.modulo = null;
+        mappa.scelto = null;
+        await caricaMappa(vid);
+        return false;
+      }
       disegnaHome();
       return false;
     }

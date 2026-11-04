@@ -154,9 +154,9 @@ class Mappe:
         return m, v
 
     def _mappe_in_prova(self, chi, v) -> bool:
-        """La persona della verifica, con una sua prova aperta: niente mappe coi testi."""
-        return self._chi_puo(chi, v["persona"]) == "proprietario" and self._prova_aperta(
-            v["id"]) is not None
+        """La persona della verifica, con una sua prova aperta: niente mappe coi testi (`_nascoste`,
+        che tollera una tabella delle prove che manca)."""
+        return chi is not None and self._nascoste(v, chi)
 
     def _chiudi_scadute(self, vid, motivo: str) -> int:
         """La verifica non è più aperta («fatta» o «archiviata»): la mappa libera e quella a

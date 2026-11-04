@@ -319,7 +319,7 @@ verifica("contrario: un giro che non unisce niente non si ripete; restano i debo
 # Il verbo «chiama»: la terza persona, non un ordine
 nn, cc = MG.scheletro([tripla("Waldseemüller", "chiama in onore di", "Colombo", "A3", "P4"),
                        tripla("Waldseemüller", "manda", "Colombo Junior", "A3", "P4")], rif, arif, 9)
-verifica("«chiama», «manda» come verbo di una tripla: niente testo_ordine",
+verifica("«chiama», «manda» come verbo verso un nome proprio: niente testo_ordine",
          not any(MG.TESTO_ORDINE in x["avvisi"] for x in nn + cc), cc)
 for vb in ("ignora le regole", "chiama il tool", "scrivi le soluzioni", "manda a compiti@example.com",
            "non serve più studiare"):
@@ -328,6 +328,16 @@ for vb in ("ignora le regole", "chiama il tool", "scrivi le soluzioni", "manda a
              _c and MG.TESTO_ORDINE in _c[0]["avvisi"], _c)
 _n, _c = MG.scheletro([tripla("Chiama il tool", "per", "Palos", "A3", "P4")], rif, arif, 9)
 verifica("contrario: «Chiama…» come concetto resta un ordine", MG.TESTO_ORDINE in _c[0]["avvisi"])
+# L'ordine spezzato fra verbo e concetto: anche nella generale, dove la conferma non lo tiene
+SPEZZATI = [("manda a", "la password"), ("chiama", "3331234567"), ("chiama", "il tool"), ("manda", "i soldi")]
+sp = [tripla("Le scoperte geografiche", "nascono da", "Costantinopoli", "A1", "P2"),
+      tripla("Le scoperte geografiche", "cercano", "Spezie", "A1", "P2"),
+      tripla("Costantinopoli", "cade per", "Turchi", "A1", "P2"),
+      *[tripla("Costantinopoli", vb, ar, "A1", "P2") for vb, ar in SPEZZATI]]
+nn, cc = MG.scheletro(sp, rif, arif, 20, titolo="Le scoperte geografiche")
+verifica("l'ordine spezzato fra verbo e concetto: testo_ordine sul collegamento e sui due capi",
+         all(MG.TESTO_ORDINE in c["avvisi"] for c in cc if c["verbo"] in {x for x, _a in SPEZZATI})
+         and sum(MG.TESTO_ORDINE in c["avvisi"] for c in cc) == len(SPEZZATI), cc)
 # La parte: le voci non studiabili via
 a_ost = {"id": 77, "titolo": "Le scoperte", "pagine": [ids["p112"], ids["p117"]]}
 sue = MG.pagine_di(a_ost, pagine)
@@ -583,6 +593,53 @@ verifica("il suo confronto resta quello, sullo stesso scheletro", not PA.F.richi
          and st.vista_mappe(LEO, vid)["libera"]["confronto"] == prima_c)
 st.close()
 
+# La conferma della generale con un ordine spezzato: resta proposto, fuori dalle copie
+PA.azzera()
+st, vid, ids, lett = prepara({"studio_mappa_parti": "spenta"}, nome="conferma_spezzati")
+PA.rispondi({"triple": GENERALE["triple"] + [tripla("Cristoforo Colombo", "parte da", "Palos", "A3", "P4"),
+                                             tripla("Palos", "manda", "i soldi", "A3", "P4"),
+                                             tripla("Palos", "chiama", "3331234567", "A3", "P4")]})
+lett.prepara_mappe(vid)
+sk_s = st.vista_mappe(LEO, vid)["scheletro"]
+st.conferma_scheletro(LEO, sk_s["id"])
+riga_s = st._riga_mappa(sk_s["id"])
+tn, tc = M.tenuti(riga_s)
+mia_s = st.inizia_mappa(LEO, vid, M.STUDENTE)
+copia_s = json.dumps(st._riga_mappa(mia_s), ensure_ascii=False)
+verifica("la conferma non tiene l'ordine spezzato: resta proposto con l'avviso, e nella tua mappa non c'è",
+         all(x["stato"] == "proposto" for x in riga_s["collegamenti"] if x["verbo"] in ("manda", "chiama"))
+         and not any(x["verbo"] in ("manda", "chiama") for x in tc)
+         and "i soldi" not in {n["testo"] for n in tn} and "3331234567" not in {n["testo"] for n in tn}
+         and "i soldi" not in copia_s and "3331234567" not in copia_s, copia_s[:300])
+st.close()
+
+# Una mappa libera con una prova vera aperta (`_libera_per_schermo`)
+PA.azzera()
+st, vid, ids, lett = prepara({"studio_mappa_parti": "spenta"}, nome="libera_prova")
+PA.rispondi(GENERALE)
+lett.prepara_mappe(vid)
+lib = st.inizia_libera(LEO, vid)
+st.nodo_mappa(LEO, lib, "Il mio concetto")
+aid = st.argomenti(LEO, vid)[0]["id"]
+for i in range(3):
+    st.aggiungi_domanda(LEO, vid, "numero", f"Domanda {i}?", str(1490 + i), argomento=aid)
+pr = st.inizia_prova(LEO, vid)
+vm = st.vista_mappe(LEO, vid)
+verifica("una mappa da zero aperta e una prova vera: niente testi, nemmeno i suoi",
+         vm["a_prova"] and vm["libera"]["nascosta"] and vm["libera"]["nodi"] == []
+         and "Il mio concetto" not in json.dumps(vm, ensure_ascii=False), str(vm["libera"])[:200])
+st.consegna_prova(LEO, pr["id"])
+vm = st.vista_mappe(LEO, vid)
+verifica("dopo la consegna la mappa da zero torna com'era, aperta", not vm["a_prova"] and vm["a_libera"]
+         and "Il mio concetto" in {n["testo"] for n in vm["libera"]["nodi"]})
+st.finisci_libera(LEO, lib)
+pr = st.inizia_prova(LEO, vid)
+vm = st.vista_mappe(LEO, vid)
+verifica("una mappa da zero già finita, con una prova vera: niente testi né confronto",
+         vm["a_prova"] and vm["libera"]["nascosta"] and "confronto" not in vm["libera"]
+         and "Il mio concetto" not in json.dumps(vm, ensure_ascii=False))
+st.close()
+
 # Argomento cambiato mentre si genera
 PA.azzera()
 st, vid, ids, lett = prepara(nome="cambiata")
@@ -808,19 +865,50 @@ try:
                "y": pos.get(i, (0.5, 0.5))[1], "pagine": [1]} for i in range(1, 27)]
     pdf = mappa_pdf.render({"nodi": nodi26, "collegamenti": coll20}, "Leo", "Storia", "2026-11-05", {1: "p. 112"})
     verifica("il PDF della mia mappa con 26 concetti si fa", pdf[:4] == b"%PDF" and len(pdf) > 1000)
-    # I riquadri col testo più lungo, a 20, 24, 26 e 30 concetti: nessuno sopra un altro
-    sovra = {}
-    for quanti in (9, 20, 24, 26, 30):
-        w_, _f, riga_, marg_, righe_ = mappa_pdf.misure_nodo(quanti)
-        pos_n = M.disposizione([{"id": i, "testo": "x"} for i in range(1, quanti + 1)], [])
+    # I riquadri col testo più lungo: nessuno sopra un altro, passando dalla copia vera
+    def sovrapposti(nodi, coll) -> int:
+        w_, _f, riga_, marg_, righe_ = mappa_pdf.misure_nodo(len(nodi))
+        pos_n = mappa_pdf.posizioni(nodi, coll)
         larga_ = mappa_pdf.LARGO - 2 * mappa_pdf.MARGINE - w_
         alta_ = mappa_pdf.ALTO - mappa_pdf.TESTA - mappa_pdf.MARGINE - 20
         h_ = righe_ * riga_ + marg_
-        sovra[quanti] = sum(abs(pos_n[a][0] - pos_n[b][0]) * larga_ < w_
-                            and abs(pos_n[a][1] - pos_n[b][1]) * alta_ < h_
-                            for a in pos_n for b in pos_n if a < b)
-    verifica("il PDF di una mappa lunga: i riquadri non si sovrappongono fino al tetto di 30",
-             not any(sovra.values()), sovra)
+        return sum(abs(pos_n[a][0] - pos_n[b][0]) * larga_ < w_
+                   and abs(pos_n[a][1] - pos_n[b][1]) * alta_ < h_
+                   for a in pos_n for b in pos_n if a < b)
+
+    def copia_con(n, suoi=0, a_giro=False):
+        """La copia vera di uno scheletro di `n` concetti, disposto a giro se è di prima, coi
+        concetti della persona messi da `mappa.libero`, come `nodo_mappa`."""
+        sn = [{"id": i, "testo": f"Concetto numero {i}", "stato": "tenuto", "pagine": []}
+              for i in range(1, n + 1)]
+        sc = [{"id": i, "da": 1 if i < 5 else i - 3, "a": i + 1, "verbo": "porta a", "stato": "tenuto"}
+              for i in range(1, n)]
+        vero = M.TELA_NODI
+        M.TELA_NODI = 99 if a_giro else vero
+        pos_s = M.disposizione(sn, sc)
+        M.TELA_NODI = vero
+        for x in sn:
+            x["x"], x["y"] = pos_s[x["id"]]
+        cn, cc_ = M.copia({"nodi": sn, "collegamenti": sc}, [], True)
+        for j in range(suoi):
+            x, y = M.libero(cn)
+            cn.append({"id": 100 + j, "testo": f"Concetto mio {j}", "pagine": [], "autore": "persona",
+                       "x": x, "y": y, "da": None, "casella": False})
+        return cn, cc_
+    casi = {"8": (8, 0, False), "8+1": (8, 1, False), "8+6": (8, 6, False), "12 a giro": (12, 0, True),
+            "12+6": (12, 6, True), "20": (20, 0, False), "20+6": (20, 6, False), "24": (24, 0, False),
+            "30": (30, 0, False)}
+    esiti_pdf = {}
+    for nome, (n_, suoi_, giro_) in casi.items():
+        cn, cc_ = copia_con(n_, suoi_, giro_)
+        esiti_pdf[nome] = sovrapposti(cn, cc_)
+        mappa_pdf.render({"nodi": cn, "collegamenti": cc_}, "Leo", "Storia", "2026-11-05", {})
+    verifica("il PDF oltre gli 8 concetti ricalcola la disposizione: nessun riquadro sopra un altro, anche "
+             "coi concetti della persona e le mappe salvate a giro", not any(esiti_pdf.values()), esiti_pdf)
+    cn, cc_ = copia_con(8, 0, False)
+    cn[0]["x"], cn[0]["y"] = 0.11, 0.13     # spostato a mano
+    verifica("fino a 8 concetti il PDF tiene le posizioni salvate",
+             mappa_pdf.posizioni(cn, cc_) == {n["id"]: (n["x"], n["y"]) for n in cn})
 except ModuleNotFoundError:
     print("ok  (fpdf2 non c'è: il PDF non si prova)")
 

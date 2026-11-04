@@ -64,10 +64,10 @@
   "argomenti": [
     {"titolo": "Identità ed equazioni", "pagine": ["p88"], "chiavi": ["identit", "incognit", "membr", "definizion", "che cos"]},
     {"titolo": "I principi di equivalenza", "pagine": ["p89"], "chiavi": ["principi", "principio", "equivalen", "trasporto"]},
-    {"titolo": "Come si risolve un'equazione", "pagine": ["p90", "appunti"], "chiavi": ["risolve", "risoluzion", "procediment", "passaggi", "metodo", "regole per"]},
+    {"titolo": "Come si risolve un'equazione", "pagine": ["p90", "appunti"], "chiavi": ["risolve", "risoluzion", "procediment", "passaggi", "metodo", "regole per", "trasporto termini", "cambio segno", "cambio di segno"]},
     {"titolo": "Equazioni con le frazioni", "pagine": ["p90"], "chiavi": ["frazion", "m.c.m", "minimo comune", "denominator"], "facoltativo": true},
     {"titolo": "Equazioni impossibili e indeterminate", "pagine": ["p91"], "chiavi": ["impossibil", "indeterminat", "determinat"]},
-    {"titolo": "La verifica della soluzione", "pagine": ["p91", "appunti"], "chiavi": ["verifica della soluzione", "verificare", "controll", "sostitu"]},
+    {"titolo": "La verifica della soluzione", "pagine": ["p91", "appunti"], "chiavi": ["verifica della soluzione", "verifica soluzione", "verificare", "controll", "sostitu"]},
     {"titolo": "Problemi con le equazioni", "pagine": ["p92"], "chiavi": ["problem"]},
     {"titolo": "Esercizi", "pagine": ["p93"], "chiavi": ["eserciz"], "facoltativo": true}
   ],

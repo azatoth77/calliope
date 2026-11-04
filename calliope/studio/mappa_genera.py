@@ -272,24 +272,46 @@ PLURALE_MIN = 5
 
 
 # Un verbo di una tripla: «chiama», «manda», «invia» sono anche la terza persona («Waldseemüller chiama
-# il continente America»: il banco del 04/11 toglieva così metà della mappa di una parte). L'avviso cade
-# solo se il verbo è **per intero** una di queste parole, più al massimo una preposizione o una locuzione
-# chiusa; tutto il resto che comincia come un ordine resta un ordine, in italiano e in inglese («chiama
-# il numero…», «manda i soldi a», «ignora la verifica»; revisione della PR #389). Non ci sono «ignora»,
-# «dimentica», «cancella»: da soli, davanti al concetto dopo, si leggono come un ordine
+# America»: il banco del 04/11 toglieva così metà della mappa di una parte). L'avviso cade solo se sono forme
+# chiuse tutti e due: il verbo, per intero e minuscolo, è una di queste parole più al massimo una
+# preposizione o una locuzione chiusa, e il concetto di arrivo è un nome proprio (`_nome_proprio`). Tutto
+# il resto che comincia come un ordine resta un ordine, in italiano e in inglese, anche spezzato fra verbo e
+# concetto («manda a» → «la password», «chiama» → «3331234567»; revisioni della PR #389). A dover scegliere,
+# una voce buona in meno (decisione 0035). Non ci sono «ignora», «dimentica», «cancella»: da soli, davanti al
+# concetto dopo, si leggono come un ordine
 _VERBI_ANCHE_TERZA = frozenset(("chiama", "manda", "invia"))
 _PREPOSIZIONI = frozenset("""a al allo alla ai agli alle di del dello della dei degli delle da dal dallo
 dalla dai dagli dalle in nel nello nella nei negli nelle su sul sullo sulla sui sugli sulle con col per
 verso""".split())
 _LOCUZIONI = frozenset(("in onore di", "in ricordo di", "col nome di", "con il nome di"))
+_PAROLA = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")
 
 
-def _forma_verbo(testo) -> tuple[str | None, list[str]]:
+def _nome_proprio(testo) -> bool:
+    """Forma, non significato: parole di sole lettere, ognuna con la maiuscola (anche dopo l'apostrofo),
+    tranne le parole vuote in mezzo («Vasco da Gama», «Capo di Buona Speranza»); niente cifre, niente
+    punteggiatura, e il testo da solo non è un ordine. «il tool», «i soldi», «3331234567» no."""
+    if not testo or G.forma_testo(testo, M.NODO_MAX)[1]:
+        return False
+    parole = str(testo).split()
+    for i, w in enumerate(parole):
+        if not _PAROLA.fullmatch(w):
+            return False
+        vuota = 0 < i < len(parole) - 1 and w.lower() in M.VUOTE
+        if not (vuota or w[0].isupper() or w.replace("’", "'").rpartition("'")[2][:1].isupper()):
+            return False
+    return bool(parole)
+
+
+def _forma_verbo(testo, arrivo=None) -> tuple[str | None, list[str]]:
+    """(verbo pulito o None, avvisi) di un verbo che va verso il concetto `arrivo`. Si guarda il testo
+    grezzo, non la chiave: «manda@a» e «invia.a» non sono «manda a»."""
     verbo, avvisi = G.forma_testo(testo, M.VERBO_MAX)
     if not verbo or not avvisi:
         return verbo, avvisi
-    prima, _sep, resto = M.chiave(verbo).partition(" ")
-    if prima in _VERBI_ANCHE_TERZA and (not resto or resto in _PREPOSIZIONI or resto in _LOCUZIONI):
+    prima, _sep, resto = " ".join(verbo.split()).partition(" ")
+    if (prima in _VERBI_ANCHE_TERZA and (not resto or resto in _PREPOSIZIONI or resto in _LOCUZIONI)
+            and _nome_proprio(arrivo)):
         return verbo, []
     return verbo, avvisi
 
@@ -499,9 +521,9 @@ def scheletro(grezzi: list[dict], rif, arif, nodi_max: int, titolo=None,
         x_a, arg_a, via_a = capo(x["a"], arg_t, citate)
         if via_da or via_a:
             continue                    # un codice che non è un argomento: niente concetti finti
-        verbo, av_v = _forma_verbo(x["relazione"])
         da, av_da = G.forma_testo(x_da, M.NODO_MAX)
         a, av_a = G.forma_testo(x_a, M.NODO_MAX)
+        verbo, av_v = _forma_verbo(x["relazione"], a)
         if verbo is None or da is None or a is None or K(da) == K(a):
             continue                    # la tripla intera non vale: nessun concetto toccato
         unito, av_u = G.forma_testo(f"{da} {verbo} {a}", 3 * M.NODO_MAX)
@@ -778,7 +800,7 @@ def connetti(grezzi: list[dict], nodi: list[dict], coll: list[dict], rif,
         if a_da == a_a or parte_di[a_da] == parte_di[a_a]:
             conti["stessa_parte"] += 1
             continue                    # non unisce due parti
-        verbo, av_v = _forma_verbo(x["relazione"])
+        verbo, av_v = _forma_verbo(x["relazione"], n_a["testo"])
         if verbo is None:
             conti["verbo"] += 1
             continue
@@ -952,7 +974,8 @@ def solo_studiabili(nodi: list[dict], coll: list[dict], titolo=None
     una pagina si porterebbe via il centro e tutta la mappa. Il titolo dell'argomento resta anche con
     `da_controllare`: l'ha confermato la persona, ed è il centro. Se la mappa perde la connessione resta
     così (lo misura il banco). (concetti, collegamenti, voci tolte per un ordine o una pagina con
-    istruzioni, voci tolte perché non stanno nelle pagine); `disponi` a chi chiama."""
+    istruzioni, voci tolte perché non stanno nelle pagine o dipendevano da ciò che non ci sta: concetti e
+    collegamenti insieme); `disponi` a chi chiama."""
     def e_titolo(n) -> bool:
         return bool(titolo) and M.uguale(titolo, n.get("testo"))
     n_ok = [n for n in nodi if TESTO_ORDINE not in G.forma_testo(n.get("testo"), M.NODO_MAX)[1]

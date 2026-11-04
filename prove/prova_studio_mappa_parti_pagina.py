@@ -142,7 +142,7 @@ def scenario_telefono(t, st, vid, args):
     ok = aspetta(lambda: "Costantinopoli" in testo(t), 6)
     el = testo(t)
     verifica("una parte si apre: lo schema, coi verbi, l'avviso e la nota delle voci tolte",
-             bool(ok) and "nascono dalla caduta di" in el and "3 voci tolte: non stanno nelle pagine" in el
+             bool(ok) and "nascono dalla caduta di" in el and "3 voci tolte perché non stanno nelle pagine o dipendevano da ciò che non ci sta" in el
              and "2 voci non messe" in el, el[:600])
     verifica("nella parte non c'è «proposto»: nessuno decide, si legge",
              "proposto" not in el.lower().replace("proposta", ""), el[:600])
@@ -210,6 +210,44 @@ def scenario_telefono(t, st, vid, args):
     st.finisci_libera(LEO, st.vista_mappe(LEO, vid)["libera"]["id"])
 
 
+def scenario_prova(t, st, vid, args):
+    """Una prova vera che parte da un altro schermo, con la mappa aperta qui (seconda revisione della
+    PR #389): al primo tocco i testi spariscono; riaperta dice perché; dopo la consegna tornano."""
+    t.tocca('.studio-h-mappa button[data-mappa="chiudi"]')
+    aspetta(lambda: t.v("!!document.querySelector('.studio-h-mappa button[data-mappa=\"apri\"]')"), 8)
+    t.tocca('.studio-h-mappa button[data-mappa="apri"]')
+    aspetta(lambda: "Le spezie" in testo(t), 8)
+    t.tocca('button[data-mappa="quale"][data-dati*="scheletro"]')
+    ok = aspetta(lambda: "Le spezie" in testo(t) and t.v("!!document.querySelector('.studio-m button[data-mappa=\"conferma\"]')"), 8)
+    verifica("prima della prova la generale si legge", bool(ok), testo(t)[:300])
+    for i in range(3):
+        st.aggiungi_domanda(LEO, vid, "numero", f"Domanda {i}?", str(1490 + i), argomento=args[0]["id"])
+    p = st.inizia_prova(LEO, vid)
+    id_s = st.vista_mappe(ANDREA, vid)["scheletro"]["id"]
+    t.tocca('.studio-m button[data-mappa="conferma"]')
+    ok = aspetta(lambda: "le mappe tornano dopo la consegna" in testo(t), 8)
+    el = testo(t)
+    verifica("pagina vecchia: la risposta «prova aperta» ricarica la mappa e i testi spariscono",
+             bool(ok) and not any(x in el for x in ("Le spezie", "Cristoforo Colombo", "Il Portogallo"))
+             and st._riga_mappa(id_s)["stato"] != "confermata", el[:400])
+    verifica("con la prova aperta: la nota, niente schede né tasti della mappa",
+             t.v("document.querySelectorAll('button[data-mappa=\"quale\"]').length") == 0
+             and t.v("document.querySelectorAll('.studio-m button').length") == 0
+             and t.v("!!document.querySelector('.studio-m .studio-avviso')"))
+    misure(t, "390×844 con la prova aperta")
+    B.foto(t, "studio-parti-prova-390x844.png")
+    t.tocca('.studio-h-mappa button[data-mappa="chiudi"]')
+    aspetta(lambda: t.v("!!document.querySelector('.studio-h-mappa button[data-mappa=\"apri\"]')"), 8)
+    t.tocca('.studio-h-mappa button[data-mappa="apri"]')
+    ok = aspetta(lambda: "le mappe tornano dopo la consegna" in testo(t), 8)
+    verifica("riaperta durante la prova: la nota, niente testi", bool(ok) and "Le spezie" not in testo(t))
+    st.consegna_prova(LEO, p["id"])
+    t.tocca('.studio-h-mappa button[data-mappa="chiudi"]')
+    aspetta(lambda: t.v("!!document.querySelector('.studio-h-mappa button[data-mappa=\"apri\"]')"), 8)
+    t.tocca('.studio-h-mappa button[data-mappa="apri"]')
+    verifica("dopo la consegna la mappa torna", bool(aspetta(lambda: "Le spezie" in testo(t), 8)))
+
+
 def scenario_pc(t, args):
     B.dimensione(t, 1440, 900)
     aspetta(lambda: t.v("!!window.calliopeSchermo"), 10)
@@ -269,6 +307,7 @@ def main() -> int:
             time.sleep(0.5)
             B.dimensione(t, 390, 844)
             scenario_telefono(t, st, vid, args)
+            scenario_prova(t, st, vid, args)
             pagina.pompa(0.3)
             errori = [r for r in pagina.log if r.startswith(("ECCEZIONE", "ERROR")) or "Content Security" in r]
             verifica("telefono: nessun errore JavaScript né violazione della CSP", not errori, "; ".join(errori)[:300])
