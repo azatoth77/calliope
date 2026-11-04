@@ -150,20 +150,25 @@ def parziale(testo) -> dict | None:
             "misure": G.oggetti_completi(testo, "misure")}
 
 
-# La fine di una frase: un segno seguito da uno spazio. Il punto di «2.7» non ha lo spazio; il punto
-# prima di un'iniziale o di una sigla non chiude niente («J. Watt», «a.C.», «il sig. Bianchi»)
-_FINE_FRASE = re.compile(r"[.!?](?=\s)")
-_ABBREVIAZIONI = frozenset("sig sigg dott prof ing avv arch geom rag on ecc es cfr pag pagg vol cap "
-                           "fig tab art nr num tel ca cioè".split())
+# La fine di una frase: un segno, uno spazio, poi una maiuscola o una virgoletta. Il punto di «2.7» non
+# ha lo spazio, «2. 7» e «1. 500» (l'OCR) e «gen. di» non hanno la maiuscola; il punto prima di
+# un'iniziale, di una sigla o di un numero d'elenco non chiude niente («J. Watt», «a.C.», «il sig.
+# Bianchi», «i passi: 1. Pesa»)
+_FINE_FRASE = re.compile(r"[.!?](?=\s+[\"«“‘'A-ZÀ-ÖØ-Þ])")
+_ABBREVIAZIONI = frozenset("sig sigg dott dr prof ing avv arch geom rag on gen col cav mons sen ecc es "
+                           "cfr pag pagg vol cap fig tab art nr num tel ca cioè".split())
+_NUMERO_ELENCO = re.compile(r"(?:^|[:;,]\s*)\d+$")
 # Sotto questa lunghezza ciò che resta non è una frase di una lezione («1.», «Il sig.», «Il pH è 7.»)
 FRASE_MIN = 25
 
 
 def _chiude(testo: str, i: int) -> bool:
-    """Il segno in `i` chiude davvero una frase? Il punto no dopo un'abbreviazione o una lettera
-    sola."""
+    """Il segno in `i` chiude davvero una frase? Il punto no dopo un'abbreviazione, una lettera sola
+    o un numero d'elenco."""
     if testo[i] != ".":
         return True
+    if _NUMERO_ELENCO.search(testo[:i]):
+        return False
     parola = re.search(r"[^\W\d_]+$", testo[:i])
     return parola is None or (len(parola.group(0)) > 1
                               and parola.group(0).lower() not in _ABBREVIAZIONI)
@@ -173,9 +178,12 @@ def fino_alla_frase(testo) -> str | None:
     """Il paragrafo del modello, una riga. Arrivato al tetto, lo schema l'ha chiuso a metà: fino
     all'ultima frase finita (revisione della PR #388: «è 2.7 g…» diventava «è 2.», un dato falso a
     chi studia). La fine del testo tagliato non conta: «2.» può essere la metà di «2.7». None se non
-    ce n'è una abbastanza lunga: meglio niente di un pezzo."""
-    t = " ".join(str(testo if testo is not None else "").split())
-    if len(t) < PARAGRAFO_MAX:
+    ce n'è una abbastanza lunga: meglio niente di un pezzo. Il tetto si guarda sul testo grezzo,
+    quello che lo schema conta: con uno spazio doppio, o uno spazio al carattere 600, il pezzo
+    normalizzato sembrerebbe integro (seconda revisione della PR #388: «la massa vale 3»)."""
+    grezzo = str(testo if testo is not None else "")
+    t = " ".join(grezzo.split())
+    if len(grezzo) < PARAGRAFO_MAX:
         return t
     fine = [m.start() for m in _FINE_FRASE.finditer(t[:PARAGRAFO_MAX]) if _chiude(t, m.start())]
     if not fine or fine[-1] + 1 < FRASE_MIN:

@@ -1232,6 +1232,10 @@ EST_ELENCO_MSG = ("Dati del turno: le estensioni che ci sono adesso, tutte: {ele
 SVILUPPO_IN_STUDIO = ("Chi parla sta studiando (modalità studio) e ha uno sviluppo aperto: non "
                       "nominarlo e non tornarci. Se è lui a parlarne, sviluppo_passo con «stato».")
 SVILUPPO_RIPRENDI = re.compile(r"(?<![a-zà-ù])(riprend|svilupp|continu)", re.I)
+# In modalità studio i sospesi solo se si nomina lo sviluppo: «continuiamo il ripasso» e «come si
+# sviluppa la fotosintesi?» sono lo studio (seconda revisione della PR #388). Decide cosa arriva nei dati
+# del turno, non cosa si fa
+SVILUPPO_NOMINATO = re.compile(r"(?<![a-zà-ù])svilupp[oi]\b", re.I)
 
 # Tool i cui risultati non restano nella storia oltre la risposta (03/10): i riservati
 # (ToolSpec.riservato, i documenti di casa) diventano una traccia neutra, questi personali
@@ -4621,7 +4625,8 @@ class Brain:
                 # bloccato: lo sviluppo va in pausa da solo
                 return svs.dati_turno(sv) + (SVILUPPO_ARGOMENTO if Brain.eventi_attivo(self)
                                              else "")
-            if SVILUPPO_RIPRENDI.search(testo or ""):
+            if SVILUPPO_RIPRENDI.search(testo or "") and (
+                    not self._in_modalita_studio() or SVILUPPO_NOMINATO.search(testo or "")):
                 return svs.dati_sospesi(chi)
         except Exception as e:  # noqa: BLE001 — sono solo dati del turno
             print(f"   [SVILUPPO] dati del turno: {type(e).__name__}: {e}", flush=True)

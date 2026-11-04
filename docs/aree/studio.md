@@ -241,7 +241,20 @@ Prove: `prova_studio_giro.py` (nuova, a secco, ogni punto coi contrari), tre cas
   argomento, almeno 550 caratteri): 5366 token per 11 lezioni e 33 paragrafi da 537 caratteri; 12 lezioni al
   tetto con reazioni e misure sono stimate sotto gli 8000.
 
-Misure dopo le correzioni (DGX, sola lettura). Sul materiale del giro: domande 4 giri, 23–27 su 11 argomenti (fine
+Dopo la seconda revisione della PR #388:
+
+- **Il tetto del paragrafo** si guarda sul testo grezzo, quello che conta lo schema: con uno spazio doppio o uno
+  spazio al carattere 600 un paragrafo tagliato sembrava integro («la massa vale 3»). La frase si chiude solo con
+  una maiuscola o una virgoletta dopo lo spazio: fuori «2. 7», «1. 500», «gen. di»; anche i numeri d'elenco.
+- **I sospesi in modalità** solo se si nomina lo sviluppo: «continuiamo il ripasso» e «come si sviluppa la
+  fotosintesi?» li portavano nei dati del turno.
+- **`scoperti` conta le voci senza avvisi**, e la seconda richiesta parte anche dopo una risposta intera, per gli
+  argomenti senza una voce pulita; se non cambia niente ci si ferma (una pagina con le istruzioni resta con
+  l'avviso). La lezione nuova prende il posto di quella con gli avvisi. Con un esito «rotto» tutti scoperti, mai il
+  valore vecchio.
+- **«tipo»** con una materia che non c'è ha la strada verso «crea», senza richiamo.
+
+Misure dopo le prime correzioni (DGX, sola lettura). Sul materiale del giro: domande 4 giri, 23–27 su 11 argomenti (fine
 «stop», 35–43 s, 21–23 senza avvisi); preparazione 2 giri, 11 lezioni su 11, 14–15 paragrafi senza avvisi su 18–19,
 0 scartati, tutti finiti a una frase; carte 2 giri, 22–24 su 11 argomenti. Taglio forzato a 900 token: domande 6
 voci, la seconda richiesta chiede i soli 8 argomenti scoperti e li copre tutti; preparazione 5 lezioni, poi le altre

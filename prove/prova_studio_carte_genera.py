@@ -130,6 +130,10 @@ verifica("doppioni (anche con le virgolette) e valori che non sono stringhe scar
          len(pr) == 7 and len([c for c in pr if "Costantinopoli" in c["domanda"]]) == 1)
 
 # ═══════════════════════════ 3. la richiesta ═══════════════════════════
+# Le carte di qui lasciano argomenti senza una voce pulita: le richieste in più hanno le prove loro in
+# prova_studio_giro.py (#383), qui si conta una richiesta per generazione
+from calliope.studio import lettura as _L  # noqa: E402
+_L.SECONDE_MAX = 0
 print("— la richiesta")
 c = G.corpo("qwen", st.verifica(LEO, vid), rif, arif)
 testo = c["messages"][1]["content"]

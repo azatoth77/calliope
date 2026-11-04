@@ -234,6 +234,20 @@ verifica("le carte tagliate: una richiesta sola, le carte intere tenute",
          lt.genera_carte(vv) == "proposte" and len(lt._chiedi_corpo.richieste) == 1
          and st.dati.uno("SELECT COUNT(*) n FROM studio_carte WHERE verifica = ?", (vid,))["n"] == 2)
 st.close()
+st, vid, vv, args = None, None, None, None
+st = nuovo(studio_carte_genera="ombra")
+vid = con_materiali(st, argomenti=3)
+v = dict(st.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (vid,)))
+vv = {**v, "_pagine": st._pagine_di(vid), "_argomenti": st._argomenti_per_carte(vid), "_modo": "ombra"}
+lt = lettore(st, (json.dumps({"carte": [carta]}, ensure_ascii=False), "stop"), ('{"carte": []}', "stop"))
+lt.genera_carte(vv)
+verifica("le carte: il campo dice gli argomenti scoperti",
+         len(st.scoperti_di(vid)["carte"]["argomenti"]) == 2, st.scoperti_di(vid))
+rif_, arif_ = rif_arif(st, vid)
+msg = G.messaggi({"materia": "x", "data": "2026-11-20"}, rif_, arif_)[1]["content"]
+verifica("le carte: la regola nella richiesta ha il numero degli argomenti",
+         "da 2 a 4 per argomento, al più 30" in msg and "{quante}" not in msg, msg[-300:])
+st.close()
 verifica("la regola delle carte ci sta nel tetto, anche oltre 15 argomenti",
          "2 per argomento" in G.regole(11) and "1 per argomento" in G.regole(16)
          and "{" not in G.regole(16) and G.SCHEMA["properties"]["carte"]["maxItems"] == G.MAX_CARTE)
@@ -283,11 +297,56 @@ verifica("sempre tagliata: si ferma al tetto, e il campo dice cosa è scoperto (
          and any("8 argomenti scoperti" in x for x in registro), f"{sc} {registro}")
 st.close()
 st, vid, vv, args = stato_lettore(studio_domande_genera="ombra")
-lt = lettore(st, (json.dumps({"domande": [dom("A1", 1)]}), "stop"))
+lt = lettore(st, (json.dumps({"domande": [dom("A1", 1)]}), "stop"), ('{"domande": []}', "stop"),
+             ('{"domande": []}', "stop"))
 lt.genera_domande(vv)
-verifica("contrario: una risposta finita non si richiede, ma ciò che manca si scrive",
-         len(lt._chiedi_corpo.richieste) == 1
+verifica("una risposta intera con argomenti scoperti: li richiede una volta; niente di nuovo, ci si ferma",
+         len(lt._chiedi_corpo.richieste) == 2
          and len(st.scoperti_di(vid)["domande"]["argomenti"]) == 10, st.scoperti_di(vid))
+st.close()
+
+
+def fuori(a):
+    """Una domanda buona nella forma, con la risposta fuori dalle pagine: da_controllare."""
+    return {**dom(a, a), "risposta": "Napoleone a Waterloo nel 1815"}
+
+
+st, vid, vv, args = stato_lettore(studio_domande_genera="ombra")
+tutte_ = [dom(f"A{i}", i) for i in range(1, 11)] + [fuori("A11")]
+lt = lettore(st, (json.dumps({"domande": tutte_}, ensure_ascii=False), "stop"),
+             (json.dumps({"domande": [dom("A11", 11)]}, ensure_ascii=False), "stop"))
+lt.genera_domande(vv)
+verifica("l'argomento con le sole voci con un avviso: la seconda richiesta chiede lui solo, e lo copre",
+         len(lt._chiedi_corpo.richieste) == 2
+         and enum_di(lt._chiedi_corpo.richieste[1], "domande") == ["A11"]
+         and st.scoperti_di(vid) == {}, st.scoperti_di(vid))
+st.close()
+st, vid, vv, args = stato_lettore(studio_domande_genera="ombra")
+lt = lettore(st, (json.dumps({"domande": tutte_}, ensure_ascii=False), "stop"),
+             (json.dumps({"domande": [fuori("A11")]}, ensure_ascii=False), "stop"),
+             (json.dumps({"domande": [fuori("A11")]}, ensure_ascii=False), "stop"))
+lt.genera_domande(vv)
+verifica("…sempre con l'avviso: una richiesta sola in più, e il campo lo conta scoperto (voci che ci sono)",
+         len(lt._chiedi_corpo.richieste) == 2
+         and st.scoperti_di(vid)["domande"]["argomenti"] == [args[10]["id"]], st.scoperti_di(vid))
+st.close()
+st, vid, vv, args = stato_lettore(studio_domande_genera="ombra")
+lt = lettore(st, (json.dumps({"domande": [dom("A1", 1)]}), "stop"), ('{"domande": []}', "stop"))
+lt.genera_domande(vv)
+pid_ = st._pagine_di(vid)[0]["id"]
+st.dati.scrivi("UPDATE studio_verifiche SET domande_firma = NULL WHERE id = ?", (vid,))
+lt = lettore(st, ("non è json", "stop"), ("non è json", "stop"))
+ok_ = lt.genera_domande(vv)
+verifica("l'esito «rotto» aggiorna il campo: tutti scoperti, non il valore vecchio",
+         ok_ == "rotto" and len(st.scoperti_di(vid)["domande"]["argomenti"]) == 11, st.scoperti_di(vid))
+st.close()
+st = nuovo(studio_carte_genera="ombra")
+vid = con_materiali(st, argomenti=3)
+v = dict(st.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (vid,)))
+vv = {**v, "_pagine": st._pagine_di(vid), "_argomenti": st._argomenti_per_carte(vid), "_modo": "ombra"}
+lt = lettore(st, ("non è json", "stop"))
+verifica("…anche per le carte", lt.genera_carte(vv) == "rotto"
+         and len(st.scoperti_di(vid)["carte"]["argomenti"]) == 3, st.scoperti_di(vid))
 st.close()
 lz = lambda a: {"argomento": a, "paragrafi": [{"testo": "Colombo partì da Palos nel 1492 con tre navi.",  # noqa: E731
                                                "pagine": ["P1"]}]}
@@ -305,6 +364,8 @@ fine = json.dumps({"lezioni": [lz(f"A{i}") for i in range(4, 12)], "reazioni": [
 lt = lettore(st, (json.dumps({"lezioni": [lz("A1"), lz("A2"), lz("A3")]}, ensure_ascii=False)[:-2] + ', {"a',
                   "length"), (fine, "stop"))
 lt.prepara(vv)
+lezione_avviso = {"argomento": "A1", "paragrafi": [{"testo": "I draghi sputano fuoco dalla bocca sempre.",
+                                                    "pagine": ["P1"]}]}
 verifica("la preparazione: la seconda richiesta copre il resto, e arriva ai valori",
          st.scoperti_di(vid) == {} and st.dati.uno(
              "SELECT COUNT(*) n FROM studio_preparazioni WHERE verifica = ? AND tipo = 'lezione'",
@@ -312,6 +373,23 @@ verifica("la preparazione: la seconda richiesta copre il resto, e arriva ai valo
 st.close()
 
 # ═══════════════════════════ 2. le lezioni scartate ═══════════════════════════
+st, vid, vv, args = stato_lettore(studio_preparazione="ombra")
+lt = lettore(st, (json.dumps({"lezioni": [lezione_avviso] + [lz(f"A{i}") for i in range(2, 12)], "reazioni": [],
+                              "misure": []}, ensure_ascii=False), "stop"),
+             (json.dumps({"lezioni": [lz("A1")], "reazioni": [], "misure": []}), "stop"))
+ok_ = lt.prepara(vv)
+righe_ = st.dati.tutti("SELECT contenuto FROM studio_preparazioni WHERE verifica = ? AND tipo = 'lezione'", (vid,))
+verifica("la lezione con i soli paragrafi con un avviso: richiesta, e la nuova prende il suo posto",
+         ok_ == "proposte" and len(lt._chiedi_corpo.richieste) == 2 and st.scoperti_di(vid) == {}
+         and len(righe_) == 11 and "draghi" not in json.dumps([dict(r) for r in righe_]), st.scoperti_di(vid))
+st.close()
+st, vid, vv, args = stato_lettore(studio_preparazione="ombra")
+lt = lettore(st, ("non è json", "stop"))
+verifica("l'esito «rotto» della preparazione: tutti scoperti, e i valori persi",
+         lt.prepara(vv) == "rotto" and st.scoperti_di(vid)["preparazione"]["valori_persi"] is True
+         and len(st.scoperti_di(vid)["preparazione"]["argomenti"]) == 11, st.scoperti_di(vid))
+st.close()
+
 print("— 2. le lezioni scartate")
 for scritto, atteso in (("A1", "A1"), ("A1: Il viaggio", "A1"), ("a3 - titolo", "A3"), ("A12", "A12"),
                         ("1", "A1"), (" A 2 ", "A2"), ("A2 Milano-Napoli", "A2")):
@@ -364,6 +442,36 @@ for nome, testa in (("una sigla, oltre il minimo", "Questa scoperta la racconta 
                     ("a.C., oltre il minimo", "Una data che si ricorda è il 44 a.C. con Cesare")):
     verifica(f"contrario, il tetto: {nome}", PR.fino_alla_frase(testa + coda) is None,
              PR.fino_alla_frase(testa + coda))
+for nome, testa in (("OCR «2. 7»", "Una misura presa con molta cura in laboratorio vale 2. 7 g"),
+                    ("OCR «1. 500»", "Nella lunga battaglia morirono allora circa 1. 500 soldati"),
+                    ("«gen. di»", "La battaglia fu vinta dalle truppe del gen. di divisione"),
+                    ("«gen. Garibaldi»", "La battaglia fu vinta dalle truppe del gen. Garibaldi"),
+                    ("«dr. Bianchi»", "La misura fu presa in laboratorio dal dr. Bianchi"),
+                    ("un elenco numerato", "I passi da seguire sono questi qui: 1. Pesa il campione")):
+    verifica(f"contrario, il tetto: {nome}", PR.fino_alla_frase(testa + coda) is None,
+             PR.fino_alla_frase(testa + coda))
+verifica("contrario, il tetto: una frase troppo corta non è una lezione",
+         PR.fino_alla_frase("Il pH è 7. Poi" + coda) is None, PR.fino_alla_frase("Il pH è 7. Poi" + coda))
+verifica("il tetto: dopo lo spazio una virgoletta chiude",
+         PR.fino_alla_frase("Colombo partì da Palos nel 1492. «Poi" + coda) == "Colombo partì da Palos nel 1492.")
+
+
+def al_tetto(testa, finale):
+    """Esattamente il tetto di caratteri grezzi, come lo chiude lo schema."""
+    c = testa + " e il testo continua"
+    while len(c) < PR.PARAGRAFO_MAX:
+        c += " e altre parole"
+    return c[:PR.PARAGRAFO_MAX - len(finale)] + finale
+
+
+for nome, x in (("finisce con uno spazio", al_tetto("Una misura presa", "la massa vale 3 ")),
+                ("spazio doppio", al_tetto("Una  misura  presa", "la massa vale 3")),
+                ("a capo doppio", al_tetto("Una misura\n\npresa", "la massa vale 3"))):
+    r_ = PR.fino_alla_frase(x)
+    verifica(f"il tetto sul testo grezzo, {nome}: il pezzo non passa per integro",
+             len(x) == PR.PARAGRAFO_MAX and r_ is None, r_)
+verifica("contrario: un carattere sotto il tetto, col testo tutto, resta intero",
+         PR.fino_alla_frase("x" * (PR.PARAGRAFO_MAX - 1)) == "x" * (PR.PARAGRAFO_MAX - 1))
 verifica("il tetto: una frase vera che finisce con un numero vale",
          PR.fino_alla_frase("Colombo partì da Palos nel 1492. Poi" + coda) == "Colombo partì da Palos nel 1492.")
 verifica("il tetto: il decimale resta dentro una frase finita",
@@ -437,8 +545,18 @@ for az in ("resoconto", "fatto"):
     verifica(f"contrario: `giorno` di «{az}» resta il suo", x == {"azione": az, "giorno": "ieri"}, x)
 verifica("contrario: `tipo` è il suo con l'azione «tipo», e `prova` detta vince",
          TS.senza_mascherati(None, {"azione": "tipo", "tipo": "x"}) == {"azione": "tipo", "tipo": "x"}
-         and TS.senza_mascherati(None, {"azione": "crea", "tipo": "x", "prova": "scritta"})["prova"]
-         == "scritta")
+         and TS.senza_mascherati(None, {"azione": "crea", "tipo": "x", "prova": "scritta"})
+         == {"azione": "crea", "prova": "scritta"})
+for nome, a_, atteso in (
+        ("`tipo` e `prova` insieme", {"azione": "crea", "tipo": "x", "prova": "scritta"}, False),
+        ("`tipo` solo", {"azione": "crea", "tipo": "x"}, False),
+        ("`giorno` solo", {"azione": "crea", "giorno": "lunedì"}, False),
+        ("un valore mascherato", {"azione": "sessione", "umore": "…"}, True),
+        ("mascherato e `tipo`", {"azione": "crea", "tipo": "x", "umore": "..."}, True)):
+    c_ = types.SimpleNamespace(regole=[])
+    TS.senza_mascherati(c_, a_)
+    verifica(f"`studio_mascherato_non_dato`, {nome}: {atteso}",
+             ("studio_mascherato_non_dato" in c_.regole) == atteso, c_.regole)
 verifica("nome inventato: la data in un campo inventato va in `data`",
          R.studio_dal_nome("studio_verifica", {"azione": "crea", "materia": "Biologia",
                                                "quando": "venerdì"})
@@ -530,8 +648,18 @@ verifica("con due: chiedi quale, nessun richiamo, e nessuna materia scritta dall
          "chiediglielo" in o["cosa_fare"] and "sola verifica" not in o["cosa_fare"]
          and "Istruzione" not in json.dumps(o, ensure_ascii=False), o)
 o = chiama(st, "studio", azione="stato", materia="tutto")
-verifica("una lettura: la strada verso «crea», e altrimenti in breve",
-         "«crea»" in o["cosa_fare"] and "in breve" in o["cosa_fare"], o)
+verifica("una lettura: la strada verso «crea», e altrimenti in breve, senza dire il contrario",
+         "«crea»" in o["cosa_fare"] and "in breve" in o["cosa_fare"]
+         and "Non dire che non la trovi" not in o["cosa_fare"], o)
+o = chiama(st, "studio", azione="tipo", materia="tutto", prova="interrogazione")
+verifica("«tipo» su una materia che non c'è: la strada verso «crea», nessun richiamo",
+         "«crea»" in o["cosa_fare"] and "richiama" not in o["cosa_fare"], o)
+st3_ = nuovo()
+st3_.crea_verifica(LEO, "Storia", datetime.date.today() + datetime.timedelta(days=9))
+o = chiama(st3_, "studio", azione="tipo", materia="Fisica", prova="interrogazione")
+verifica("…anche con una verifica sola: non si cambia il tipo di un'altra",
+         "«crea»" in o["cosa_fare"] and "richiama" not in o["cosa_fare"], o)
+st3_.close()
 for az in ("archivia", "conclusa", "fatto", "salta_oggi", "togli"):
     o = chiama(st, "studio", azione=az, materia="tutto")
     verifica(f"«{az}» su una materia che non c'è: non si rifà su un'altra, niente «crea» né richiamo",
@@ -728,6 +856,19 @@ verifica("in modalità il modello non riceve la fase dello sviluppo",
 b.tool_ctx.speaker_ctx.in_modalita_studio = False
 verifica("contrario: fuori dalla modalità la riceve",
          "FASEDELLOSVILUPPO" in (b._sviluppo_turno("Che ore sono?") or ""))
+svs.aperto = None
+svs.dati_sospesi = lambda chi: "SOSPESIDELLOSVILUPPO"
+b.tool_ctx.speaker_ctx.in_modalita_studio = True
+for frase_ in ("Continuiamo il ripasso.", "Come si sviluppa la fotosintesi?", "Riprendo a studiare."):
+    verifica(f"in modalità, «{frase_}»: niente sospesi nei dati del turno",
+             not b._sviluppo_turno(frase_), b._sviluppo_turno(frase_))
+for frase_ in ("Riprendiamo lo sviluppo del gioco.", "Quali sviluppi ho sospesi?"):
+    verifica(f"in modalità, «{frase_}»: i sospesi ci sono",
+             b._sviluppo_turno(frase_) == "SOSPESIDELLOSVILUPPO")
+b.tool_ctx.speaker_ctx.in_modalita_studio = False
+verifica("contrario: fuori dalla modalità «continuiamo» li porta, come prima",
+         b._sviluppo_turno("Continuiamo il ripasso.") == "SOSPESIDELLOSVILUPPO")
+svs.aperto = types.SimpleNamespace(titolo="Tris", di=lambda: "di Tris", fase="analisi")
 b.tool_ctx.speaker_ctx.in_modalita_studio = True
 b.last_tools = [{"nome": "sviluppo_passo"}]
 verifica("contrario: in modalità, se se ne è appena parlato, la riceve",

@@ -223,12 +223,6 @@ def parziale(testo) -> list[dict]:
     return oggetti_completi(testo, "carte")
 
 
-def scoperti(voci: list[dict], arif: list[tuple[str, dict]]) -> list[tuple[str, dict]]:
-    """Gli argomenti di `arif` senza una voce: quelli da richiedere dopo un taglio."""
-    coperti = {_arg(x.get("argomento")) for x in voci if isinstance(x, dict)}
-    return [(r, a) for r, a in arif if r not in coperti]
-
-
 def _arg(x) -> str:
     s = str(x if x is not None else "")
     m = _CODICE_ARG.match(s)

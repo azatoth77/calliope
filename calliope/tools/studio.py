@@ -391,19 +391,22 @@ def _nessuna_verifica(svc, chi, verifica, materia, azione=None) -> dict:
     La strada verso «crea» e il richiamo valgono solo per chi legge o studia: un'azione che cambia
     qualcosa non si rifà su un'altra verifica («ho finito con tutto» → `conclusa` su Storia,
     revisione della PR #388). Il richiamo è senza materia e solo con una verifica sola: così i nomi
-    scritti dalla persona non entrano qui fuori busta."""
+    scritti dalla persona non entrano qui fuori busta. «tipo» cambia una verifica, ma può essere chi
+    annuncia un'interrogazione nuova: ha la strada verso «crea», non il richiamo."""
     if materia:
         errore = f"nessuna verifica di {materia} nello Studio"
-        if azione is not None and azione not in LETTURE:
+        if azione is not None and azione not in LETTURE and azione != "tipo":
             return {"ok": False, "errore": errore,
                     "cosa_fare": "Non farlo su un'altra verifica. Dillo in breve; se non è chiaro "
                                  "quale verifica intende, chiediglielo."}
         aperte = len(svc.home(chi)["verifiche"])
         altre = ("C'è una sola verifica aperta: se chi parla non ha nominato una materia nuova, "
-                 "richiama subito senza materia, senza chiederglielo. " if aperte == 1 else
+                 "richiama subito senza materia, senza chiederglielo. "
+                 if aperte == 1 and azione != "tipo" else
                  "Se non è chiaro di quale verifica parla, chiediglielo. " if aperte else "")
+        testa = "Non dire che non la trovi. " if azione is None else ""
         return {"ok": False, "errore": errore,
-                "cosa_fare": f"Non dire che non la trovi. {altre}Se chi parla ha detto che ha una "
+                "cosa_fare": f"{testa}{altre}Se chi parla ha detto che ha una "
                              "verifica o un'interrogazione di questa materia con una data, è "
                              "nuova: chiama subito studio con azione «crea», la materia, la data "
                              "detta e prova «interrogazione» se è un'interrogazione. "
@@ -2085,6 +2088,8 @@ def senza_mascherati(ctx, argomenti: dict) -> dict:
     «tranquillo»). Vale «non dato», così l'altro valore si aggiorna (seconda revisione della PR
     #317). Una conversione della forma, prima dei controlli dello schema."""
     out = {k: v for k, v in (argomenti or {}).items() if v not in ("…", "...")}
+    if len(out) != len(argomenti or {}):
+        note_rule(ctx, "studio_mascherato_non_dato")
     # Il giorno di una verifica sta in `data`, anche se il modello l'ha scritto in `giorno` (#383):
     # qui, prima dei controlli, così vale il controllo su chi ha detto la data
     if (str(out.get("azione") or "").strip().lower() in CON_DATA and out.get("giorno")
@@ -2096,8 +2101,6 @@ def senza_mascherati(ctx, argomenti: dict) -> dict:
         tipo = out.pop("tipo")
         if tipo and not out.get("prova"):
             out["prova"] = tipo
-    if len(out) != len(argomenti or {}):
-        note_rule(ctx, "studio_mascherato_non_dato")
     return out
 
 
