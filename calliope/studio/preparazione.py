@@ -495,6 +495,13 @@ class Preparazioni:
             self.dati.scrivi("UPDATE studio_verifiche SET scoperti = ? WHERE id = ?",
                              (json.dumps(tutti) if tutti else None, int(vid)))
 
+    def argomenti_decisi(self, vid, tabella: str) -> set:
+        """Gli argomenti con una carta o una domanda già decisa (scritta o confermata), che una
+        generazione non tocca: sono coperti. `tabella` la scrive il codice."""
+        return {r["argomento"] for r in self.dati.tutti(
+            f"SELECT argomento FROM {tabella} WHERE verifica = ? AND stato = 'attiva'", (int(vid),))
+            if r["argomento"] is not None}
+
     def scoperti_di(self, vid) -> dict:
         r = self.dati.uno("SELECT scoperti FROM studio_verifiche WHERE id = ?", (int(vid),))
         try:

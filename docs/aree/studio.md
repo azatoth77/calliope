@@ -254,6 +254,12 @@ Dopo la seconda revisione della PR #388:
   valore vecchio.
 - **«tipo»** con una materia che non c'è ha la strada verso «crea», senza richiamo.
 
+Dopo la terza revisione: **una seconda richiesta può solo aggiungere** (`lettura._aggiungi`). Delle nuove voci
+contano solo i codici mancanti, al più 3 per argomento, prima una per ciascuno; escono solo le vecchie di quegli
+argomenti; le vecchie pulite stanno davanti, dentro al tetto. Una lezione pulita non si sostituisce. Prima 30 voci sporche
+su un argomento facevano sparire quelle buone degli altri. Un argomento con una carta o una domanda già decisa è coperto
+(`argomenti_decisi`) e non si richiede.
+
 Misure dopo le prime correzioni (DGX, sola lettura). Sul materiale del giro: domande 4 giri, 23–27 su 11 argomenti (fine
 «stop», 35–43 s, 21–23 senza avvisi); preparazione 2 giri, 11 lezioni su 11, 14–15 paragrafi senza avvisi su 18–19,
 0 scartati, tutti finiti a una frase; carte 2 giri, 22–24 su 11 argomenti. Taglio forzato a 900 token: domande 6

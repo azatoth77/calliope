@@ -507,6 +507,7 @@ class Ceduta(Exception):
 
 # Quante richieste in più per gli argomenti rimasti scoperti da un taglio (#388)
 SECONDE_MAX = 2
+SECONDE_PER_ARGOMENTO = 3
 
 
 def _puliti(voci: list[dict]) -> set:
@@ -520,16 +521,36 @@ def _lezioni_pulite(risultato: dict) -> set:
             if any(not p["avvisi"] for p in lz["paragrafi"])}
 
 
-def _unisci(prime, altre):
-    """Le voci di due risposte. Una lista: prima le nuove, perché il controllo si ferma al tetto. La
-    preparazione: una lezione sola per argomento, la nuova al posto di quella con gli avvisi."""
-    if not isinstance(prime, dict):
-        return list(altre) + list(prime)
+def _aggiungi(prime, altre, mancano: set, pulita=None):
+    """Le voci di una risposta in più: **può solo aggiungere**, mai togliere una voce pulita già
+    tenuta (terza revisione della PR #388: messe davanti, 30 voci nuove su un argomento facevano
+    uscire dal tetto quelle buone degli altri). Delle nuove contano solo i codici `mancano`, al più
+    `SECONDE_PER_ARGOMENTO` per argomento, prima una per ciascuno; al loro posto escono solo le vecchie
+    di quegli argomenti, che hanno tutte un avviso. Poi vecchie pulite, nuove e le altre vecchie: il
+    controllo si ferma al tetto. La preparazione: una lezione per argomento, sostituita solo se manca.
+    `pulita(voce)`: per le liste, se il controllo del codice non le dà un avviso."""
     from . import genera as G
-    lezioni = {G._arg(x.get("argomento") if isinstance(x, dict) else None): x
-               for x in list(prime.get("lezioni") or []) + list(altre.get("lezioni") or [])}
-    return {"lezioni": list(lezioni.values()),
-            **{k: list(prime.get(k) or []) + list(altre.get(k) or []) for k in ("reazioni", "misure")}}
+    if isinstance(prime, dict):
+        lezioni = {G._arg(x.get("argomento")): x for x in prime.get("lezioni") or []
+                   if isinstance(x, dict)}
+        for x in altre.get("lezioni") or []:
+            c = G._arg(x.get("argomento")) if isinstance(x, dict) else None
+            if c in mancano and x.get("paragrafi"):
+                lezioni[c] = x
+        return {"lezioni": list(lezioni.values()),
+                **{k: list(prime.get(k) or []) + list(altre.get(k) or [])
+                   for k in ("reazioni", "misure")}}
+    giri: dict = {}
+    nuove = []
+    for x in altre:
+        c = G._arg(x.get("argomento")) if isinstance(x, dict) else None
+        if c in mancano and giri.get(c, 0) < SECONDE_PER_ARGOMENTO:
+            nuove.append((giri.get(c, 0), x))
+            giri[c] = giri.get(c, 0) + 1
+    nuove = [x for _n, x in sorted(nuove, key=lambda t: t[0])]
+    vecchie = [x for x in prime if G._arg(x.get("argomento")) not in giri]
+    buone = [x for x in vecchie if pulita(x)]
+    return buone + nuove + [x for x in vecchie if not pulita(x)]
 
 
 class Lettore:
@@ -1321,9 +1342,12 @@ class Lettore:
         t0 = time.monotonic()
         grezzi = None
         try:
+            # Un argomento con una carta già decisa è coperto (#388): non si richiede
+            decisi = self.studio.argomenti_decisi(vid, "studio_carte")
             grezzi, _finita = self._chiedi_lista(
                 lambda ar: G.corpo(self.modello, v, rif, ar), arif, m, vid, "carte", G.leggi,
-                G.parziale, lambda voci: _puliti(G.proposte(voci, rif, arif)))
+                G.parziale, lambda voci: _puliti(G.proposte(voci, rif, arif)) | decisi,
+                lambda x: bool(_puliti(G.proposte([x], rif, arif))))
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: carte, ceduto il passo a un lavoro dell'agente")
@@ -1361,9 +1385,9 @@ class Lettore:
         if esito == G.ROTTO:
             m["rotte"] += 1
             self._registra(f"verifica {vid}: carte illeggibili ({s:.1f} s)")
-            self._copertura(vid, "carte", arif, set())
+            self._copertura(vid, "carte", arif, decisi)
             return "rotto"
-        self._copertura(vid, "carte", arif, _puliti(proposte))
+        self._copertura(vid, "carte", arif, _puliti(proposte) | decisi)
         m["carte"] += n
         if modo == G.OMBRA:
             m["ombra"] += n
@@ -1408,15 +1432,15 @@ class Lettore:
         return None, True
 
     def _chiedi_lista(self, corpo_di, arif: list, m: dict, vid: int, cosa: str, leggi, parziale,
-                      coperti):
+                      coperti, pulita=None):
         """→ (le voci o None, finita): `_una_lista` e una richiesta per i soli argomenti rimasti senza
         una voce pulita, con gli stessi codici, al più `SECONDE_MAX` (revisione della PR #388: con un
         taglio dopo A3 gli altri 8 argomenti restavano scoperti e l'esito era pieno; la seconda:
         anche quelli con le sole voci con un avviso, che chi mostra i materiali non può usare).
         `coperti(voci)`: gli id degli argomenti con una voce pulita per il controllo del codice. Se la
         richiesta non cambia niente ci si ferma: una pagina con le istruzioni resta con l'avviso.
-        `finita`: una risposta è arrivata in fondo, con reazioni e misure. Ciò che resta scoperto lo
-        scrive chi chiama (`_copertura`)."""
+        `pulita(voce)`: vedi `_aggiungi`. `finita`: una risposta è arrivata in fondo, con reazioni e
+        misure. Ciò che resta scoperto lo scrive chi chiama (`_copertura`)."""
         voci, tagliata = self._una_lista(corpo_di(arif), m, vid, cosa, leggi, parziale)
         finita = not tagliata
         prima = None
@@ -1433,7 +1457,7 @@ class Lettore:
             altre, tagliata = self._una_lista(corpo_di(mancano), m, vid, cosa, leggi, parziale)
             if altre is None:
                 break
-            voci = _unisci(voci, altre)
+            voci = _aggiungi(voci, altre, set(codici), pulita)
             finita = finita or not tagliata
         return voci, finita
 
@@ -1464,9 +1488,11 @@ class Lettore:
         t0 = time.monotonic()
         grezzi = None
         try:
+            decisi = self.studio.argomenti_decisi(vid, "studio_domande")
             grezzi, _finita = self._chiedi_lista(
                 lambda ar: DG.corpo(self.modello, v, rif, ar), arif, m, vid, "domande", DG.leggi,
-                DG.parziale, lambda voci: _puliti(DG.proposte(voci, rif, arif)))
+                DG.parziale, lambda voci: _puliti(DG.proposte(voci, rif, arif)) | decisi,
+                lambda x: bool(_puliti(DG.proposte([x], rif, arif))))
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: domande, ceduto il passo a un lavoro dell'agente")
@@ -1502,9 +1528,9 @@ class Lettore:
         if esito == DG.ROTTO:
             m["rotte"] += 1
             self._registra(f"verifica {vid}: domande illeggibili ({s:.1f} s)")
-            self._copertura(vid, "domande", arif, set())
+            self._copertura(vid, "domande", arif, decisi)
             return "rotto"
-        self._copertura(vid, "domande", arif, _puliti(proposte))
+        self._copertura(vid, "domande", arif, _puliti(proposte) | decisi)
         m["domande"] += n
         if modo == DG.OMBRA:
             m["ombra"] += n

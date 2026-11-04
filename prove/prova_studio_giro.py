@@ -348,6 +348,105 @@ lt = lettore(st, ("non è json", "stop"))
 verifica("…anche per le carte", lt.genera_carte(vv) == "rotto"
          and len(st.scoperti_di(vid)["carte"]["argomenti"]) == 3, st.scoperti_di(vid))
 st.close()
+# Una seconda richiesta può solo aggiungere (terza revisione della PR #388)
+def buona(a, i):
+    return {**dom(a, f"{a}-{i}"), "domanda": f"Chi partì da Palos, {a} numero {i}?"}
+
+
+def sporca(a, i):
+    return {**fuori(a), "domanda": f"Chi perse a Waterloo, {a} numero {i}?"}
+
+
+def pulite_per(st_, vid_):
+    pul = {}
+    for r in st_.dati.tutti("SELECT argomento, testo, avvisi FROM studio_domande WHERE verifica = ?", (vid_,)):
+        if not r["avvisi"]:
+            pul.setdefault(r["argomento"], set()).add(r["testo"])
+    return pul
+
+
+def giro_domande(n_arg, prima, *altre):
+    st_ = nuovo(studio_domande_genera="ombra")
+    vid_ = con_materiali(st_, argomenti=n_arg)
+    v_ = dict(st_.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (vid_,)))
+    a_ = st_._argomenti_per_carte(vid_)
+    vv_ = {**v_, "_pagine": st_._pagine_di(vid_), "_argomenti": a_, "_modo": "ombra"}
+    lt_ = lettore(st_, *[(json.dumps({"domande": x}, ensure_ascii=False), "stop") for x in (prima, *altre)])
+    lt_.genera_domande(vv_)
+    return st_, vid_, a_, lt_
+
+
+prima_ = [buona(f"A{i}", j) for i in range(1, 10) for j in (1, 2, 3)] + [sporca("A10", 1), sporca("A11", 1)]
+st, vid, args, lt = giro_domande(11, prima_, [buona(a, j + 10) for a in ("A10", "A11") for j in range(1, 6)])
+pul = pulite_per(st, vid)
+verifica("11 argomenti: le 27 pulite già tenute restano tutte, e nel tetto entrano A10 e A11",
+         all(len(pul.get(a["id"], ())) == 3 for a in args[:9]) and args[9]["id"] in pul
+         and args[10]["id"] in pul and st.scoperti_di(vid) == {}, f"{ {k: len(x) for k, x in pul.items()} }")
+st.close()
+prima_ = [buona(f"A{i}", j) for i in (1, 2, 3) for j in (1, 2, 3)] + [sporca("A4", 1)]
+st, vid, args, lt = giro_domande(4, prima_, [sporca("A4", j + 20) for j in range(30)],
+                                 [sporca("A4", j + 60) for j in range(30)])
+pul = pulite_per(st, vid)
+n_ = st.dati.uno("SELECT COUNT(*) n FROM studio_domande WHERE verifica = ?", (vid,))["n"]
+verifica("30 voci sporche su A4: le 9 pulite di A1–A3 restano, e A4 resta scoperto",
+         all(len(pul.get(a["id"], ())) == 3 for a in args[:3]) and args[3]["id"] not in pul
+         and st.scoperti_di(vid)["domande"]["argomenti"] == [args[3]["id"]] and n_ <= 9 + 3, f"{pul} {n_}")
+st.close()
+st, vid, args, lt = giro_domande(4, prima_, [buona("A4", j + 20) for j in range(30)])
+pul = pulite_per(st, vid)
+n_ = st.dati.uno("SELECT COUNT(*) n FROM studio_domande WHERE verifica = ?", (vid,))["n"]
+verifica("30 voci buone su A4: al più 3, e al posto della sporca",
+         all(len(pul.get(a["id"], ())) == 3 for a in args[:3]) and len(pul[args[3]["id"]]) == 3 and n_ == 12,
+         f"{ {k: len(x) for k, x in pul.items()} } {n_}")
+st.close()
+st, vid, args, lt = giro_domande(3, [buona("A1", 1), buona("A2", 1), sporca("A3", 1)],
+                                 [buona("A1", 9), buona("A3", 1), sporca("A2", 9)])
+testi_ = {r["testo"] for r in st.dati.tutti("SELECT testo FROM studio_domande")}
+verifica("delle nuove contano solo i codici mancanti",
+         not any("A1 numero 9" in x or "A2 numero 9" in x for x in testi_)
+         and any("A3 numero 1" in x and "Palos" in x for x in testi_), testi_)
+st.close()
+st, vid, args, lt = giro_domande(3, [buona("A1", 1), buona("A2", 1), sporca("A3", 1)], [])
+verifica("contrario: se non arriva niente di nuovo la vecchia con l'avviso resta",
+         any("A3 numero 1" in r["testo"] for r in st.dati.tutti("SELECT testo FROM studio_domande")))
+st.close()
+x_ = L._aggiungi([{"argomento": f"A{i}", "domanda": f"A{i}"} for i in range(1, 4)],
+                 [{"argomento": "A9", "domanda": "nuova A9"}], {"A9"}, lambda v_: True)
+y_ = L._aggiungi([{"argomento": "A1", "domanda": "sporca"}, {"argomento": "A2", "domanda": "pulita"}],
+                 [{"argomento": "A9", "domanda": "nuova"}], {"A9"}, lambda v_: v_["domanda"] == "pulita")
+verifica("le vecchie con un avviso d'altri argomenti dopo le nuove: il tetto taglia loro per prime",
+         [v_["domanda"] for v_ in y_] == ["pulita", "nuova", "sporca"], y_)
+verifica("prima le vecchie pulite, poi le nuove: il tetto taglia le nuove, mai loro",
+         [v_["domanda"] for v_ in x_] == ["A1", "A2", "A3", "nuova A9"], x_)
+x_ = L._aggiungi([], [{"argomento": "A1", "n": j} for j in range(3)] + [{"argomento": "A2", "n": 9}],
+                 {"A1", "A2"}, lambda v_: True)
+verifica("le nuove: una per argomento prima delle altre, così tutti gli argomenti entrano nel tetto",
+         [v_["argomento"] for v_ in x_][:2] == ["A1", "A2"], x_)
+
+# Una carta confermata conta come coperta
+st = nuovo(studio_carte_genera="ombra")
+vid = con_materiali(st, argomenti=3)
+args = st._argomenti_per_carte(vid)
+for a_ in args[2:]:
+    st.dati.scrivi("INSERT INTO studio_carte (verifica, persona, argomento, domanda, risposta, pagine, origine, "
+                   "stato, creata) VALUES (?, 'l1', ?, 'Scritta?', 'x', '[]', 'persona', 'attiva', '2026-11-01')",
+                   (vid, a_["id"]))
+v = dict(st.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (vid,)))
+vv = {**v, "_pagine": st._pagine_di(vid), "_argomenti": args, "_modo": "ombra"}
+c1 = {"argomento": "A1", "domanda": "Chi partì da Palos?", "risposta": "Colombo", "pagine": ["P1"]}
+c2 = {**c1, "argomento": "A2", "domanda": "Quante navi aveva?"}
+lt = lettore(st, (json.dumps({"carte": [c1, c2]}, ensure_ascii=False), "stop"))
+lt.genera_carte(vv)
+verifica("un argomento con una sola carta confermata è coperto: niente seconda richiesta, niente scoperti",
+         len(lt._chiedi_corpo.richieste) == 1 and st.scoperti_di(vid) == {}, st.scoperti_di(vid))
+st.dati.scrivi("UPDATE studio_carte SET stato = 'tolta' WHERE origine = 'persona'")
+st.dati.scrivi("UPDATE studio_verifiche SET carte_firma = NULL WHERE id = ?", (vid,))
+lt = lettore(st, (json.dumps({"carte": [c1, c2]}, ensure_ascii=False), "stop"), ('{"carte": []}', "stop"))
+lt.genera_carte(vv)
+verifica("contrario: una carta tolta non copre", len(lt._chiedi_corpo.richieste) == 2
+         and st.scoperti_di(vid)["carte"]["argomenti"] == [args[2]["id"]], st.scoperti_di(vid))
+st.close()
+
 lz = lambda a: {"argomento": a, "paragrafi": [{"testo": "Colombo partì da Palos nel 1492 con tre navi.",  # noqa: E731
                                                "pagine": ["P1"]}]}
 st, vid, vv, args = stato_lettore(studio_preparazione="ombra")
@@ -388,6 +487,19 @@ lt = lettore(st, ("non è json", "stop"))
 verifica("l'esito «rotto» della preparazione: tutti scoperti, e i valori persi",
          lt.prepara(vv) == "rotto" and st.scoperti_di(vid)["preparazione"]["valori_persi"] is True
          and len(st.scoperti_di(vid)["preparazione"]["argomenti"]) == 11, st.scoperti_di(vid))
+st.close()
+
+st, vid, vv, args = stato_lettore(studio_preparazione="ombra")
+altra = {"argomento": "A2", "paragrafi": [{"testo": "Un'altra lezione, peggiore: i draghi volano sempre.",
+                                           "pagine": ["P1"]}]}
+lt = lettore(st, (json.dumps({"lezioni": [lezione_avviso] + [lz(f"A{i}") for i in range(2, 12)], "reazioni": [],
+                              "misure": []}, ensure_ascii=False), "stop"),
+             (json.dumps({"lezioni": [altra, lz("A1")], "reazioni": [], "misure": []}, ensure_ascii=False), "stop"))
+lt.prepara(vv)
+righe_ = json.dumps([dict(r) for r in st.dati.tutti(
+    "SELECT contenuto FROM studio_preparazioni WHERE verifica = ? AND tipo = 'lezione'", (vid,))], ensure_ascii=False)
+verifica("una lezione pulita non viene mai sostituita, anche se la seconda risposta ne porta un'altra",
+         "draghi" not in righe_ and righe_.count("Colombo") == 11, righe_[:200])
 st.close()
 
 print("— 2. le lezioni scartate")

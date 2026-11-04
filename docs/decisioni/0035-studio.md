@@ -964,9 +964,11 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     - **La richiesta ci sta nel suo tetto.** Quante voci per argomento le dice il numero degli
       argomenti, lo schema ha il tetto, e il budget di token basta per il tetto.
     - **I codici degli argomenti li impone lo schema** (`enum`), e il codice legge anche «A1: titolo».
-    - **Un taglio non lascia buchi nascosti.** Dopo un taglio si richiedono i soli argomenti rimasti
-      senza una voce, al più due volte; ciò che resta scoperto sta in `studio_verifiche.scoperti` (solo
-      id), per chi mostrerà questi materiali (#384).
+    - **Un taglio non lascia buchi nascosti.** Si richiedono i soli argomenti rimasti senza una voce
+      pulita (anche dopo una risposta intera), al più due volte; ciò che resta scoperto sta in
+      `studio_verifiche.scoperti` (solo id), per chi mostrerà questi materiali (#384). Una risposta in
+      più può solo aggiungere: mai togliere una voce pulita già tenuta. Una carta o una domanda già
+      decisa copre il suo argomento.
     - **Effetto 3 della modalità studio:** su quel satellite, a modalità aperta, niente promemoria degli
       sviluppi sospesi né riga dello sviluppo aperto, e niente fase dello sviluppo nei dati del turno, a
       meno che si parli dello sviluppo. Il promemoria non si consuma. È lo stato giusto perché dice già
