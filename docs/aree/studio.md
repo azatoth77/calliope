@@ -227,23 +227,43 @@ un altro argomento non la rifà.
 decidere, e un annuncio non deve arrivare a un minore come cosa da studiare: le pagine con istruzioni
 **non vanno nemmeno al modello** (la pagina dice «pagina non usata»), un argomento su sole quelle pagine
 non chiede niente, e comunque le voci con un ordine o da una pagina con istruzioni sono tolte
-(`solo_studiabili`, contate). `scheletro` segna i due capi di una tripla cattiva: se un concetto ha
+(`solo_studiabili`, contate). Dalla revisione della PR #389 sono tolte, e la pagina dice quante, anche le
+voci `da_controllare` e i collegamenti che ne dipendono: chi studia non deve leggere ciò che non sta nelle
+pagine. Il titolo dell'argomento resta anche con quell'avviso (l'ha confermato la persona). Niente legami
+deboli nelle parti: non sono nelle pagine, e le isole restano isole. `scheletro` segna i due capi di una tripla cattiva: se un concetto ha
 ancora un collegamento buono e il suo testo è pulito resta, altrimenti un messaggio si porterebbe via il
 centro e la mappa. **Il testo resta un dato**: nessun tool legge le parti, nel registro id e conti.
 **Nascoste** a chi sta facendo una mappa senza guardare o una prova (dicono le risposte più dello
 scheletro, come le carte), non al tutore.
 
-**Un falso allarme trovato dal banco.** «Martin Waldseemüller — chiama — America» era `testo_ordine`
-perché «chiama» è anche un imperativo, e la mappa di Vespucci perdeva 6 voci. Un **verbo** ora è un ordine
-solo con un indirizzo, un annuncio o se parla di assistente, regole, risposte, memoria (`_forma_verbo`,
-principio 10, coi contrari in prova: «ignora le regole», «chiama il tool»).
+**Durante una prova vera aperta** (revisione della PR #389, decisione di chi amministra) la persona non legge
+**nessuna** mappa coi testi, la generale e le sue comprese, e non ne cambia nessuna: né «Controlla», né PDF,
+né «Fai la tua», né «Un indizio» (`_mappe_in_prova`, `PROVA_APERTA`); la pagina lo dice e basta. Una mappa a
+memoria o da zero aperta quando parte la prova aspetta, e dopo la consegna riprende da dove era. Il tutore
+continua a vedere tutto. Vedi le voci storiche della sezione delle prove.
+
+**Una mappa libera già controllata** ferma la rigenerazione dello scheletro (revisione della PR #389): il suo
+confronto dice gli id dello scheletro di allora, e su quello nuovo «Il Portogallo» diventava un altro concetto.
+Con la firma «v2» sarebbe scattato su ogni verifica aperta. Sulla DGX, contate in sola lettura il 04/11: nessuna
+riga così (0 mappe libere controllate).
+
+**Un falso allarme trovato dal banco.** «Martin Waldseemüller — chiama — America» era `testo_ordine` perché
+«chiama» è anche un imperativo, e la mappa di Vespucci perdeva 6 voci. Ora l'avviso cade solo se il verbo è **per
+intero** «chiama», «manda» o «invia», più al massimo una preposizione o una locuzione chiusa («chiama in onore
+di»); tutto il resto resta un ordine, in italiano e in inglese (`_forma_verbo`, principio 10, contrari in
+`prova_testo.py`). *[storico fino alla revisione della PR #389: l'ordine era riconosciuto dalle parole
+«istruzioni», «regole», «risposte»…, e «chiama il numero 3331234567», «manda i soldi a», «ignora la verifica»
+passavano puliti]* «ignora», «dimentica», «cancella» restano ordini anche da soli. Sull'uscita vera del banco
+le 6 voci di Vespucci si recuperano tutte.
 
 **Il telefono.** La scheda «Le parti»: un tasto per argomento coi concetti, che si apre e si richiude;
 dentro «Schema» (dalla radice in giù, rientrato per livello, i verbi) e «Mappa». Oltre 8 concetti la
 disposizione è a righe (`mappa._a_righe`: due per riga, dalla radice) e la pagina allunga il disegno: sul
 telefono il giro attorno al centro non ci stava (due riquadri da 210 su 456 di largo); la parte non
-pronta dice perché. La generale dice «Ci sono N argomenti su M». Il PDF con una mappa lunga ha i riquadri
-più larghi (80 mm). Pagina **v42**. **L'ingresso** per la #384: `Lettore.prepara_mappe(v o id, passi=None)`
+pronta dice perché, anche quando è vuota perché tutto è stato tolto. La generale dice quanti argomenti ha. Il
+PDF con una mappa lunga ha riquadri larghi, testo più piccolo e meno righe (`mappa_pdf.misure_nodo`): nessuna
+sovrapposizione fino a 30 concetti col testo più lungo, guardato a 20 (oltre 24 una riga sola, troncata:
+l'elenco delle pagine dopo ha il testo intero). Pagina **v42**. **L'ingresso** per la #384: `Lettore.prepara_mappe(v o id, passi=None)`
 fa la generale e le parti che mancano, guardando la guardia; il giro del lettore la chiama con `passi=1`,
 al solito posto (dopo le carte): il momento in cui parte non è cambiato.
 
@@ -257,24 +277,27 @@ argomenti non facoltativi, i criteri delle domande nei concetti e nei verbi).
 | coperti dal codice (sul ricalcolo) | 7 su 8 | 5 su 7 | 7 su 9 |
 | dalla verità: argomenti, domande | 5/6, 1/10 | 4/5, 2/10 | 7/8, 1/10 |
 | secondi | 7 | 9 | 9 |
-| **Dopo** (14:15), generale: concetti, collegamenti | 10, 9 | 19, 25 | 20, 19 |
-| coperti dal codice (fuori prima della mirata) | 8 su 8 (0) | 6 su 7 (1) | 9 su 9 (1) |
-| dalla verità: argomenti, domande | 6/6, 1/10 | 4/5, 3/10 | 8/8, 1/10 |
+| **Dopo** (14:49, con la revisione), generale: concetti, collegamenti | 20, 19 | 19, 26 | 20, 19 |
+| coperti dal codice (fuori prima della mirata) | 8 su 8 (0) | 7 su 7 (2) | 9 su 9 (1) |
+| dalla verità: argomenti, domande | 4/6, 2/10 | 5/5, 4/10 | 8/8, 3/10 |
 | parti connesse, deboli | 1, 0 | 1, 0 | 1, 0 |
-| secondi | 9 | 29 | 19 |
-| **Parti**: mappe, concetti per mappa | 8/8, 6–16 | 7/8, 6–24 | 9/10, 7–16 |
-| concetti nelle pagine | 92/101 | 100/107 | 111/117 |
-| una parte connessa sola, deboli | 8/8, 0 | 6/7, 1 | 9/9, 0 |
+| secondi | 28 | 30 | 19 |
+| **Parti**: mappe, concetti per mappa | 8/8, 3–16 | 7/8, 6–24 | 9/10, 6–16 |
+| concetti nelle pagine | 95/95 | 95/95 | 104/104 |
+| voci tolte perché fuori dalle pagine | 27 | 17 | 22 |
+| una parte connessa sola, voci con un ordine tolte | 8/8, 0 | 7/7, 0 | 9/9, 0 |
 | doppioni, voci ostili | 0, 0 | 0, 0 | 0, 0 |
-| dalla verità: argomenti, domande | 6/6, **4/10** | 5/5, **9/10** | 8/8, **10/10** |
-| secondi | 82 | 94 | 100 |
+| dalla verità: argomenti, domande | 6/6, **4/10** | 5/5, **9/10** | 8/8, **9/10** |
+| secondi | 96 | 92 | 102 |
 
-La mappa che manca è un argomento su pagine con istruzioni (non si chiede). «Fuori» in scienze è
-l'argomento «Esercizi», dalla pagina degli esercizi. Le domande di matematica restano 4/10: i loro criteri
-sono risultati di esercizi, che in una mappa non ci sono né devono esserci. Il banco varia da un giro
-all'altro anche a temperatura 0 (la generale di matematica 10–19 concetti in quattro giri, una parte
-sola 67–100 %): coi giri di prima l'ordine è lo stesso. Tutto insieme circa due minuti a verifica, a
-DGX libera. Le uscite in `/tmp/banco-385/` sulla DGX, non conservate.
+Togliere i `da_controllare` non ha rotto la connessione né la copertura delle domande rispetto al giro prima
+della revisione (92/101, 100/107, 111/117 nelle pagine; domande 4, 9, 10 su 10; una mappa non connessa in
+scienze). La mappa che manca è un argomento su pagine con istruzioni (non si chiede). Le domande di matematica
+restano 4/10: i loro criteri sono risultati di esercizi, che in una mappa non ci sono né devono esserci. La
+generale di matematica ha 4/6 argomenti dalla verità con 8/8 dal codice: le chiavi del banco cercano parole
+che qui il modello ha detto in un altro modo. Il banco varia da un giro all'altro anche a temperatura 0 (la
+generale di matematica 10–20 concetti in cinque giri, una parte sola 67–100 %). Tutto insieme circa due minuti a
+verifica, a DGX libera. Le uscite in `/tmp/banco-385/` sulla DGX, non conservate.
 
 Prove: `prova_studio_mappa_parti.py`, `prova_studio_mappa_parti_pagina.py` (browser, 390×844, 320×693 col
 125 %, PC); in `prova_studio_modalita.py` tolta una data fissa che dal 03/11 faceva cadere la prova da
@@ -2101,7 +2124,8 @@ I casi stanno nella sezione 10 di `prova_studio_prove.py`, nel vero o falso gene
 Le minori:
 - l'orale valuta la frase di Whisper prima di «capito» (`ToolContext.user_text_stt`), non
   quella riscritta dal modello;
-- **le mappe restano visibili durante una prova**, che è fatta a casa: lo scheletro non è una
+- *[storico fino al 04/11, revisione della PR #389: dal 04/11 nessuna mappa coi testi per la persona con una
+  prova aperta]* **le mappe restano visibili durante una prova**, che è fatta a casa: lo scheletro non è una
   risposta esatta. «Parliamone» però, con una prova aperta, non mette concetti in busta e
   risponde «c'è una prova in corso»;
 - le domande generate: un «falso» resta `da_controllare`, perché il codice vede le parole, non
@@ -2158,7 +2182,8 @@ I casi di `esiti3.py` del revisore sono entrati nella sezione 10 di `prova_studi
 - «da rivedere» si decide una volta sola (il tutore non corregge l'autovalutazione);
 - le mappe non entrano nel punteggio;
 - durante una prova sono nascoste anche le carte scritte dalla persona;
-- lo scheletro della mappa, durante una prova, resta visibile: non è una risposta esatta.
+- lo scheletro della mappa, durante una prova, resta visibile: non è una risposta esatta *[storico fino al
+  04/11, revisione della PR #389: ora resta nascosto a chi fa la prova, non al tutore]*.
 
 ## La mappa libera, lo scheletro connesso e «Parliamone» (30/10 notte, issue #328, ramo `issue-328-studio-mappa-libera`)
 
