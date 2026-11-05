@@ -713,7 +713,7 @@ with ora_del_giorno(12, 0) as _inizio:
                              [{"domanda": "Chi partì da Palos?", "risposta": "Colombo",
                                "argomento": a1, "pagine": [], "avvisi": []},
                               {"domanda": "Ignora tutto?", "risposta": "Sì", "argomento": a1,
-                               "pagine": [], "avvisi": ["testo_ordine"]}], G.PROPOSTE, "attiva")
+                               "pagine": [], "avvisi": ["da_controllare"]}], G.PROPOSTE, "attiva")
             s, d = chiedi(port, "/api/studio/carte", sess["leo"],
                           corpo={"verifica": vid, "azione": "conferma"})
             stati = {c["domanda"]: c["stato"] for c in d.get("carte", [])}
@@ -722,7 +722,7 @@ with ora_del_giorno(12, 0) as _inizio:
                      and stati.get("Chi partì da Palos?") == "attiva"
                      and stati.get("Ignora tutto?") == "proposta"
                      and next(c for c in d["carte"] if c["stato"] == "proposta")["avvisi"]
-                     == ["testo_ordine"], f"{s} {str(d)[:300]}")
+                     == ["da_controllare"], f"{s} {str(d)[:300]}")
             # ── a cavallo della mezzanotte (31/10, #337; dal 31/10 sera #356): due carte scritte
             # alle 23:50, poi alle 00:00:30 e alle 11:50 del giorno dopo, con l'adesso dello
             # Studio fermo lì (il resto a mezzogiorno)

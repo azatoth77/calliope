@@ -85,6 +85,7 @@ DA_CONTROLLARE = G.DA_CONTROLLARE
 PAGINA_CON_ISTRUZIONI = G.PAGINA_CON_ISTRUZIONI
 TESTO_ORDINE = G.TESTO_ORDINE
 DA_DECIDERE = G.DA_DECIDERE
+SICUREZZA = G.SICUREZZA
 
 PROPOSTE, VUOTO, ROTTO, ERRORE = G.PROPOSTE, G.VUOTO, G.ROTTO, G.ERRORE
 SPENTA, OMBRA, ATTIVA = G.SPENTA, G.OMBRA, G.ATTIVA
@@ -164,7 +165,7 @@ def proposte(grezzi: list[dict], rif, arif) -> list[dict]:
     avvisi}], col controllo del codice; senza doppioni e al più `MAX_DOMANDE`."""
     from ..provenienza import parole
     from . import dati as D
-    testi = {r: p["testo"] for r, p in rif}
+    testi = {r: G.ricuci(p["testo"]) for r, p in rif}
     ids = {r: int(p["id"]) for r, p in rif}
     istruzioni = {r for r, p in rif if "istruzioni" in D.da_j(p.get("avvisi"))}
     args = {r: int(a["id"]) for r, a in arif}
@@ -202,10 +203,6 @@ def proposte(grezzi: list[dict], rif, arif) -> list[dict]:
             avvisi.append(TESTO_ORDINE)
         # La risposta nelle pagine citate; una risposta corta («1492», «vero», un'opzione) si
         # cerca con la domanda, come le carte
-        base = d["attesa"] if len(parole(d["attesa"])) >= 2 else f"{d['testo']} {d['attesa']}"
-        if d["tipo"] == "vero_falso":
-            base = d["testo"]
-        _e, dentro = A.controlla(base, citate, testi)
         aid = args.get(G._arg(g.get("argomento")))
         # Un «falso» non si regge su una frase che lo dice: il codice vede di cosa parla, il giudizio
         # indipendente se dice il contrario (#384; *[storico fino al 04/11: da controllare, PR #342]*)
@@ -219,7 +216,7 @@ def proposte(grezzi: list[dict], rif, arif) -> list[dict]:
         pag_c = [testi[r] for r in esistono]
         fonte = (G.appoggio_falso(d["testo"], pag_c) if falso
                  else G.appoggio("" if vf else d["testo"], d["testo"] if vf else d["attesa"], pag_c))
-        if not dentro or aid is None or not testo_pag or sbagliata or fonte is None:
+        if aid is None or not testo_pag or sbagliata or fonte is None or len(esistono) != len(set(map(str, citate))):
             avvisi.append(DA_CONTROLLARE)
         # Anche una sola pagina con le istruzioni (#384), come le carte
         if any(r in istruzioni for r in esistono):

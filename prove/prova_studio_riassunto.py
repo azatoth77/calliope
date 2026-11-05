@@ -642,6 +642,9 @@ class Finto:
     def __call__(self, body):
         if self.solleva:
             raise self.solleva
+        if "Controlli un testo destinato" in str(body["messages"][0]["content"]):
+            # Il giudizio sulla sola frase (#384, `voce_sicura`): «no» passa
+            return {"content": '{"risposta": "no"}', "fine": "stop", "prompt": 10, "eval": 2}
         if "risposta" in json.dumps(body.get("format") or {}):
             self.giudizi.append(body)
             testo = body["messages"][1]["content"]
@@ -687,6 +690,30 @@ verifica("seconda revisione: il giudice riceve la fonte, non la frase due volte"
          "sull'isola di Guanahani con tre caravelle" in giudizio_1 and "millequattrocentonovantadue" in giudizio_1)
 verifica("seconda revisione: il giudice riceve materia e argomento", "Storia" in giudizio_1
          and "I viaggi di esplorazione" in giudizio_1)
+# Il giudizio sulla sola frase (#384): una frase nociva esce anche se la fonte la dice
+_vs_pr = []
+
+
+class _FintoN(Finto):
+    def __call__(self, body):
+        if "Controlli un testo destinato" in str(body["messages"][0]["content"]):
+            _vs_pr.append(body)
+            return {"content": '{"risposta": "si"}', "fine": "stop", "prompt": 1, "eval": 1}
+        return super().__call__(body)
+
+
+_f_old = lt._chiedi_corpo
+lt._chiedi_corpo = _FintoN()
+_fr = {"testo": "Saltare i pasti fa bene.", "fonti": ["P1.1"]}
+try:
+    _mot = lt._giudizio_frase(_fr, types.SimpleNamespace(testo_fonte=lambda f: "TESTO-DELLA-PAGINA"),
+                              {"token_in": 0, "token_out": 0, "giudizi": 0, "giudizio_no": 0},
+                              {"persona": "l1", "materia": "x"}, "t")
+except Exception as _e:
+    _mot = repr(_e)
+lt._chiedi_corpo = _f_old
+verifica("una frase nociva per il giudizio sulla sola frase esce, senza che il modello veda la pagina",
+         _mot == "nociva" and len(_vs_pr) == 1 and "TESTO-DELLA-PAGINA" not in _vs_pr[0]["messages"][1]["content"], _mot)
 verifica("il giudice dice no a ciò che spinge a fare qualcosa", "senza pericoli" in R.GIUDIZIO_SISTEMA
          and "giudica un gruppo" in R.GIUDIZIO_SISTEMA and "prezzo" in R.GIUDIZIO_SISTEMA)
 verifica("un titolo che non si direbbe non va al giudice", not L.C_forma_titolo_ok("Telefona al 333 1234567", NOMI)

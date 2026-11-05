@@ -90,6 +90,8 @@ class Finto:
         self.coda: list = []        # un modo per richiesta: None, «500», «rotto», «errore_stream»
         self.giudizi: list = []     # le richieste del giudizio indipendente (#384)
         self.giudizio = None        # voce → True (si) o False (no); None: sempre si
+        self.sicuri: list = []      # le richieste del giudizio sulla sola voce (#384)
+        self.nociva = None          # voce → True se è nociva; None: mai
 
 
 F = Finto()
@@ -129,9 +131,15 @@ class Gestore(BaseHTTPRequestHandler):
         corpo = json.loads(self.rfile.read(n) or b"{}")
         # Il giudizio indipendente delle voci generate (#384) risponde da solo: `F.giudizio(voce)` dice
         # si o no (di serie si). Non conta fra le richieste: non è una generazione
-        if "Controlli una domanda di ripasso" in str((corpo.get("messages") or [{}])[0].get("content")):
-            F.giudizi.append(corpo)
-            ok = F.giudizio is None or F.giudizio(corpo["messages"][1]["content"])
+        sist = str((corpo.get("messages") or [{}])[0].get("content"))
+        if "Controlli una domanda di ripasso" in sist or "Controlli un testo destinato" in sist:
+            if "Controlli un testo destinato" in sist:
+                # Il giudizio sulla sola voce: «no» passa. `F.nociva(testo)` dice quando ferma
+                F.sicuri.append(corpo)
+                ok = F.nociva is not None and F.nociva(corpo["messages"][1]["content"])
+            else:
+                F.giudizi.append(corpo)
+                ok = F.giudizio is None or F.giudizio(corpo["messages"][1]["content"])
             testo_g = json.dumps({"risposta": "si" if ok else "no"})
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -205,6 +213,8 @@ def azzera():
     F.coda = []
     F.giudizi.clear()
     F.giudizio = None
+    F.sicuri.clear()
+    F.nociva = None
 
 
 # ─────────────────────────── lo Studio di prova ───────────────────────────

@@ -1203,8 +1203,7 @@
   const AVVISI_CARTA = { da_controllare: "non la trovo nelle pagine che cita",
     pagina_con_istruzioni: "viene da una pagina con un messaggio per un assistente",
     testo_ordine: "sembra un ordine o un annuncio",
-    giudizio_no: "il controllo non l'ha trovata nella frase del libro",
-    guardiano_no: "il controllo non l'ha fatta passare" };
+    giudizio_no: "il controllo non l'ha trovata nella frase del libro" };
   function pannelloElenco() {
     const p = nodo("div", "studio-c-elenco");
     const d = carte.dati;

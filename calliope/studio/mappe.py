@@ -1082,6 +1082,14 @@ class Mappe:
         return {"lunghezza": len(testo or ""), "svelati": sv}
 
     # ── la generazione dello scheletro (dal lettore, studio/lettura.py, mappa_genera.py) ──
+    def segna_fermate_mappa(self, vid, chiave: str, n: int):
+        """Quante voci di una mappa sono state fermate per sicurezza: solo un conto (`Studio.fermate_di`)."""
+        with self.dati.lock:
+            db = self.dati.db
+            self._scrivi_fermate(db, vid, "mappe", {chiave: int(n)} if n else {},
+                                 {int(chiave)} if chiave.isdecimal() else None)
+            db.commit()
+
     def _scheletro_toccabile(self, db, vid) -> tuple[bool, list[int]]:
         """(si può generare?, gli id degli scheletri del modello da rifare). Mai sopra uno scheletro
         della persona: scritto a mano, confermato, o con una voce cambiata da una persona."""
@@ -1158,6 +1166,8 @@ class Mappe:
         for v in self.dati.tutti("SELECT * FROM studio_verifiche WHERE stato = 'aperta' AND "
                                  "data >= ? AND (? IS NULL OR id = ?) ORDER BY data, id",
                                  (self._oggi().isoformat(), vid, vid)):
+            if m == MG.ATTIVA and self.guardiano_manca(v["persona"]):
+                continue                 # senza guardiano per un minore niente esce (#384)
             args = self._argomenti_per_carte(v["id"])
             pagine = self._pagine_di(v["id"])
             lette = {int(p["id"]) for p in A.lette(pagine)}

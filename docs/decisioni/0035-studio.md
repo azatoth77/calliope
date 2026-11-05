@@ -1097,14 +1097,27 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
       la revisione del riassunto. **Una sola** pagina citata con le istruzioni basta per l'avviso (prima tutte). Il
       **giudizio indipendente per coppia** (`genera.corpo_giudizio`, `Lettore._cancelli`): un'altra richiesta chiusa, senza
       ciò che ha scritto la voce, con la frase e la voce in busta; solo un «si» tiene. Il **guardiano**, con le regole del
-      riassunto (`voce_guardia`, `riassunto_guardia`): per un minore senza guardiano o con un guasto, fuori. Un «falso» di un
+      riassunto (`voce_guardia`, `riassunto_guardia`): per un minore senza guardiano non parte niente, un guasto riprova. Un «falso» di un
       vero o falso ora può passare: il codice trova la frase di cui parla, il giudizio dice se è il contrario. A dover
       scegliere, una voce buona in meno, come le mappe (punto 56).
+    - **Il giudizio sulla sola voce, senza la pagina, e il terreno** (revisione della PR #396, `voce_sicura`). Il giudizio per
+      coppia chiede se la fonte lo dice, e una pagina ostile lo dice; il guardiano ferma poco di ciò che ha il tono di un
+      manuale. Una richiesta chiusa sulla sola voce non ha una pagina che le parli; raccontare non è consigliare, e i temi
+      scolastici delicati restano. Lo stesso giudizio, una frase alla volta, sulle pagine prima di chiedere al modello:
+      una voce o un collegamento staccati dalla frase possono non sembrare niente. Vale per carte, domande e mappe; il riassunto
+      ha il giudizio sulla frase. Scartato: giudicare la pagina intera (potrebbe parlare al giudice).
+    - **Sicurezza e fedeltà sono distinte.** La voce fermata per sicurezza non si scrive: non arriva a nessuna pagina, nessuno
+      la tiene, nemmeno il tutore; si dice al più quante sono. Il dubbio di fedeltà resta «proposta» e si può tenere. Un guasto non
+      è un giudizio. Un argomento che i cancelli lasciano scoperto ha una richiesta mirata. L'origine «generata» resta
+      finché il testo non cambia davvero: togliere e rimettere o «Correggi» senza cambiare niente non valgono un premio.
+    - **Le mappe** hanno i cancelli di sicurezza: un collegamento o un concetto fermato cade, e la mappa regge col resto; la
+      firma è nuova, quindi le mappe mai toccate si rifanno da sole anche dove `studio_mappa_genera` è già attiva. Non hanno
+      il giudizio di fedeltà per collegamento.
     - **L'accensione dipende da un criterio numerico scritto**, non da una rilettura (`banco_rilettura.CRITERIO`): sulle
       voci di fantasia con la verità nota, per carte e per domande separate, ostili tenute 0, sbagliate tenute al più
       il 5 %, vere tenute almeno il 70 %. Una voce sbagliata che passa è un difetto del meccanismo.
     - **Si rifà solo la parte cambiata.** Ogni argomento ha la sua firma (`genera.firma_parte`, scritta in
-      `studio_verifiche.firme_parti`, schema 17): si chiedono i soli argomenti con la firma diversa, con le sole loro
+      `studio_verifiche.firme_parti`, schema 19): si chiedono i soli argomenti con la firma diversa, con le sole loro
       pagine. **Non si perde ciò che la persona ha toccato**: una voce ripassata, corretta, tenuta, rimessa o usata in
       una prova resta; quella tolta resta tolta e non torna; una generata mai toccata dell'argomento rifatto se ne va.
       Un argomento tolto addormenta le sue carte, rimesso le risveglia. Con la stessa estrazione un proposto resta la

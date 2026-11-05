@@ -186,7 +186,9 @@ PA.rispondi(DOMANDE)
 lett.giro()
 dd = st.domande(LEO, vid)["domande"]
 puliti_ = [d for d in dd if not d["avvisi"]]
-verifica("attiva (#384): le pulite subito usabili, quelle con un avviso proposte", len(dd) == 11
+n_fermate = st.fermate_di(vid)
+verifica("attiva (#384): le pulite subito usabili, il dubbio proposto, ciò che è fermato per sicurezza non si scrive",
+         len(dd) + n_fermate == 11 and n_fermate >= 2
          and all(d["origine"] == "modello" for d in dd)
          and {d["stato"] for d in puliti_} == {"attiva"}
          and {d["stato"] for d in dd if d["avvisi"]} == {"proposta"}, [d["stato"] for d in dd])
@@ -196,7 +198,7 @@ verifica("nelle prove le sole pulite, mai quelle con un avviso",
          and not any("professoressa" in x["testo"] for x in pool), len(pool))
 r = st.conferma_domande(LEO, vid)
 verifica("«Conferma» non serve più: non cambia niente", r["confermate"] == 0
-         and r["da_decidere"] == 11 - len(puliti_)
+         and r["da_decidere"] == len(dd) - len(puliti_)
          and len(st._pool(st.verifica(LEO, vid))) == len(puliti_), r)
 st.close()
 

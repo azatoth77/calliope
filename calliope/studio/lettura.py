@@ -1342,7 +1342,6 @@ class Lettore:
         vid = int(v["id"])
         modo = v["_modo"]
         firma = G.firma(v["_argomenti"], v["_pagine"], modo)
-        rif = A.riferimenti(v["_pagine"])
         tutti = G.argomenti_rif(v["_argomenti"])
         # Solo la parte cambiata (#384): con gli argomenti di prima non si chiede niente
         arif = G.da_rifare(tutti, v["_pagine"], modo, self.studio.firme_parti(vid, "carte"))
@@ -1350,10 +1349,13 @@ class Lettore:
         if not arif:
             n = self.studio.proponi_carte(vid, firma, [], G.PROPOSTE, modo, rifatti=rifatti)
             return "cambiate" if n is None else "proposte"
-        rif_r = rif if len(arif) == len(tutti) else G.pagine_di_parte(rif, arif)
         t0 = time.monotonic()
         grezzi = None
         try:
+            if modo == G.ATTIVA:
+                v = self._terreno(v, m)
+            rif = A.riferimenti(v["_pagine"])
+            rif_r = rif if len(arif) == len(tutti) else G.pagine_di_parte(rif, arif)
             # Un argomento con una carta già decisa è coperto (#388): non si richiede
             decisi = self.studio.argomenti_decisi(vid, "studio_carte")
             grezzi, _finita = self._chiedi_lista(
@@ -1363,6 +1365,8 @@ class Lettore:
             proposte = None if grezzi is None else G.proposte(grezzi, rif, arif)
             if proposte and modo == G.ATTIVA:
                 self._cancelli(proposte, m, v["persona"])
+                proposte = self._mirata(proposte, arif, decisi, lambda ar: G.corpo(self.modello, v, rif_r, ar), G,
+                                        m, vid, "carte", v["persona"], rif)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: carte, ceduto il passo a un lavoro dell'agente")
@@ -1474,24 +1478,125 @@ class Lettore:
             finita = finita or not tagliata
         return voci, finita
 
+    def _terreno(self, v: dict, m: dict) -> dict:
+        """La verifica col terreno pulito (`voce_sicura.terreno`), con «attiva»: le frasi nocive non arrivano al modello.
+        Un guasto risale come un errore del server. La frase si giudica una volta per testo, finché il lettore vive."""
+        from . import genera as G
+        from . import voce_sicura as VS
+        cache = self.__dict__.setdefault("_frasi_sicure", {})
+
+        def giudica(frase: str) -> bool:
+            if frase not in cache:
+                r = self._chiedi_corpo(VS.corpo(self.modello, frase))
+                if not r.get("fine"):
+                    raise ErroreServer("stream senza fine")
+                m["token_in"] += int(r.get("prompt") or 0)
+                m["token_out"] += int(r.get("eval") or 0)
+                cache[frase] = VS.passa(r.get("content"))
+            return cache[frase]
+        pagine, conti = VS.terreno(v["_pagine"], giudica, G.frasi_di)
+        for k, n in conti.items():
+            m[f"terreno_{k}"] = m.get(f"terreno_{k}", 0) + n
+        if conti["nocive"]:
+            self._registra(f"verifica {v['id']}: {conti['nocive']} frasi nocive su {conti['frasi']}, "
+                           f"{conti['pagine_fuori']} pagine fuori dal terreno")
+        return {**v, "_pagine": pagine}
+
+    def _sicura(self, testo: str, persona, m: dict) -> str | None:
+        """I due cancelli di sicurezza su un testo generato: il giudizio sulla sola voce, senza la pagina
+        (`voce_sicura`), e il guardiano. None se passa, o l'avviso. Un guasto non è un giudizio: risale come un errore
+        del server, senza scrivere la firma, e si riprova il giro. Una risposta illeggibile del giudizio ferma."""
+        from . import genera as G
+        from . import voce_sicura as VS
+        r = self._chiedi_corpo(VS.corpo(self.modello, testo))
+        if not r.get("fine"):
+            raise ErroreServer("stream senza fine")
+        m["token_in"] += int(r.get("prompt") or 0)
+        m["token_out"] += int(r.get("eval") or 0)
+        m["giudizi_sicuri"] = m.get("giudizi_sicuri", 0) + 1
+        if not VS.passa(r.get("content")):
+            return G.NOCIVA_NO
+        g = self.studio.voce_guardia(persona, testo)
+        if g == "guasto":
+            raise ErroreServer("guardiano guasto o assente")
+        return G.GUARDIANO_NO if g == "guardiano" else None
+
     def _cancelli(self, voci: list[dict], m: dict, persona) -> None:
-        """I due cancelli automatici sulle voci ancora pulite, con «attiva» (decisione di chi amministra
-        del 04/11: nessuna persona valida prima che lo studente le veda). Il **giudizio indipendente per
-        coppia**: un'altra richiesta chiusa, senza ciò che ha scritto la voce, con la sola frase d'appoggio e
-        la voce in busta; solo un «si» tiene, una risposta che non si legge è un no; il server giù risale e
-        si riprova il giro. Poi il **guardiano**. Una voce fermata resta con un avviso, fuori. Solo conti."""
+        """I cancelli automatici, con «attiva» (decisione di chi amministra del 04/11: nessuna persona valida
+        prima che lo studente le veda). Su **ogni** voce non già fermata per sicurezza, anche su quelle col solo dubbio
+        di fedeltà, che restano visibili: il giudizio sulla sola voce e il guardiano (`_sicura`). Sulle pulite, poi, il
+        **giudizio indipendente per coppia**: un'altra richiesta chiusa, senza ciò che ha scritto la voce, con la sola
+        frase d'appoggio e la voce in busta; solo un «si» tiene, una risposta che non si legge è un no; il server
+        giù risale e si riprova il giro. Solo conti."""
         from . import genera as G
         for v in voci:
+            if set(v["avvisi"]) & set(G.SICUREZZA):
+                continue
+            ferma = self._sicura(v["voce"], persona, m)
+            if ferma:
+                v["avvisi"].append(ferma)
+                continue
             if v["avvisi"]:
                 continue
             r = self._chiedi_corpo(G.corpo_giudizio(self.modello, v["voce"], v["fonte"]))
+            if not r.get("fine"):
+                raise ErroreServer("stream senza fine")
             m["token_in"] += int(r.get("prompt") or 0)
             m["token_out"] += int(r.get("eval") or 0)
             m["giudizi"] = m.get("giudizi", 0) + 1
             if not G.leggi_giudizio(r.get("content")):
                 v["avvisi"].append(G.GIUDIZIO_NO)
-            elif not self.studio.voce_guardia(persona, v["voce"]):
-                v["avvisi"].append(G.GUARDIANO_NO)
+
+    def _mirata(self, proposte: list[dict], arif: list, decisi: set, corpo_di, mod, m: dict, vid: int, cosa: str,
+                persona, rif) -> list[dict]:
+        """Gli argomenti che i cancelli hanno lasciato senza voci, che ne avevano: una richiesta mirata, con le sole loro
+        pagine, e le voci nuove passano dagli stessi cancelli (come il riassunto). Se non cambia niente, restano
+        scoperti e la scheda lo dice."""
+        coperti = _puliti(proposte) | decisi
+        avevano = {v["argomento"] for v in proposte}
+        mancano = [(r_, a) for r_, a in arif if int(a["id"]) not in coperti and int(a["id"]) in avevano]
+        if not mancano:
+            return proposte
+        self._registra(f"verifica {vid}: {cosa}, richiesta mirata per {len(mancano)} argomenti scoperti dopo i cancelli")
+        grezzi, _t = self._una_lista(corpo_di(mancano), m, vid, cosa, mod.leggi, mod.parziale)
+        if not grezzi:
+            return proposte
+        altre = mod.proposte(grezzi, rif, mancano)
+        self._cancelli(altre, m, persona)
+        chiave = "domanda" if mod.__name__.endswith(".genera") else "testo"
+        viste = {v[chiave] for v in proposte}
+        return proposte + [v for v in altre if v[chiave] not in viste]
+
+    def _mappa_sicura(self, nodi: list[dict], coll: list[dict], persona, m: dict) -> tuple[list, list, int]:
+        """I cancelli di sicurezza sulla mappa (#384): ogni collegamento come frase, e i concetti soli. Un
+        collegamento fermato cade, e con lui il concetto rimasto senza legami; un concetto fermato cade coi suoi
+        legami. La mappa regge se ne cade qualcuno. (nodi, collegamenti, quante voci fermate). Solo conti."""
+        from . import genera as G
+        sic = set(G.SICUREZZA)
+        testi = {x["id"]: str(x.get("testo") or "") for x in nodi}
+        # Una voce con un avviso di sicurezza (una pagina con le istruzioni, un ordine) cade qui, senza chiedere: con
+        # «attiva» non resta nello scheletro con l'avviso, dove una pagina la mostrerebbe
+        fermi: set = {x["id"] for x in nodi if set(x.get("avvisi") or ()) & sic}
+        tieni, ferme = [], len(fermi)
+        legati: set = set()
+        for c in coll:
+            if set(c.get("avvisi") or ()) & sic or c["da"] in fermi or c["a"] in fermi:
+                ferme += 1
+                continue
+            t = f"{testi.get(c['da'], '')} {c.get('verbo') or ''} {testi.get(c['a'], '')}".strip()
+            if self._sicura(t, persona, m):
+                ferme += 1
+                # Il capo che resta senza legami cade: da solo non dice più niente, o dice il consiglio
+                continue
+            tieni.append(c)
+            legati |= {c["da"], c["a"]}
+        toccati = {x for c in coll for x in (c["da"], c["a"])}
+        for x in nodi:
+            if x["id"] not in fermi and x["id"] not in toccati and self._sicura(testi[x["id"]], persona, m):
+                fermi.add(x["id"])
+                ferme += 1
+        nodi2 = [x for x in nodi if x["id"] not in fermi and (x["id"] in legati or x["id"] not in toccati)]
+        return nodi2, tieni, ferme
 
     def _fermi(self, vid: int, cosa: str, tutti: list, rifatti: set) -> set:
         """Gli argomenti non rifatti in questo giro e già coperti l'altra volta: restano coperti."""
@@ -1521,7 +1626,6 @@ class Lettore:
         vid = int(v["id"])
         modo = v["_modo"]
         firma = DG.firma(v["_argomenti"], v["_pagine"], modo)
-        rif = A.riferimenti(v["_pagine"])
         tutti = G.argomenti_rif(v["_argomenti"])
         # Solo la parte cambiata (#384), come le carte
         arif = DG.da_rifare(tutti, v["_pagine"], modo, self.studio.firme_parti(vid, "domande"))
@@ -1529,10 +1633,13 @@ class Lettore:
         if not arif:
             n = self.studio.proponi_domande(vid, firma, [], DG.PROPOSTE, modo, rifatti=rifatti)
             return "cambiate" if n is None else "proposte"
-        rif_r = rif if len(arif) == len(tutti) else DG.pagine_di_parte(rif, arif)
         t0 = time.monotonic()
         grezzi = None
         try:
+            if modo == DG.ATTIVA:
+                v = self._terreno(v, m)
+            rif = A.riferimenti(v["_pagine"])
+            rif_r = rif if len(arif) == len(tutti) else DG.pagine_di_parte(rif, arif)
             decisi = self.studio.argomenti_decisi(vid, "studio_domande")
             grezzi, _finita = self._chiedi_lista(
                 lambda ar: DG.corpo(self.modello, v, rif_r, ar), arif, m, vid, "domande", DG.leggi,
@@ -1541,6 +1648,8 @@ class Lettore:
             proposte = None if grezzi is None else DG.proposte(grezzi, rif, arif)
             if proposte and modo == DG.ATTIVA:
                 self._cancelli(proposte, m, v["persona"])
+                proposte = self._mirata(proposte, arif, decisi, lambda ar: DG.corpo(self.modello, v, rif_r, ar), DG,
+                                        m, vid, "domande", v["persona"], rif)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: domande, ceduto il passo a un lavoro dell'agente")
@@ -1841,6 +1950,14 @@ class Lettore:
         if not R.leggi_giudizio(r.get("content")):
             m["giudizio_no"] += 1
             return "giudizio"
+        # Il giudizio sulla sola frase, senza la pagina (#384, `voce_sicura`): una pagina non può parlargli
+        from . import voce_sicura as VS
+        r = self._chiedi_corpo(VS.corpo(self.modello, f["testo"]))
+        if not r.get("fine"):
+            raise ErroreServer("stream senza fine")
+        if not VS.passa(r.get("content")):
+            m["nociva_no"] = m.get("nociva_no", 0) + 1
+            return "nociva"
         return self.studio.riassunto_guardia(v["persona"], f["testo"])
 
     def _errore_generazione(self, cosa: str, vid: int, e: Exception, scrivi_errore) -> str:
@@ -1871,17 +1988,22 @@ class Lettore:
         vid = int(v["id"])
         modo = v["_modo"]
         firma = MG.firma(v["_argomenti"], v["_pagine"], modo)
-        rif = A.riferimenti(v["_pagine"])
         arif = G.argomenti_rif(v["_argomenti"])
         t0 = time.monotonic()
         grezzi = None
         nodi, coll, forma = [], [], {}
         try:
+            if modo == MG.ATTIVA:
+                v = self._terreno(v, m)
+            rif = A.riferimenti(v["_pagine"])
             r = MG.rete(self._chiedi_mappa(vid, m), v, rif, arif, M.nodi_max(self.studio.cfg),
                         titolo=v.get("argomento"), argomenti=v["_argomenti"],
                         pagine=v["_pagine"])
             if not r["rotto"]:
                 grezzi, nodi, coll, forma = True, r["nodi"], r["coll"], r["forma"]
+                if modo == MG.ATTIVA:
+                    nodi, coll, ferme = self._mappa_sicura(nodi, coll, v["persona"], m)
+                    self.studio.segna_fermate_mappa(vid, "generale", ferme)
                 m["connessioni"] += int(forma.get("connessioni") or 0)
                 m["connessioni_rotte"] += int(forma.get("connessioni_rotte") or 0)
                 # Quanti ne propone il modello e quanti dentro una parte già unita (#349)
@@ -1996,12 +2118,22 @@ class Lettore:
         m = self.misure["mappa"]
         vid, aid, modo = int(v["id"]), int(a["id"]), v["_modo"]
         firma = MG.firma_parte(a, v["_pagine"], modo)
-        sue = MG.pagine_di(a, v["_pagine"])
-        pulite = MG.pagine_pulite(sue)
 
         def scrivi(nodi, coll, esito, esclusi=0, fuori=0):
             return self.studio.proponi_parte(vid, aid, firma, nodi, coll, esito, modo,
                                              esclusi=esclusi, fuori=fuori)
+        try:
+            if modo == MG.ATTIVA:
+                v = self._terreno(v, m)
+        except (Ceduta, _Giu):
+            raise
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            attesa = self._attendi_errore()
+            self._registra(f"verifica {vid}: mappa di una parte, errore del server ({e}), riprovo fra {attesa:.0f} s")
+            return "errore_server"
+        sue = MG.pagine_di(a, v["_pagine"])
+        pulite = MG.pagine_pulite(sue)
         try:
             if not pulite:
                 scrivi([], [], MG.SOLO_ISTRUZIONI)
@@ -2020,6 +2152,9 @@ class Lettore:
             r = MG.rete(self._chiedi_mappa(vid, m), v, rif, arif,
                         M.parte_nodi(self.studio.cfg, len(rif)), titolo=a.get("titolo"), parte=True,
                         altri=MG.altri_sulle_pagine(a, v["_argomenti"]))
+            if modo == MG.ATTIVA and not r["rotto"]:
+                r["nodi"], r["coll"], ferme = self._mappa_sicura(r["nodi"], r["coll"], v["persona"], m)
+                self.studio.segna_fermate_mappa(vid, str(aid), ferme)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: mappa di una parte, ceduto il passo a un lavoro "

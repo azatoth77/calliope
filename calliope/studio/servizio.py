@@ -1339,7 +1339,7 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
     # ── le carte (30/10, passo 6, #246; decisione 0035 punto 33) ──
     def _carta(self, chi, cid) -> tuple[dict, dict]:
         c = self.dati.uno("SELECT * FROM studio_carte WHERE id = ?", (int(cid),))
-        if c is None:
+        if c is None or self._voce_ferma(c):
             raise NonTrovata()
         # Una carta nata dalla mappa («Fanne carte», origine «mappa») con la mappa libera aperta
         # non c'è per la persona (revisione della PR #330): dice i concetti dello scheletro
@@ -1421,10 +1421,12 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
         r = C.testo_normale(risposta, C.RISPOSTA_MAX) if risposta is not None else c["risposta"]
         aid = c["argomento"] if argomento is self._UGUALE else self._argomento_di(v, argomento)
         nuova = r != c["risposta"]
+        # L'origine cambia solo se cambia il testo (#384): se no un «Correggi» senza niente varrebbe un premio
+        cambia = int(nuova or d != c["domanda"])
         adesso = self.adesso().isoformat(timespec="seconds")
         self.dati.scrivi(
             "UPDATE studio_carte SET domanda = ?, risposta = ?, chiusa = ?, argomento = ?, "
-            "origine = CASE WHEN origine = 'mappa' THEN 'mappa' ELSE 'persona' END, "
+            f"origine = CASE WHEN origine = 'mappa' THEN 'mappa' WHEN {cambia} THEN 'persona' ELSE origine END, "
             "stato = 'attiva', avvisi = NULL, modificata = ?, "
             "scatola = CASE WHEN ? THEN 1 ELSE scatola END, "
             "scadenza = CASE WHEN ? THEN ? ELSE scadenza END WHERE id = ?",
@@ -1495,6 +1497,12 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
         av = a["avvisi"]
         return not set(av if isinstance(av, list) else D.da_j(av)) & set(DA_DECIDERE)
 
+    def guardiano_manca(self, persona) -> bool:
+        """Per un minore senza guardiano le voci generate non partono nemmeno: nessuna potrebbe passare."""
+        from .. import minori
+        g = self.guardiano
+        return minori.e_minore(self._profilo(persona)) and (g is None or not getattr(g, "attivo", False))
+
     def apri_pronte(self) -> list[int]:
         """Le verifiche in bozza con le pagine tutte lette e almeno un argomento buono si aprono da
         sole, col piano (`generazione_automatica`; dal giro del lettore). Prima la conferma faceva
@@ -1520,10 +1528,17 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
         return out
 
     @staticmethod
+    def _voce_ferma(r) -> bool:
+        """Una voce con un avviso di sicurezza: non si scrive più con «attiva», e una rimasta non va a nessuno."""
+        from .genera import SICUREZZA
+        return r["stato"] != "ombra" and bool(set(D.da_j(r["avvisi"])) & set(SICUREZZA))
+
+    @staticmethod
     def _generata(r) -> bool:
-        """Una carta o una domanda scritta dal modello e che nessuno ha toccato: corretta è della
-        persona (`origine`), tenuta o rimessa ha `modificata`. Vale per i premi e la padronanza."""
-        return r["origine"] == "modello" and not r["modificata"]
+        """Una carta o una domanda scritta dal modello, finché il testo non cambia davvero (allora è della
+        persona, `origine`). Togliere e rimettere, tenere o «correggere» senza cambiare niente non la fanno
+        diventare d'altri: un premio non si prende così. Vale per i premi e la padronanza."""
+        return r["origine"] == "modello"
 
     def firme_parti(self, vid, cosa: str) -> dict:
         """{id dell'argomento (testo): firma} all'ultima generazione di `cosa` (carte, domande)."""
@@ -1534,6 +1549,45 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
             x = {}
         y = x.get(cosa) if isinstance(x, dict) else None
         return y if isinstance(y, dict) else {}
+
+    @staticmethod
+    def _fermate_di(voci: list[dict], modo_: str, G) -> tuple[list[dict], dict]:
+        """(le voci da scrivere, {argomento: quante fermate per sicurezza}): con «attiva» una voce fermata per
+        sicurezza non si scrive, così non può arrivare a una pagina né essere tenuta. In ombra sì: non va a nessuno."""
+        if modo_ == G.OMBRA:
+            return list(voci), {}
+        tieni, ferme = [], {}
+        for v in voci:
+            if set(v.get("avvisi") or ()) & set(G.SICUREZZA):
+                k = str(v.get("argomento"))
+                ferme[k] = ferme.get(k, 0) + 1
+            else:
+                tieni.append(v)
+        return tieni, ferme
+
+    def _scrivi_fermate(self, db, vid, cosa: str, ferme: dict, rifatti):
+        """Quante voci fermate per sicurezza, per argomento: solo conti. Quelle degli argomenti rifatti ripartono."""
+        r = db.execute("SELECT firme_parti FROM studio_verifiche WHERE id = ?", (int(vid),)).fetchone()
+        try:
+            tutte = json.loads(r["firme_parti"] or "{}")
+        except (TypeError, ValueError):
+            tutte = {}
+        tutte = tutte if isinstance(tutte, dict) else {}
+        tot = tutte.setdefault("fermate", {})
+        mie = {} if rifatti is None else {k: n for k, n in (tot.get(cosa) or {}).items()
+                                          if not (str(k).isdecimal() and int(k) in rifatti)}
+        mie.update(ferme)
+        tot[cosa] = mie
+        db.execute("UPDATE studio_verifiche SET firme_parti = ? WHERE id = ?", (json.dumps(tutte), int(vid)))
+
+    def fermate_di(self, vid) -> int:
+        """Quante voci di questa verifica non sono state proposte per sicurezza. Solo un numero."""
+        r = self.dati.uno("SELECT firme_parti FROM studio_verifiche WHERE id = ?", (int(vid),))
+        try:
+            x = json.loads((r or {}).get("firme_parti") or "{}").get("fermate") or {}
+        except (ValueError, AttributeError):
+            return 0
+        return sum(int(n) for d in x.values() if isinstance(d, dict) for n in d.values())
 
     def _scrivi_firme(self, db, vid, cosa: str, args: list[dict], pagine: list[dict], modo_: str,
                       rifatti):
@@ -1626,7 +1680,7 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
             lette = {int(p["id"]) for p in A.lette(pagine)}
             if not any(set(a["pagine"]) & lette for a in args):
                 continue
-            if m == G.ATTIVA and self._prova_aperta(v["id"]):
+            if m == G.ATTIVA and (self._prova_aperta(v["id"]) or self.guardiano_manca(v["persona"])):
                 continue                 # le prove già aperte non cambiano: si riprova dopo (#384)
             if G.da_generare(v.get("carte_firma"), v.get("carte_esito"), v.get("carte_del"),
                              G.firma(args, pagine, m), self.adesso()):
@@ -1670,11 +1724,18 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
                         db.execute("DELETE FROM studio_carte WHERE id = ?", (cid,))
                     decise = {A.chiave(r[0]) for r in db.execute(
                         "SELECT domanda FROM studio_carte WHERE verifica = ?", (int(vid),))}
+                    # Una tolta riformulata non torna: stessa risposta, stesso argomento (#384)
+                    tolte = {(r[0], A.chiave(r[1])) for r in db.execute(
+                        "SELECT argomento, risposta FROM studio_carte WHERE verifica = ? AND stato = 'tolta'",
+                        (int(vid),))}
+                    proposte, ferme = self._fermate_di(proposte, modo_, G)
+                    self._scrivi_fermate(db, vid, "carte", ferme, rifatti)
                     tot = db.execute("SELECT COUNT(*) FROM studio_carte WHERE verifica = ? AND "
                                      "stato != 'ombra'", (int(vid),)).fetchone()[0]
                     adesso = self.adesso().isoformat(timespec="seconds")
                     for c in proposte:
-                        if A.chiave(c["domanda"]) in decise or tot + n >= C.CARTE_MAX:
+                        if (A.chiave(c["domanda"]) in decise or tot + n >= C.CARTE_MAX
+                                or (c["argomento"], A.chiave(c["risposta"])) in tolte):
                             continue
                         stato = G.stato_iniziale(c["avvisi"], modo_)
                         db.execute(
@@ -1737,7 +1798,7 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
         # Le carte dell'ombra (studio_carte_genera: ombra) non vanno mai alla persona
         for i, c in enumerate(self.dati.tutti("SELECT * FROM studio_carte WHERE verifica = ? AND "
                                               "stato != 'ombra' ORDER BY id", (v["id"],)), 1):
-            if libera_aperta and c["origine"] == "mappa":
+            if (libera_aperta and c["origine"] == "mappa") or self._voce_ferma(c):
                 continue
             c["pagine"] = [int(x) for x in D.da_j(c["pagine"]) if str(x).isdecimal()]
             c["avvisi"] = D.da_j(c["avvisi"])

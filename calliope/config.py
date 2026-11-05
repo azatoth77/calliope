@@ -2199,7 +2199,7 @@ class Config:
     # qwen3.6 le carte degli argomenti di una verifica aperta, dal solo testo letto in busta. Il
     # codice le controlla come gli argomenti (pagine vere, risposta e valori nelle pagine, forma).
     # «ombra» le genera e le misura soltanto: nessuna carta va alla persona. «attiva» (dal 04/11,
-    # #384, 0035 punto 57; *[storico: «le dà proposte, da confermare» fino al 04/11]*) lavora a
+    # #384, 0035 punto 58; *[storico: «le dà proposte, da confermare» fino al 04/11]*) lavora a
     # lettura finita senza aspettare la conferma degli argomenti (con questa o con
     # `studio_domande_genera` la verifica si apre da sola): le carte pulite vanno subito nel ripasso,
     # quelle con un avviso o fermate dai cancelli restano fuori. «spenta» niente. Il criterio per passare

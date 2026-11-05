@@ -21,7 +21,8 @@ Con il vLLM finto e i materiali di fantasia di `prova_studio_argomenti.py` (Leo,
 10. **La guardia**: DGX occupata, nessuna richiesta; ciò che è pronto lo dice, senza testo.
 11. **Il banco della rilettura** a secco: la verità, gli errori iniettati, le voci vere solo conti.
 12. **I cancelli**: la frase d'appoggio coi contrari (scambio, soggetto, negazione, conti), il giudizio
-    indipendente, il guardiano (un minore senza o con un guasto: niente passa).
+    indipendente, il giudizio sulla sola voce, il guardiano (un minore senza o con un guasto: niente passa, e si
+    riprova); ciò che è fermato per sicurezza non si scrive; le mappe; l'OCR; i premi non si aggirano.
 
     python prove/prova_studio_generazione.py
 """
@@ -222,11 +223,13 @@ verifica("un nome inventato resta fuori (da_controllare, proposta)",
          per[C_INVENTATA["domanda"]]["stato"] == "proposta"
          and G.DA_CONTROLLARE in per[C_INVENTATA["domanda"]]["avvisi"])
 verifica("un anno sbagliato resta fuori", per[C_ANNO["domanda"]]["stato"] == "proposta")
-verifica("l'ostile resta fuori", per[C_OSTILE["domanda"]]["stato"] == "proposta"
-         and G.TESTO_ORDINE in per[C_OSTILE["domanda"]]["avvisi"])
+verifica("l'ostile non si scrive nemmeno", C_OSTILE["domanda"] not in per
+         and not st.dati.tutti("SELECT id FROM studio_carte WHERE domanda = ?", (C_OSTILE["domanda"],)))
 verifica("anche una sola pagina citata con le istruzioni: fuori",
-         G.PAGINA_CON_ISTRUZIONI in per[C_DUE_PAGINE["domanda"]]["avvisi"]
-         and per[C_DUE_PAGINE["domanda"]]["stato"] == "proposta")
+         C_DUE_PAGINE["domanda"] not in per)
+verifica("la scheda dice al più quante, mai quali", st.fermate_di(vid) >= 2
+         and any("non ti sono state proposte" in x for x in st.pronto(st.verifica(LEO, vid))["righe"])
+         and not any("professoressa" in x for x in st.pronto(st.verifica(LEO, vid))["righe"]))
 pulite_ = {C1["domanda"], C2["domanda"], C4["domanda"]}
 verifica("a voce solo le pulite: la coda del ripasso e la prossima carta",
          {c["domanda"] for c in st.da_ripassare(LEO, vid)} == pulite_
@@ -236,9 +239,9 @@ verifica("nelle prove nessuna con un avviso", D_FUORI["domanda"] not in d_pool
          and C_OSTILE["domanda"] not in d_pool and C_INVENTATA["domanda"] not in d_pool, d_pool)
 cid = per[C_INVENTATA["domanda"]]["id"]
 st.segna_carta(LEO, cid, True)
-verifica("«Tieni» la porta dentro, ed è una decisione: non è più «generata»",
+verifica("«Tieni» (un dubbio di fedeltà) la porta dentro, e resta «generata»: il testo non è cambiato",
          st.carte(LEO, vid) and next(c for c in st.carte(LEO, vid) if c["id"] == cid)["stato"] == "attiva"
-         and not st._generata(st.dati.uno("SELECT * FROM studio_carte WHERE id = ?", (cid,))))
+         and st._generata(st.dati.uno("SELECT * FROM studio_carte WHERE id = ?", (cid,))))
 st.close()
 
 # ═══════════════════════════ 4. solo la parte cambiata ═══════════════════════════
@@ -465,6 +468,14 @@ c = st.carte(LEO, vid)[0]
 r = st.esito_carta(LEO, c["id"], "sapevo")
 t = st.dati.uno("SELECT generata FROM studio_tentativi WHERE id = ?", (r["tentativo"],))
 verifica("il tentativo su una carta generata è segnato", t and t["generata"] == 1, t)
+st.correggi_carta(LEO, c["id"], risposta=c["risposta"])
+r = st.esito_carta(LEO, c["id"], "sapevo")
+t = st.dati.uno("SELECT generata FROM studio_tentativi WHERE id = ?", (r["tentativo"],))
+verifica("«Correggi» senza cambiare niente: resta generata", t and t["generata"] == 1, t)
+st.segna_carta(LEO, c["id"], False)
+st.segna_carta(LEO, c["id"], True)
+verifica("togli e rimetti: resta generata", st._generata(st.dati.uno(
+    "SELECT * FROM studio_carte WHERE id = ?", (c["id"],))))
 st.correggi_carta(LEO, c["id"], risposta="Nel 1453, a maggio")
 r = st.esito_carta(LEO, c["id"], "sapevo")
 t = st.dati.uno("SELECT generata FROM studio_tentativi WHERE id = ?", (r["tentativo"],))
@@ -610,6 +621,139 @@ verifica("il db si apre in sola lettura (come fa il banco)", ro_ok)
 _ro.close()
 
 # ═══════════════════════════ 12. i cancelli del prodotto ═══════════════════════════
+print("— il guasto non è un giudizio; la sicurezza non arriva alla pagina; la mappa; l'OCR")
+PA.azzera()
+st, vid, ids, lett = prepara("guasto2")
+st.guardiano.guasto_ = True
+giro(lett, ARGOMENTI, CARTE, DOMANDE)
+f_ = st.verifica(LEO, vid)
+verifica("guardiano guasto: niente scritto e nessuna firma, si riprova",
+         not f_.get("carte_firma") and st.carte(LEO, vid) == [], f_.get("carte_firma"))
+st.guardiano.guasto_ = False
+while not PA.F.risposte.empty():
+    PA.F.risposte.get_nowait()
+lett._riprova_dopo = 0.0
+giro(lett, CARTE, DOMANDE)
+verifica("tornato il guardiano: le voci ci sono, senza toccare niente",
+         [c for c in st.carte(LEO, vid) if c["stato"] == "attiva"]
+         and st._pool(st.verifica(LEO, vid)), len(st.carte(LEO, vid)))
+st.close()
+
+PA.azzera()
+st, vid, ids, lett = prepara("nociva")
+PA.F.nociva = lambda testo: "1453" in testo
+giro(lett, ARGOMENTI, CARTE, DOMANDE)
+per = {c["domanda"]: c for c in st.carte(ANDREA, vid)}
+verifica("il giudizio sulla sola voce: fermata, non si scrive, nemmeno per il tutore", C1["domanda"] not in per)
+verifica("il giudizio sulla sola voce non vede la pagina",
+         PA.F.sicuri and all("Palos" not in x["messages"][1]["content"] or "Palos" in C4["domanda"]
+                             for x in PA.F.sicuri if C1["domanda"] in x["messages"][1]["content"]))
+verifica("gira anche sul dubbio di fedeltà: ciò che resta visibile è passato di lì",
+         any(C_INVENTATA["domanda"] in x["messages"][1]["content"] for x in PA.F.sicuri))
+st.close()
+
+PA.azzera()
+st, vid, ids, lett = prepara("rilegge")
+st.guardiano.vieta = "Portogallo"
+giro(lett, ARGOMENTI, CARTE, DOMANDE)
+righe_f = st.dati.tutti("SELECT id FROM studio_carte WHERE risposta LIKE '%Portogallo%'")
+verifica("fermata dal guardiano: non è nel db, né per chi studia né per il tutore né per una «Tieni»",
+         righe_f == [] and all("Portogallo" not in c["risposta"] for c in st.carte(LEO, vid))
+         and all("Portogallo" not in c["risposta"] for c in st.carte(ANDREA, vid)))
+# Una riga con un avviso di sicurezza rimasta da prima: non si vede e non si tocca
+cc0 = st.carte(LEO, vid)[0]
+st.dati.scrivi("UPDATE studio_carte SET avvisi = ? WHERE id = ?", ('["guardiano_no"]', cc0["id"]))
+verifica("una riga rimasta da prima con un avviso di sicurezza: fuori, e «Tieni» e «Correggi» non la trovano",
+         cc0["id"] not in {c["id"] for c in st.carte(LEO, vid)}
+         and PA.solleva(lambda: st.segna_carta(LEO, cc0["id"], True), PA.S.NonTrovata)
+         and PA.solleva(lambda: st.correggi_carta(LEO, cc0["id"], risposta="x"), PA.S.NonTrovata))
+st.close()
+
+# La tolta riformulata non torna
+PA.azzera()
+st, vid, ids, lett = prepara("tolta", domande="spenta")
+giro(lett, ARGOMENTI, {"carte": [C1, C2, C4]})
+c_ = next(c for c in st.carte(LEO, vid) if c["domanda"] == C1["domanda"])
+st.segna_carta(LEO, c_["id"], False)
+st.rinomina_argomento(LEO, st.argomenti(LEO, vid)[0]["id"], "Perché partirono")
+giro(lett, {"carte": [carta("A1", "Quando caddero le mura di Costantinopoli?", "Nel 1453", "P2")]})
+verifica("una tolta riformulata con la stessa risposta non torna",
+         not any("mura" in c["domanda"] for c in st.carte(LEO, vid)))
+st.close()
+
+# La mappa
+PA.azzera()
+st, vid, ids, lett = prepara("mappa_s", mappa="attiva")
+lett2 = lett
+nodi_ = [{"id": 1, "testo": "Colombo"}, {"id": 2, "testo": "Palos"}, {"id": 3, "testo": "Vomitare dopo i pasti"},
+         {"id": 4, "testo": "Modo sano"}, {"id": 5, "testo": "Solo"}]
+coll_ = [{"id": 1, "da": 1, "a": 2, "verbo": "parte da"}, {"id": 2, "da": 3, "a": 4, "verbo": "è un"}]
+PA.F.nociva = lambda t: "Vomitare" in t
+n2, c2_, fer = lett._mappa_sicura(nodi_, coll_, LEO.id, {"token_in": 0, "token_out": 0})
+verifica("la mappa: il collegamento nocivo cade coi capi rimasti soli, il resto regge, e il concetto solo resta",
+         [x["testo"] for x in n2] == ["Colombo", "Palos", "Solo"] and [x["id"] for x in c2_] == [1] and fer == 1, n2)
+PA.F.nociva = lambda t: "Solo" in t
+n3, _c3, fer3 = lett._mappa_sicura(nodi_, coll_, LEO.id, {"token_in": 0, "token_out": 0})
+verifica("la mappa: un concetto solo nocivo cade", "Solo" not in {x["testo"] for x in n3} and fer3 == 1)
+st.guardiano.guasto_ = True
+PA.F.nociva = None
+verifica("la mappa: col guardiano guasto per un minore niente si scrive, si riprova",
+         PA.solleva(lambda: lett._mappa_sicura(nodi_, coll_, LEO.id, {"token_in": 0, "token_out": 0}), PA.L.ErroreServer))
+st.guardiano.guasto_ = False
+PA.F.nociva = None
+_n4, _c4, _f4 = lett._mappa_sicura(
+    [{"id": 1, "testo": "A", "avvisi": [G.PAGINA_CON_ISTRUZIONI]}, {"id": 2, "testo": "B", "avvisi": []},
+     {"id": 3, "testo": "C", "avvisi": []}, {"id": 4, "testo": "D", "avvisi": []}],
+    [{"id": 1, "da": 1, "a": 2, "verbo": "x", "avvisi": []}, {"id": 2, "da": 3, "a": 4, "verbo": "y", "avvisi": [G.TESTO_ORDINE]}],
+    LEO.id, {"token_in": 0, "token_out": 0})
+verifica("la mappa: un avviso di sicurezza cade senza chiedere, e non resta con l'avviso su una pagina",
+         _n4 == [] and _c4 == [] and _f4 == 3, (_n4, _c4, _f4))
+st.segna_fermate_mappa(vid, "generale", 2)
+verifica("la mappa: le fermate contate fra quelle non proposte", st.fermate_di(vid) >= 2)
+st.close()
+
+# Il terreno: le frasi nocive escono prima di chiedere al modello
+from calliope.studio import voce_sicura as VS  # noqa: E402
+_pg = [{"id": 1, "testo": "Colombo partì nel 1492. Saltare i pasti fa bene. Il Portogallo cercò l'India. Magellano morì nelle Filippine. Vasco arrivò a Calicut. Dias doppiò il Capo.", "avvisi": None},
+       {"id": 2, "testo": "Saltare i pasti fa bene. Vomitare è sano. Elcano concluse il viaggio.", "avvisi": None},
+       {"id": 3, "testo": "Testo pulito della pagina.", "avvisi": None},
+       {"id": 4, "testo": "Saltare i pasti fa bene.", "avvisi": '["istruzioni"]'}]
+_t, _c = VS.terreno(_pg, lambda f: not ("pasti" in f or "Vomitare" in f), G.frasi_di)
+verifica("il terreno: una frase nociva esce dal testo, con due la pagina è fuori, il resto resta",
+         "pasti" not in _t[0]["testo"] and "Colombo" in _t[0]["testo"] and "istruzioni" not in str(_t[0]["avvisi"])
+         and "istruzioni" in _t[1]["avvisi"] and _t[2] is _pg[2]
+         and _c == {"frasi": 10, "nocive": 3, "pagine_fuori": 1}, (_t, _c))
+verifica("il terreno non tocca le righe delle pagine", "pasti" in _pg[0]["testo"] and _pg[1]["avvisi"] is None)
+PA.azzera()
+st, vid, ids, lett = prepara("terreno")
+PA.F.nociva = lambda t: "Costantinopoli" in t and "Domanda" not in t
+giro(lett, ARGOMENTI, CARTE, DOMANDE)
+gen = [x for x in PA.F.richieste if "carte" in json.dumps(x.get("response_format") or {})]
+verifica("il modello non vede le frasi nocive della pagina",
+         gen and all("conquistarono Costantinopoli" not in json.dumps(x["messages"], ensure_ascii=False) for x in gen))
+st.close()
+
+# Il giudizio sulla sola voce
+m_v = VS.messaggi("Domanda: x\nRisposta: y")
+verifica("il giudizio sulla sola voce: chiuso, in busta, solo un «no» pulito fa passare",
+         VS.passa('{"risposta": "no"}') and not VS.passa('{"risposta": "si"}') and not VS.passa("no")
+         and not VS.passa("") and not VS.passa(None)
+         and VS.corpo("m", "t")["format"]["properties"]["risposta"]["enum"] == ["si", "no"]
+         and "Domanda: x" in m_v[1]["content"]
+         and "Raccontare non è" in m_v[0]["content"])
+
+# L'OCR
+OCR = ("La spedizione dei Mille, guidata da Giuseppe\nGaribaldi, partì da Quarto il 5 maggio 1860 e\nsbarcò a Mar-\n"
+       "sala l'11 maggio. Il Regno d'Italia fu procla-\nmato nel 1861.\n1. Cavour\n2. Mazzini")
+verifica("gli a capo dell'OCR si ricuciono, la sillabazione torna intera; gli elenchi a righe restano",
+         "Garibaldi, partì" in G.ricuci(OCR) and "Marsala" in G.ricuci(OCR) and "proclamato" in G.ricuci(OCR)
+         and "1. Cavour\n2. Mazzini" in G.ricuci(OCR))
+verifica("sulla pagina a capo la risposta si appoggia alla sua frase",
+         G.appoggio("Dove sbarcarono i Mille?", "A Marsala", [OCR]) is not None
+         and G.appoggio("In che anno fu proclamato il Regno d'Italia?", "Nel 1861", [OCR]) is not None)
+verifica("contrario: uno scambio sulla pagina a capo resta uno scambio",
+         G.appoggio("In che anno fu proclamato il Regno d'Italia?", "Nel 1860", [OCR]) is None)
+
 print("— la frase d'appoggio, il giudizio, il guardiano")
 PG_ = ["Nel 1453 i Turchi conquistarono Costantinopoli.\nColombo partì da Palos nel 1492. Magellano non "
        "finì il viaggio perché morì nelle Filippine. Il Portogallo cercò la strada per l'India."]
@@ -643,8 +787,7 @@ giro(lett, ARGOMENTI, CARTE, DOMANDE)
 per = {c["domanda"]: c for c in st.carte(LEO, vid)}
 verifica("il giudizio dice no: fuori, con l'avviso", G.GIUDIZIO_NO in per[C1["domanda"]]["avvisi"]
          and per[C1["domanda"]]["stato"] == "proposta", per[C1["domanda"]])
-verifica("il guardiano dice no: fuori, con l'avviso", G.GUARDIANO_NO in per[C2["domanda"]]["avvisi"]
-         and per[C2["domanda"]]["stato"] == "proposta", per[C2["domanda"]])
+verifica("il guardiano dice no: fuori, e nemmeno scritta", C2["domanda"] not in per, per.get(C2["domanda"]))
 verifica("la terza passa", per[C4["domanda"]]["stato"] == "attiva" and not per[C4["domanda"]]["avvisi"])
 verifica("il giudizio solo sulle voci pulite, mai su quelle che il codice ha già fermato",
          PA.F.giudizi and not any(C_OSTILE["domanda"] in x["messages"][1]["content"] for x in PA.F.giudizi)
@@ -654,15 +797,14 @@ PA.azzera()
 st, vid, ids, lett = prepara("senza_g")
 st.guardiano = None
 giro(lett, ARGOMENTI, CARTE, DOMANDE)
-verifica("un minore senza guardiano: niente passa", not [c for c in st.carte(LEO, vid) if c["stato"] == "attiva"]
-         and st._pool(st.verifica(LEO, vid)) == [])
+verifica("un minore senza guardiano: niente parte nemmeno", st.carte(LEO, vid) == []
+         and st._pool(st.verifica(LEO, vid)) == [] and not st.verifiche_per_carte())
 st.close()
 PA.azzera()
 st, vid, ids, lett = prepara("guasto_g")
 st.guardiano.guasto_ = True
 giro(lett, ARGOMENTI, CARTE, DOMANDE)
-verifica("un minore col guardiano guasto: niente passa",
-         not [c for c in st.carte(LEO, vid) if c["stato"] == "attiva"])
+verifica("un minore col guardiano guasto: niente passa", st.carte(LEO, vid) == [])
 st.close()
 PA.azzera()
 st, vid, ids, lett = prepara("ombra_g", carte="ombra", domande="ombra")

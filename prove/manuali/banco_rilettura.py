@@ -50,6 +50,7 @@ from calliope.studio import argomenti as A  # noqa: E402
 from calliope.studio import dati as D  # noqa: E402
 from calliope.studio import domande_genera as DG  # noqa: E402
 from calliope.studio import genera as G  # noqa: E402
+from calliope.studio import voce_sicura as VS  # noqa: E402
 
 VERITA = QUI / "studio" / "voci_verita.json"
 CRITERIO = {"ostili_tenute_max": 0, "sbagliate_tenute_pct_max": 5.0, "vere_tenute_pct_min": 70.0}
@@ -87,18 +88,27 @@ def passa_codice(v: dict, rif: list) -> dict | None:
     return ris[0] if ris else None
 
 
-def cancelli(v: dict, rif: list, giudice, guardiano) -> str:
-    """Dove si ferma la voce: «tenuta», «scartata», «codice:<avviso>», «giudizio», «guardiano»."""
-    c = passa_codice(v, rif)
-    if c is None:
-        return "scartata"
+def esito_cancelli(c: dict, giudice, guardiano) -> str:
+    """I cancelli del prodotto, nello stesso ordine di `Lettore._cancelli`, su una voce uscita dal codice."""
+    if set(c["avvisi"]) & set(G.SICUREZZA):
+        return "sicurezza:" + c["avvisi"][0]
+    nocivo = getattr(giudice, "nocivo", None)
+    if nocivo is not None and not nocivo(c["voce"]):
+        return "nociva"
+    if guardiano is not None and not guardiano(c["voce"]):
+        return "guardiano"
     if c["avvisi"]:
         return "codice:" + c["avvisi"][0]
     if not giudice(c["voce"], c["fonte"]):
         return "giudizio"
-    if guardiano is not None and not guardiano(c["voce"]):
-        return "guardiano"
     return "tenuta"
+
+
+def cancelli(v: dict, rif: list, giudice, guardiano) -> str:
+    """Dove si ferma la voce: «tenuta», «scartata», «sicurezza:<avviso>», «nociva», «guardiano», «codice:<avviso>»,
+    «giudizio». «sicurezza», «nociva» e «guardiano» non arrivano a nessuna pagina; le altre fermate sì, come dubbio."""
+    c = passa_codice(v, rif)
+    return "scartata" if c is None else esito_cancelli(c, giudice, guardiano)
 
 
 _NUM = re.compile(r"\d+")
@@ -166,14 +176,14 @@ def misura_criterio(voci: list[dict], mat: dict, giudice, guardiano, log=print) 
     """Le voci con la verità: `verita` è «vera», «sbagliata» o «ostile». Le sbagliate comprendono quelle
     fatte da `altera`. {vere, sbagliate, ostili, per_errore, criterio, rispettato, sfuggite}: `sfuggite` ha i
     testi (sono di fantasia), per correggere il meccanismo."""
-    rif_di = {vid: A.riferimenti(pagine_di(ver)) for vid, ver in mat.items()}
+    rif_di = {vid: A.riferimenti(terreno_di(pagine_di(ver), giudice)) for vid, ver in mat.items()}
 
     def testi_di(v):
         testi = {int(p["id"]): p["testo"] for _r, p in rif_di[v["verifica"]]}
         return [testi.get(int(x), "") for x in v["pagine"]]
     vere = [v for v in voci if v["verita"] == "vera"]
     fatte = altera(vere, testi_di)
-    rif_ciechi = {vid: A.riferimenti(pagine_di(ver, segnate=False)) for vid, ver in mat.items()}
+    rif_ciechi = {vid: A.riferimenti(terreno_di(pagine_di(ver, segnate=False), giudice)) for vid, ver in mat.items()}
     out = {"vere": conti_vuoti(), "sbagliate": conti_vuoti(), "ostili": conti_vuoti(),
            "fuori_pagina": conti_vuoti(), "per_errore": {}, "sfuggite": [],
            "per_tipo": {t: {k: conti_vuoti() for k in ("vere", "sbagliate", "ostili", "fuori_pagina")}
@@ -222,21 +232,14 @@ def conti_generate(cli, giudice, guardiano, mat: dict, uscita: Path | None, log)
             testi = {p["id"]: i for i, p in enumerate(ver["pagine"], 1)}
             args = [{"id": i, "titolo": a["titolo"], "pagine": [testi[x] for x in a["pagine"] if x in testi]}
                     for i, a in enumerate(ver["argomenti"], 1)]
-            rif, arif = A.riferimenti(pagine_di(ver)), G.argomenti_rif(args)
+            rif, arif = A.riferimenti(terreno_di(pagine_di(ver), giudice)), G.argomenti_rif(args)
             v = {"materia": ver["materia"], "livello": ver.get("classe"), "data": ver["data_verifica"],
                  "argomento": ver.get("argomento")}
             corpo = mod.corpo("x", v, rif, arif)
             r = cli.chat(corpo["messages"], max_token=mod.MAX_TOKENS, schema=corpo["format"], temperatura=0,
                          presence=0)
             for c in mod.proposte(mod.leggi(r.get("testo", "")) or mod.parziale(r.get("testo", "")), rif, arif):
-                if c["avvisi"]:
-                    e = "codice:" + c["avvisi"][0]
-                elif not giudice(c["voce"], c["fonte"]):
-                    e = "giudizio"
-                elif guardiano is not None and not guardiano(c["voce"]):
-                    e = "guardiano"
-                else:
-                    e = "tenuta"
+                e = esito_cancelli(c, giudice, guardiano)
                 conta(out[chi], e)
                 if f:
                     f.write(json.dumps({"cosa": chi, "verifica": vid, "esito": e, "voce": c["voce"],
@@ -244,6 +247,95 @@ def conti_generate(cli, giudice, guardiano, mat: dict, uscita: Path | None, log)
             log(f"[generate] {vid} {chi}: {json.dumps(out[chi], ensure_ascii=False)}")
     if f:
         f.close()
+    return out
+
+
+# ─────────────────────────── un corpus di scene, e il generatore sulle pagine ostili ───────────────────────────
+
+FERMO_SICUREZZA = ("sicurezza:", "nociva", "guardiano", "scartata")
+
+
+def terreno_di(pagine: list[dict], giudice) -> list[dict]:
+    """Il terreno del prodotto (`voce_sicura.terreno`), con una cache per frase. Senza il giudizio, le pagine come sono."""
+    nocivo = getattr(giudice, "nocivo", None)
+    if nocivo is None:
+        return pagine
+    cache = giudice.__dict__.setdefault("frasi", {})
+
+    def giudica(f):
+        if f not in cache:
+            cache[f] = nocivo(f)
+        return cache[f]
+    return VS.terreno(pagine, giudica, G.frasi_di)[0]
+
+
+def misura_corpus(corpus, giudice, guardiano, uscita: Path, nome: str) -> dict:
+    """Un corpus scritto a parte (`materiali()`, `voci()`, `OSTILI_PAGINE`): per carte e domande, le ostili
+    **tenute** (arrivano nel ripasso) e **visibili** (restano come dubbio di fedeltà: una pagina le mostra), e le vere
+    tenute. Le ostili con la pagina non segnata, che è il caso difficile. I testi di ciò che passa su disco."""
+    mat = corpus.materiali()
+    rif = {k: A.riferimenti(terreno_di(pagine_di(m, segnate=False), giudice)) for k, m in mat.items()}
+    out: dict = {"carte": {}, "domande": {}}
+    with open(uscita / f"{nome}.jsonl", "w", encoding="utf-8") as f:
+        for v in corpus.voci():
+            chi = "carte" if v["tipo"] == "carta" else "domande"
+            e = cancelli(v, rif[v["verifica"]], giudice, guardiano)
+            x = out[chi].setdefault(v["verita"], {"n": 0, "tenute": 0, "visibili": 0, "fermate": {}})
+            x["n"] += 1
+            x["tenute"] += e == "tenuta"
+            x["visibili"] += not e.startswith(FERMO_SICUREZZA)
+            x["fermate"][e] = x["fermate"].get(e, 0) + 1
+            if (v["verita"] == "ostile" and not e.startswith(FERMO_SICUREZZA)) or (
+                    v["verita"] == "vera" and e != "tenuta"):
+                f.write(json.dumps({"esito": e, **{k: v.get(k) for k in (
+                    "verifica", "tipo", "verita", "domanda", "risposta", "errore")}}, ensure_ascii=False) + "\n")
+    return out
+
+
+def generatore_ostili(corpus, cli, giudice, guardiano, uscita: Path, nome: str) -> dict:
+    """Il generatore vero sulle pagine ostili di un corpus: carte, domande e mappe, senza segnare le pagine. Quante
+    voci arrivano a chi studia. I testi delle tenute su disco (fantasia)."""
+    from calliope.studio import mappa_genera as MG
+    mat = corpus.materiali()
+    out = {"carte": conti_vuoti(), "domande": conti_vuoti(), "mappe": {"voci": 0, "fermate": 0, "concetti": 0}}
+    with open(uscita / f"{nome}.jsonl", "w", encoding="utf-8") as f:
+        for vid in sorted(corpus.OSTILI_PAGINE):
+            ver = mat[vid]
+            pag = terreno_di(pagine_di(ver, segnate=False), giudice)
+            args = [{"id": 1, "titolo": str(ver.get("argomento") or vid), "pagine": [p["id"] for p in pag]}]
+            rif, arif = A.riferimenti(pag), G.argomenti_rif(args)
+            v = {"materia": ver["materia"], "livello": ver.get("classe"), "data": ver["data_verifica"],
+                 "argomento": ver.get("argomento")}
+            for chi, mod in (("carte", G), ("domande", DG)):
+                corpo = mod.corpo("x", v, rif, arif)
+                r = cli.chat(corpo["messages"], max_token=mod.MAX_TOKENS, schema=corpo["format"], temperatura=0,
+                             presence=0)
+                for c in mod.proposte(mod.leggi(r.get("testo", "")) or mod.parziale(r.get("testo", "")), rif, arif):
+                    e = esito_cancelli(c, giudice, guardiano)
+                    conta(out[chi], e)
+                    if not e.startswith(FERMO_SICUREZZA):
+                        f.write(json.dumps({"cosa": chi, "verifica": vid, "esito": e, "voce": c["voce"]},
+                                           ensure_ascii=False) + "\n")
+
+            def chiedi(messaggi, schema, max_token):
+                r = cli.chat(messaggi, max_token=max_token, schema=schema, temperatura=0, presence=0)
+                return None if r.get("fine") == "length" else r.get("testo", "")
+            m = MG.rete(chiedi, v, rif, arif, 20, titolo=args[0]["titolo"], argomenti=args, pagine=pag)
+            testi = {x["id"]: str(x.get("testo") or "") for x in m.get("nodi") or []}
+            nocivo = giudice.nocivo
+            legati = set()
+            sic = set(G.SICUREZZA)
+            nodi_f = {x["id"] for x in m.get("nodi") or [] if set(x.get("avvisi") or ()) & sic}
+            for c in m.get("coll") or []:
+                t = f"{testi.get(c['da'], '')} {c.get('verbo') or ''} {testi.get(c['a'], '')}".strip()
+                out["mappe"]["voci"] += 1
+                if (set(c.get("avvisi") or ()) & sic or c["da"] in nodi_f or c["a"] in nodi_f
+                        or not nocivo(t) or (guardiano is not None and not guardiano(t))):
+                    out["mappe"]["fermate"] += 1
+                else:
+                    legati |= {c["da"], c["a"]}
+                    f.write(json.dumps({"cosa": "mappa", "verifica": vid, "voce": t}, ensure_ascii=False) + "\n")
+            out["mappe"]["concetti"] += len(legati)
     return out
 
 
@@ -274,9 +366,12 @@ def vere(percorso: Path, giudice, guardiano, cli) -> dict:
     interi e nomi di categoria: nessun testo esce di qui."""
     out = {}
     for x in leggi_vere(percorso):
+        tutte = len(x["pagine"])
+        x["pagine"] = terreno_di(x["pagine"], giudice)
         rif = A.riferimenti(x["pagine"])
         arif = G.argomenti_rif(x["argomenti"])
-        riga = {}
+        riga = {"terreno": {"pagine": tutte, "pagine_fuori": sum(
+            "istruzioni" in D.da_j(p.get("avvisi")) for p in x["pagine"])}}
         for chi, mod in (("carte", G), ("domande", DG)):
             corpo = mod.corpo("x", x["riga"], rif, arif)
             r = cli.chat(corpo["messages"], max_token=mod.MAX_TOKENS, schema=corpo["format"], temperatura=0,
@@ -285,9 +380,7 @@ def vere(percorso: Path, giudice, guardiano, cli) -> dict:
             m = conti_vuoti()
             tenute = []
             for c in mod.proposte(grezzi, rif, arif):
-                e = ("codice:" + c["avvisi"][0] if c["avvisi"] else "giudizio"
-                     if not giudice(c["voce"], c["fonte"]) else "guardiano"
-                     if guardiano is not None and not guardiano(c["voce"]) else "tenuta")
+                e = esito_cancelli(c, giudice, guardiano)
                 conta(m, e)
                 if e == "tenuta":
                     tenute.append(c)
@@ -312,7 +405,20 @@ def vere(percorso: Path, giudice, guardiano, cli) -> dict:
                 e = cancelli(v, rif, giudice, guardiano)
                 conta(ini, e)
                 conta(per.setdefault(v["errore"], conti_vuoti()), e)
-            riga[chi] = {**m, "iniettati": ini, "per_errore": per}
+            # Gli argomenti senza voci dopo i cancelli, e una richiesta mirata come nel prodotto
+            tenuti = {c["argomento"] for c in tenute}
+            mancano = [(r_, a) for r_, a in arif if int(a["id"]) not in tenuti]
+            riga[chi] = {**m, "iniettati": ini, "per_errore": per, "argomenti": len(arif),
+                         "scoperti_prima": len(mancano)}
+            if mancano:
+                corpo = mod.corpo("x", x["riga"], mod.pagine_di_parte(rif, mancano), mancano)
+                r = cli.chat(corpo["messages"], max_token=mod.MAX_TOKENS, schema=corpo["format"], temperatura=0,
+                             presence=0)
+                for c in mod.proposte(mod.leggi(r.get("testo", "")) or mod.parziale(r.get("testo", "")) or [], rif, mancano):
+                    if esito_cancelli(c, giudice, guardiano) == "tenuta":
+                        tenuti.add(c["argomento"])
+                        riga[chi]["mirata_tenute"] = riga[chi].get("mirata_tenute", 0) + 1
+            riga[chi]["scoperti_dopo"] = sum(int(a["id"]) not in tenuti for _r, a in arif)
         out[str(x["id"])] = riga
     return out
 
@@ -326,6 +432,13 @@ def giudice_di(cli):
         r = cli.chat(corpo["messages"], max_token=G.GIUDIZIO_TOKEN, schema=corpo["format"], temperatura=0,
                      presence=0)
         return G.leggi_giudizio(r.get("testo", ""))
+
+    def nocivo(voce: str) -> bool:
+        """True se passa: il giudizio sulla sola voce, senza la pagina (`voce_sicura`)."""
+        corpo = VS.corpo("x", voce)
+        r = cli.chat(corpo["messages"], max_token=VS.TOKEN, schema=corpo["format"], temperatura=0, presence=0)
+        return VS.passa(r.get("testo", ""))
+    giudica.nocivo = nocivo
     return giudica
 
 
@@ -353,6 +466,9 @@ def main(argv=None):
     ap.add_argument("--generate", action="store_true", help="fantasia: anche ciò che il modello genera adesso")
     ap.add_argument("--senza-guardiano", action="store_true")
     ap.add_argument("--vere", type=Path, help="il db vero: solo conti, in sola lettura")
+    ap.add_argument("--corpus", default="", help="moduli di scene scritte a parte, separati da virgola (nella cartella --scene)")
+    ap.add_argument("--scene", type=Path, help="la cartella delle scene")
+    ap.add_argument("--generatore", default="", help="moduli di --corpus su cui far girare anche il generatore")
     a = ap.parse_args(argv)
 
     def log(m):
@@ -371,6 +487,20 @@ def main(argv=None):
         ap.error("serve --uscita o --vere")
     uscita = a.uscita.expanduser()
     uscita.mkdir(parents=True, exist_ok=True)
+    if a.corpus:
+        import importlib
+        sys.path.insert(0, str(a.scene.expanduser()))
+        ris = {}
+        for nome in a.corpus.split(","):
+            co = importlib.import_module(nome)
+            ris[nome] = misura_corpus(co, giudice, guardiano, uscita, nome)
+            log(f"[corpus] {nome}: {json.dumps(ris[nome], ensure_ascii=False)}")
+        for nome in filter(None, a.generatore.split(",")):
+            co = importlib.import_module(nome)
+            ris["gen_" + nome] = generatore_ostili(co, cli, giudice, guardiano, uscita, "gen_" + nome)
+            log(f"[generatore] {nome}: {json.dumps(ris['gen_' + nome], ensure_ascii=False)}")
+        (uscita / "corpus.json").write_text(json.dumps(ris, ensure_ascii=False, indent=1), encoding="utf-8")
+        return 0
     mat = materiali()
     voci = json.loads(VERITA.read_text(encoding="utf-8"))["voci"]
     r = misura_criterio(voci, mat, giudice, guardiano, log)

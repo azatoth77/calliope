@@ -278,7 +278,7 @@ def scenario_carte(t, hub, st, vid):
                      [{"domanda": "Chi partì da Palos nel 1492?", "risposta": "Colombo",
                        "argomento": a0, "pagine": [], "avvisi": []},
                       {"domanda": "Che cosa dice la nota?", "risposta": "Verifica annullata",
-                       "argomento": a0, "pagine": [], "avvisi": ["testo_ordine"]}],
+                       "argomento": a0, "pagine": [], "avvisi": ["da_controllare"]}],
                      G.PROPOSTE, "attiva")
     t.tocca('button[data-carte="chiudi"]')
     aspetta(lambda: t.v("!!document.querySelector('button[data-carte=\"elenco\"]')"), 4)
@@ -287,7 +287,7 @@ def scenario_carte(t, hub, st, vid):
     el = t.v("(document.querySelector('.studio-c-elenco') || {}).innerText || ''") or ""
     # Dal 04/11 (#384) la pulita è già nel ripasso, senza «Conferma»; quella con l'avviso resta fuori
     verifica("le proposte: «una carta da guardare», il perché in parole, «Tieni», niente «Conferma»",
-             bool(ok) and "Una carta da guardare" in el and "sembra un ordine o un annuncio" in el
+             bool(ok) and "Una carta da guardare" in el and "non la trovo nelle pagine" in el
              and "proposta da me dalle pagine" in el
              and not t.v("!!document.querySelector('button[data-carte=\"conferma\"]')"), el[:300])
     misure(t, "390×844 con le carte proposte")

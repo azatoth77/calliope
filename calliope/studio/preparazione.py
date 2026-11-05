@@ -505,11 +505,12 @@ class Preparazioni:
             and not (r["origine"] == "modello" and not r["modificata"] and not r.get("ultima"))}
 
     # ── il guardiano su una voce generata (#384): lo stesso cancello del riassunto ──
-    def voce_guardia(self, persona, testo: str) -> bool:
-        """Il guardiano su una voce generata, una volta quando si scrive: True se può andare. Stesse
-        regole del riassunto (`Riassunti.riassunto_guardia`): per un minore, guardiano assente o guasto
-        vuol dire fuori."""
-        return self.riassunto_guardia(persona, testo) is None
+    def voce_guardia(self, persona, testo: str) -> str | None:
+        """Il guardiano su una voce generata, una volta quando si scrive: None se può andare, «guardiano» se
+        ferma, «guasto» se non ha risposto per un minore (assente o guasto: stesse regole del riassunto,
+        `Riassunti.riassunto_guardia`). Un guasto non è un giudizio: chi chiama riprova, non scrive."""
+        m = self.riassunto_guardia(persona, testo)
+        return None if m is None else "guardiano" if m == "guardiano" else "guasto"
 
     # ── cosa è pronto, per la scheda della verifica e per la voce (#384) ──
     def _stato_generazione(self, v: dict, cosa: str, modulo, args, pagine) -> str | None:
@@ -593,6 +594,8 @@ class Preparazioni:
             sc = len(set((scoperti.get(cosa) or {}).get("argomenti") or ()) & vivi)
             righe.append(self._riga_materiale(nome, stato, pronte, dg, sc))
             in_corso = in_corso or stato == "in_preparazione"
+        # Le voci fermate per sicurezza: al più quante, mai il testo (#384)
+        fermate = self.fermate_di(v["id"])
         if MG.modo(self.cfg) == MG.ATTIVA:
             cm = self._conto_mappa(v)
             da_fare = bool(self.verifiche_per_mappa(v["id"]))
@@ -604,7 +607,11 @@ class Preparazioni:
             in_corso = in_corso or da_fare
         if in_corso and getattr(getattr(self, "lettore", None), "in_attesa", None):
             righe.append("La DGX adesso è occupata: continuo appena è libera.")
-        return {"in_corso": in_corso, "righe": righe, "generate": generate, "da_guardare": guardare}
+        if fermate:
+            righe.append("Una voce non ti è stata proposta." if fermate == 1
+                         else f"{fermate} voci non ti sono state proposte.")
+        return {"in_corso": in_corso, "righe": righe, "generate": generate, "da_guardare": guardare,
+                "fermate": fermate}
 
     def scoperti_di(self, vid) -> dict:
         r = self.dati.uno("SELECT scoperti FROM studio_verifiche WHERE id = ?", (int(vid),))

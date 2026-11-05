@@ -119,7 +119,7 @@ class Prove:
 
     def _domanda(self, chi, did) -> tuple[dict, dict]:
         r = self.dati.uno("SELECT * FROM studio_domande WHERE id = ?", (int(did),))
-        if r is None or r["stato"] == "ombra":
+        if r is None or r["stato"] == "ombra" or self._voce_ferma(r):
             from .servizio import NonTrovata
             raise NonTrovata()
         v = self._verifica(chi, r["verifica"])
@@ -172,6 +172,8 @@ class Prove:
         senza = self._risposte_nascoste(v, chi)
         for i, r in enumerate(self.dati.tutti("SELECT * FROM studio_domande WHERE verifica = ? "
                                               "AND stato != 'ombra' ORDER BY id", (v["id"],)), 1):
+            if self._voce_ferma(r):
+                continue
             d = self._riga_domanda(r)
             d["numero"] = i
             d["argomento_numero"] = numeri.get(d["argomento"])
@@ -198,7 +200,7 @@ class Prove:
             lette = {int(p["id"]) for p in A.lette(pagine)}
             if not any(set(a["pagine"]) & lette for a in args):
                 continue
-            if m == G.ATTIVA and self._prova_aperta(v["id"]):
+            if m == G.ATTIVA and (self._prova_aperta(v["id"]) or self.guardiano_manca(v["persona"])):
                 continue                 # le prove già aperte non cambiano: si riprova dopo (#384)
             if G.da_generare(v.get("domande_firma"), v.get("domande_esito"),
                              v.get("domande_del"), G.firma(args, pagine, m), self.adesso()):
@@ -239,11 +241,17 @@ class Prove:
                         db.execute("DELETE FROM studio_domande WHERE id = ?", (did,))
                     decise = {A.chiave(r[0]) for r in db.execute(
                         "SELECT testo FROM studio_domande WHERE verifica = ?", (int(vid),))}
+                    tolte = {(r[0], A.chiave(r[1])) for r in db.execute(
+                        "SELECT argomento, attesa FROM studio_domande WHERE verifica = ? AND stato = 'tolta'",
+                        (int(vid),))}
+                    proposte, ferme = self._fermate_di(proposte, modo_, G)
+                    self._scrivi_fermate(db, vid, "domande", ferme, rifatti)
                     tot = db.execute("SELECT COUNT(*) FROM studio_domande WHERE verifica = ? AND "
                                      "stato != 'ombra'", (int(vid),)).fetchone()[0]
                     adesso = self.adesso().isoformat(timespec="seconds")
                     for d in proposte:
-                        if A.chiave(d["testo"]) in decise or tot + n >= RS.DOMANDE_MAX:
+                        if (A.chiave(d["testo"]) in decise or tot + n >= RS.DOMANDE_MAX
+                                or (d["argomento"], A.chiave(d["attesa"])) in tolte):
                             continue
                         stato = G.stato_iniziale(d["avvisi"], modo_)
                         db.execute(
