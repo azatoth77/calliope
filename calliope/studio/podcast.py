@@ -50,7 +50,7 @@ CARTELLA_PODCAST = "podcast"       # i file finiti: podcast/<verifica>/<firma>-<
 CARTELLA_LAVORO = "podcast_lavoro"  # la sola cartella scrivibile del container: si svuota a ogni sessione
 
 # La versione entra nella firma: un prompt, un elenco o un taglio nuovi rifanno i copioni
-VERSIONE = 3
+VERSIONE = 4
 VOCI = ("A", "B")
 DI_FILA_MAX = 2                    # le battute di fila della stessa voce
 QUOTA_RACCORDI = 0.5               # dei cenni per battuta con la fonte, al più
@@ -278,11 +278,20 @@ def con_battute(ris: dict) -> dict:
 _NUMERO = re.compile(r"(?<![\w,.])(\d{1,3}(?:[. ]\d{3})+|\d+)(?:,(\d+))?(?![\w])(?![.,]\d)")
 # Il trattino, a regola rovesciata (seconda revisione della PR #393): si dice o si toglie **solo** in queste forme; ogni altro resta,
 # e `fedele` scarta la battuta. Prima si toglieva ovunque, e «Cl-», «OH-», «d=a-b» perdevano il meno senza che nessuno lo vedesse.
-_TERMINE = r"(?:[A-Za-z]|\d+(?:[.,]\d+)?)"
-_OPERAZIONE = re.compile(rf"(?<![\w,.])({_TERMINE})\s*[-−–]\s*(?={_TERMINE}(?![A-Za-z]))")
-_NOME_NUMERO = re.compile(r"(?<=[A-Za-zÀ-ÿ])[-–](?=\d)")        # «carbonio-14», «B-12»
+_TERMINE = r"(?:\d*[A-Za-z]|\d+(?:[.,]\d+)?)"
+_OPERAZIONE = re.compile(rf"(?<![\w,.])({_TERMINE})\s*[-−–]\s*(?={_TERMINE}(?![A-Za-z0-9]))")
+# Algebra senza uguale: «3x-5», «n-1», «a-b», «T-5». Due maiuscole sole («C-H») sono un legame: non si sa dire, si scarta
+_ALGEBRA = re.compile(r"(?<![\w,.])(?:\d*[a-z]-(?:\d*[a-z]|\d+)|\d*[a-z]\s+[-−–]\s+\d*[a-z]|[b-df-hj-np-z]\s+[-−–]\s+\d+|[A-Z]-\d+)"
+                      r"(?![A-Za-z0-9])")      # non «a -196» né «a - 196»: lì «a» è una preposizione
+# Il nome col numero: un nome intero di almeno due lettere («carbonio-14», «Na-23»), o una sigla di un elenco chiuso. Con una lettera
+# sola è una sottrazione (terza revisione della PR #393)
+_SIGLE_NUMERO = re.compile(r"(?<![\w-])(B-(?:[1-9]|12)|[DK]-[123]|C-1[234]|U-23[58])(?![\w-])")
+_NOME_NUMERO = re.compile(r"(?<![\w-])([A-Za-zÀ-ÿ]{2,})[-–](?=\d+(?![\w-]))")
 _NEGATIVO = re.compile(r"(?<![\w)\]])[-−–](?=\d)")             # «-196», «a -2», «(-5»
-_INTERVALLO = re.compile(r"(?<![\w,.])(\d+)[-–](\d+)(?![\w])")  # «1519-1521», «3-5»
+_INTERVALLO = re.compile(r"(?<![\w,.-])(\d+)[-–](\d+)(?![\w-])")  # «1519-1521», «pag. 3-5»
+# Ciò che dice che è un intervallo: senza, «il risultato di 3-5» non è «tre a cinque»
+_PRIMA_INTERVALLO = re.compile(r"(?:\b(?:pag|pagg|pagina|pagine|dal|dai|dalle|anni|anno|fra|tra|circa|secoli)\b\.?\s*(?:i|gli|le|il)?\s*)$", re.I)
+_DOPO_INTERVALLO = re.compile(r"\s*(?:anni|mesi|giorni|secoli|ore|minuti|volte)\b", re.I)
 _COMPOSTA = re.compile(r"(?<=[A-Za-zÀ-ÿ]{3})[-–](?=[A-Za-zÀ-ÿ]{3})")   # «anni-luce», «nord-est»: la sola forma che si toglie
 _RESTA = re.compile(r"[-−–]")
 
@@ -301,25 +310,29 @@ _IONE = re.compile(r"(?<![\w-])((?:[A-Z][a-z]?\d*)+)(\s\d)?-(?=[\s.,;:)]|$)")
 
 def e_operazione(testo: str) -> bool:
     """Una frase con un'operazione: il trattino è un meno fra due termini, e il valore dopo non ha il suo segno da solo."""
-    t = str(testo or "")
-    return "=" in t and bool(_OPERAZIONE.search(t)) or bool(re.search(r"(?<![\w,.])[A-Za-z]\s*[-−–]\s*[A-Za-z](?![\w])", t))
+    t = _SIGLE_NUMERO.sub("", str(testo or ""))
+    return ("=" in t and bool(_OPERAZIONE.search(t))) or bool(_ALGEBRA.search(t))
 
 
 def _segni(testo: str) -> str:
     """Il segno e il trattino, prima di ogni altra pulizia. Gli ioni come i positivi («Cl-» come «Na+»), il meno di un'operazione,
     il nome col numero, il numero negativo, l'intervallo, la parola composta. Il resto non si tocca."""
     t = _IONE.sub(_ione, str(testo or ""))
+    t = _SIGLE_NUMERO.sub(lambda m: m.group(1).replace("-", " "), t)
     if e_operazione(t):
         for _i in range(6):      # «a-b-c»: i termini si sovrappongono
             nuovo = _OPERAZIONE.sub(r"\1 − ", t)
             if nuovo == t:
                 break
             t = nuovo
-    t = _NOME_NUMERO.sub(" ", t)
+    t = _NOME_NUMERO.sub(lambda m: m.group(1) + " ", t)
     t = _NEGATIVO.sub("meno ", t)
 
     def intervallo(m: re.Match) -> str:
-        return f"{m.group(1)} a {m.group(2)}" if int(m.group(1)) < int(m.group(2)) else m.group(0)
+        a, b = int(m.group(1)), int(m.group(2))
+        anni = all(1000 <= x <= 2100 for x in (a, b))
+        segnale = _PRIMA_INTERVALLO.search(m.string[:m.start()]) or _DOPO_INTERVALLO.match(m.string[m.end():])
+        return f"{a} a {b}" if a < b and (anni or segnale) else m.group(0)
     t = _INTERVALLO.sub(intervallo, t)
     return _COMPOSTA.sub(" ", t)
 
@@ -381,8 +394,8 @@ def valori_di(testo: str) -> list[float]:
     # La carica di uno ione («SO4 2-») e il numero di una sigla («B-12») stanno con la formula: Whisper li scrive attaccati («SO42-»,
     # «B12»), e non sono valori della frase. «carbonio-14» è un nome col suo numero, non un quattordici negativo
     t = _IONE.sub(lambda m: m.group(1), t)
-    t = re.sub(r"(?<![\w])([A-Z][a-z]?)[-–](\d+)(?![\w])", r"\1\2", t)
-    return [round(v, 9) for v, _u in U.leggi(C._normale(_NOME_NUMERO.sub(" ", t)))]
+    t = _SIGLE_NUMERO.sub(lambda m: m.group(1).replace("-", ""), t)
+    return [round(v, 9) for v, _u in U.leggi(C._normale(_NOME_NUMERO.sub(lambda m: m.group(1) + " ", t)))]
 
 
 def fedele(testo: str) -> bool:

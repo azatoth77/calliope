@@ -54,6 +54,8 @@ PAVIMENTO_MB = 4000           # durante la sessione, sotto si ferma tutto (la gu
 ATTESA_MEMORIA_S = 60.0       # dopo il fermo di vLLM la memoria torna in qualche secondo
 ANCORA_OGNI_S = 5.0
 INVENTATE_POCHE = 4           # in un pezzo corto una manciata non è una percentuale
+SUONA_MIN = 0.55              # un nome sentito male, dal banco del 05/11: «Isabeau» e «Isabeo», non «Cortés» e «ragazzo»
+ULTIME_PAROLE = 3             # almeno una di queste, per battuta: la coda tronca
 PAUSA_WHISPER_S = 1800.0      # Whisper giù: si riguarda fra un po', senza toccare vLLM
 PAUSA_DOPO_GUASTO_S = 3600.0
 PAUSA_FRA_SESSIONI_S = 1800.0
@@ -129,28 +131,41 @@ def _chimiche(testo: str) -> list[str]:
     return out
 
 
-def fragili(testo: str, trascritto: str = "") -> tuple[set[str], set[str]]:
-    """(le parole che Whisper può sentire in un altro modo, quelle che ha scritto da formula). MOSS dice «acca due o», Whisper scrive
-    «H2O»; dice «o acca meno», scrive «OH-» (misurato sulla chimica del 05/11: 2 pezzi su 2 buttati, e MOSS li aveva detti giusti).
-    Sentite in un altro modo non buttano il pezzo; saltate sì."""
-    fr = set(nomi_di(testo))
+def fragili(testo: str, trascritto: str = "") -> tuple[set[str], set[str], set[str]]:
+    """(i nomi, le parole delle formule, quelle che Whisper ha scritto da formula). MOSS dice «acca due o», Whisper scrive «H2O»; dice «o
+    acca meno», scrive «OH-» (la chimica del 05/11: 2 pezzi su 2 buttati, e MOSS li aveva detti giusti). «meno» e «più» non stanno qui:
+    uno ione non deve coprire il «meno» di un'altra parte della frase (`_e_segno`)."""
+    nomi = set(nomi_di(testo))
+    chim: set[str] = set()
     scritte: set[str] = set()
     tutto = re.sub(r"[\W_]", "", _norma(trascritto))
-    op = P.e_operazione(testo)
     for w in _chimiche(testo):
-        parole_w = set(_parole(P.detto(w))) | set(_parole(w))
-        if w[-1:] in "+-−⁺⁻":
-            parole_w |= {"meno", "piu"}
-        fr |= parole_w
+        parole_w = (set(_parole(P.detto(w))) | set(_parole(w))) - {"meno", "piu"}
+        chim |= parole_w
         chiave = re.sub(r"[\W_]", "", _norma(w))
         if chiave and chiave in tutto:
             scritte |= parole_w
-    if op:
-        # Un'operazione si scrive in cento modi («A-B»): i suoi termini sono lettere, e il meno non si può sentire da solo
-        termini = {_norma(x) for x in re.findall(r"(?<![\w])[A-Za-z](?![\w])", str(testo))} | {"meno", "uguale"}
-        fr |= termini
+    if P.e_operazione(testo):
+        # Un'operazione si scrive in cento modi («A-B»): i suoi termini sono lettere e cifre
+        termini = {_norma(x) for x in re.findall(r"(?<![A-Za-z])[A-Za-z](?![A-Za-z])", str(testo))} | {"uguale"}
+        chim |= termini
         scritte |= termini
-    return fr - _VUOTE, scritte
+    return nomi - _VUOTE, chim - _VUOTE, scritte - _VUOTE
+
+
+def _suona(n: str, sentite: list[str]) -> bool:
+    """Ciò che si è sentito al posto di un nome gli somiglia nel suono: «Isabeau», «Isabeo»; «Ermengarda», «Armen Garda»; non
+    «Hernán Cortés» e «Un ragazzo». Un `replace` dell'allineamento da solo non dice che è stato detto (terza revisione)."""
+    if not sentite:
+        return False
+    prove = list(sentite) + ["".join(sentite)] + ["".join(sentite[i:i + 2]) for i in range(len(sentite) - 1)]
+    return max(difflib.SequenceMatcher(None, n, x, autojunk=False).ratio() for x in prove) >= SUONA_MIN
+
+
+def _e_formula_sentita(sentite: list[str], chiavi: list[str]) -> bool:
+    if "xformula" in sentite:
+        return True
+    return any(difflib.SequenceMatcher(None, c, x, autojunk=False).ratio() >= SUONA_MIN for c in chiavi for x in sentite)
 
 
 def _valori_sentiti(token: list[str]) -> list[float]:
@@ -179,7 +194,7 @@ def confronta(battute: list[dict], trascritto: str) -> dict:
     trovate = [False] * len(att)
     posto: list[int | None] = [None] * len(att)   # dove è stata sentita, per i tratti di ogni battuta
     usate = [False] * len(sent)
-    storpiate = [False] * len(att)                # al suo posto si è sentito altro: non è un salto
+    blocco: list[list[str]] = [[] for _ in att]   # ciò che si è sentito al suo posto, se è stato sentito altro
     in_piu = 0
     sm = difflib.SequenceMatcher(None, att, sent, autojunk=False)
     for op, i1, i2, j1, j2 in sm.get_opcodes():
@@ -189,7 +204,7 @@ def confronta(battute: list[dict], trascritto: str) -> dict:
                 posto[i1 + k] = j1 + k
         elif op == "replace":
             for k in range(i1, i2):
-                storpiate[k] = True
+                blocco[k] = sent[j1:j2]
                 for h in range(j1, j2):
                     if not usate[h] and _simile(att[k], sent[h]):
                         trovate[k] = usate[h] = True
@@ -206,17 +221,33 @@ def confronta(battute: list[dict], trascritto: str) -> dict:
             continue
         idx = [k for k, d in enumerate(dove) if d == i]
         testo = b.get("testo") or b.get("detto") or ""
-        # I nomi e le formule sentiti male stanno fuori dal conto; quelli saltati dentro
-        fr, scritte = fragili(testo, trascritto)
-        fuori = {k for k in idx if not trovate[k] and ((att[k] in fr and storpiate[k]) or att[k] in scritte)}
+        # I nomi e le formule sentiti in un altro modo stanno fuori dal conto; saltati, o con al posto loro tutt'altro, dentro
+        nomi, chim, scritte = fragili(testo, trascritto)
+        fr = nomi | chim
+        chiavi = [re.sub(r"[\W_]", "", _norma(w)) for w in _chimiche(testo)]
+        op = P.e_operazione(testo)
+
+        def e_segno(k: int) -> bool:
+            """Il «meno» o il «più» di uno ione o di un'operazione, subito dopo il suo termine: gli altri contano."""
+            return (att[k] in ("meno", "piu") and k > idx[0] and (att[k - 1] in fr or (op and (att[k - 1][:1].isdigit() or len(att[k - 1]) == 1))))
+
+        fuori = {k for k in idx if not trovate[k] and (
+            att[k] in scritte or e_segno(k)
+            or (att[k] in nomi and _suona(att[k], blocco[k]))
+            or (att[k] in chim and _e_formula_sentita(blocco[k], chiavi)))}
         piene = [k for k in idx if (att[k] not in _VUOTE or att[k] in _NEGAZIONI) and k not in fuori]
         negs = [k for k in idx if att[k] in _NEGAZIONI and k not in fuori]
+        # Il resto della frase deve esserci, e la sua fine deve tornare: la coda tronca è il difetto vero di MOSS
+        resto = [k for k in piene if att[k] not in fr]
+        contenuto = [k for k in idx if att[k] not in _VUOTE]
+        ultime = contenuto[-ULTIME_PAROLE:]
+        coda_ok = any(trovate[k] or k in fuori for k in ultime) if ultime else True
+        resto_ok = any(trovate[k] for k in resto) if resto else True
         copre = (sum(trovate[k] for k in piene) / len(piene)) if piene else 1.0
         # Il tratto di audio di questa battuta: dopo l'ultima parola ritrovata di quelle prima, fino alla prima di quelle dopo
         da = max((posto[k] for k in range(len(att)) if dove[k] < i and posto[k] is not None), default=-1) + 1
         a_ = min((posto[k] for k in range(len(att)) if dove[k] > i and posto[k] is not None), default=len(sent))
         tratto = _valori_sentiti(sent[da:a_])
-        op = P.e_operazione(testo)
         persi = 0
         for v in P.valori_di(testo):
             # In ordine: dopo quello trovato prima. Il valore viene dal testo di prima della pulizia
@@ -228,8 +259,10 @@ def confronta(battute: list[dict], trascritto: str) -> dict:
             numeri += 1
         numeri_persi += persi
         motivi = []
-        if copre < SOGLIA_FRASE:
-            motivi.append("persa" if copre < 0.4 else "cambiata")
+        if copre < SOGLIA_FRASE or not resto_ok:
+            motivi.append("persa" if copre < 0.4 or not resto_ok else "cambiata")
+        if not coda_ok:
+            motivi.append("coda")
         if persi:
             motivi.append("numero")
         if any(not trovate[k] for k in negs):

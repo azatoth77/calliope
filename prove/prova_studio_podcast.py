@@ -214,10 +214,15 @@ for t, atteso in (("Il cloro forma lo ione Cl- in acqua.", "Cl meno"), ("Lo ione
                   ("La differenza è d=a-b.", "d uguale a meno b"), ("Vale v = s - t ovunque.", "v uguale s meno t"),
                   ("Si ha 5-3=2.", "cinque meno tre uguale due"), ("Il carbonio-14 decade.", "carbonio quattordici"),
                   ("L'uranio-235 è fissile.", "uranio duecentotrentacinque"), ("La vitamina B-12 serve.", "B dodici"),
+                  ("Vale 3x-5 in tutto.", "3x meno cinque"), ("Il termine n-1 cresce.", "n meno uno"), ("Vale y=2x-3 sempre.", "y uguale 2x meno tre"),
+                  ("Si prende x-2 ogni volta.", "x meno due"), ("Si prende 2n-2 ogni volta.", "2n meno due"), ("Mancano T-5 secondi.", "T meno cinque"),
+                  ("Risolvi 3x-5=10 per ora.", "3x meno cinque uguale dieci"), ("Il Na-23 è stabile.", "Na ventitré"),
+                  ("Dalle pag. 3-5 si legge.", "3".replace("3", "tre a cinque")), ("Durò 3-5 anni.", "tre a cinque"), ("Dal 1519-1521 viaggiò.", "a millecinquecentoventuno"),
                   ("Lo ione Na+ è positivo.", "Na più")):
     verifica(f"«{t}» → «{atteso}»", atteso in P.detto(t), P.detto(t))
     verifica(f"…e si può dire: «{t}»", P.fedele(t), f"{P.detto(t)} {P.valori_di(t)} {P.valori_di(P.detto(t))}")
-for t in ("Il 2-metilpropano è un gas.", "Il modello 3-D cade.", "Pre- e post-bellico.", "Il rapporto 5-3 cala."):
+for t in ("Il 2-metilpropano è un gas.", "Il modello 3-D cade.", "Pre- e post-bellico.", "Il rapporto 5-3 cala.",
+          "Il risultato di 3-5 è negativo.", "Il legame C-H è forte.", "La formula CnH2n-2 è generale."):
     verifica(f"contrario: un trattino che non si sa dire scarta la battuta: «{t}»", not P.fedele(t), P.detto(t))
 for t, atteso in (("Dal 1519-1521 viaggiò.", "millecinquecentodiciannove a millecinquecentoventuno"),
                   ("Sono anni-luce.", "anni luce"), ("Vale 1 metro.", "un metro")):
@@ -368,6 +373,20 @@ e = PA.confronta(batt("L'acqua ha formula H2O e bolle a 100 gradi."), "L'acqua h
 verifica("contrario: un numero vero sbagliato accanto a una formula", not e["ok"], str(e))
 e = PA.confronta(batt("Il cloruro di sodio ha formula NaCl e si scioglie bene nell'acqua fredda."), "Il cloruro di sodio ha.")
 verifica("contrario: saltato non è sentito male", not e["ok"], str(e))
+print("— terza revisione, punti 4 e 5")
+e = PA.confronta(batt("Lo ione Cl- è meno reattivo del fluoro in acqua."), "Lo ione Cl- è reattivo del fluoro in acqua.")
+verifica("«meno» saltato conta anche dove c'è uno ione", not e["ok"] and "negazione" in e["frasi"][0]["motivi"], str(e))
+e = PA.confronta(batt("Lo ione Cl- è meno reattivo del fluoro in acqua."), "Lo ione Cl è meno reattivo del fluoro in acqua.")
+verifica("contrario: il meno dello ione che Whisper non scrive non conta", e["ok"], str(e))
+e = PA.confronta(batt("Hernán Cortés sbarcò nello Yucatán con pochi uomini."), "Un ragazzo sbarcò nello sport con pochi uomini.")
+verifica("«Un ragazzo» al posto di «Hernán Cortés» e «sport» per «Yucatán» non sono storpiature", e["frasi"][0]["copre"] < 0.75, str(e))
+e = PA.confronta(batt("Hernán Cortés e Francisco Pizarro."), "Boh.")
+verifica("«Boh.» per una frase di soli nomi", not e["ok"], str(e))
+e = PA.confronta(batt("Colombo esplorò le isole e le coste dell'America centrale e poi tornò in Spagna con molte ricchezze."),
+                 "Colombo esplorò le isole e le coste dell'America centrale e poi.")
+verifica("una frase troncata non passa", not e["ok"] and "coda" in e["frasi"][0]["motivi"], str(e))
+e = PA.confronta(batt("Isabeau si rifugiò a Ostrovala con il cancelliere."), "Isabeo si rifugiò a Ostrovalla con il cancelliere.")
+verifica("contrario: un nome sentito male, simile nel suono, va", e["ok"], str(e))
 print("— non coperto, di proposito: il significato è già deciso sul testo")
 LUNGA = "Il solfato di orsio resta insolubile in acqua anche quando la temperatura sale molto durante tutta la lunga stagione calda."
 verifica("non è un controllo del senso: solfato → solfito in una frase lunga passa, ed è scritto nel documento d'area",
@@ -838,6 +857,16 @@ verifica("revisione, punto 9: il container sparito non si aspetta", "container" 
 verifica("…il segno va via: `verifica` non dice «ok» per sempre, e chi vuole un lavoro trova il guasto vero",
          not r.segno.exists() and not r.in_ripresa())
 print("— Docker giù per un momento (seconda revisione, punto 2)")
+for msg in ("Cannot connect: dial unix /var/run/docker.sock: connect: no such file or directory", "lookup registry: no such host",
+            "error mounting /x: no such file or directory"):
+    verifica(f"terza revisione, punto 1: «{msg[:40]}…» non è un container sparito", not PM._non_esiste(types.SimpleNamespace(returncode=1, stderr=msg, stdout="")))
+r, d, o = ripresa_finta("socket-assente")
+r.ferma({})
+d0s = d.__call__
+r.vllm.esegui = lambda argv, timeout=60.0: types.SimpleNamespace(returncode=1, stderr="connect: no such file or directory", stdout="")
+verifica("col socket assente: il segno resta, vLLM non è dato per sparito", r.riparti() is False and r.segno.exists() and not r.vllm.sparito)
+r.vllm.esegui = d0s
+verifica("…e tornato Docker riparte", r.controlla() and d.vllm_su)
 verifica("«no such» in minuscolo e maiuscolo, il testo vero di Docker", PM._non_esiste(types.SimpleNamespace(returncode=1, stderr="error: no such object: x", stdout=""))
          and PM._non_esiste(types.SimpleNamespace(returncode=1, stderr="Error response from daemon: No such container: x", stdout=""))
          and not PM._non_esiste(types.SimpleNamespace(returncode=1, stderr="Cannot connect to the Docker daemon", stdout="")))

@@ -34,6 +34,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -75,11 +76,15 @@ def _esegui(argv: list[str], timeout: float = 60.0) -> subprocess.CompletedProce
     return subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False)
 
 
+# Non «no such» e basta: col socket assente Docker dice «connect: no such file or directory», e «no such host» (terza revisione)
+_NON_C_E = re.compile(r"\bno such (?:container|object)\b", re.I)
+
+
 def _non_esiste(r) -> bool:
     """Solo «No such container» vuol dire che non c'è (il testo vero del 05/11: «Error response from daemon: No such container», e
     «error: no such object» con `inspect`, in minuscolo). Ogni altro errore, Docker giù per un momento compreso, non dice niente sul
     container (seconda revisione della PR #393)."""
-    return r.returncode != 0 and "no such" in f"{getattr(r, 'stderr', '')}{getattr(r, 'stdout', '')}".lower()
+    return r.returncode != 0 and bool(_NON_C_E.search(f"{getattr(r, 'stderr', '')}{getattr(r, 'stdout', '')}"))
 
 
 ALBERI = ("venv/moss",)      # un'impronta sola: migliaia di file che si controllano insieme
