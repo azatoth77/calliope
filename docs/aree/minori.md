@@ -1575,3 +1575,31 @@ punto 45. In breve, per un minore di casa:
 
 Le azioni dei duelli valgono, per un minore, dentro gli orari dei tutori (`minori.fuori_orario`,
 come le prove). Lo stato d'animo non entra.
+
+## Il guardiano non dipende dallo Studio (05/11, issue #394, ramo `issue-394-guardiano-avvio`)
+
+**Il difetto.** Con il ripasso da ascoltare (`abc962e8`, 31/10, solo nel ramo dell'epic #251)
+`_ripasso_da_ascoltare` è stata inserita nel mezzo di `Avvio._minori_e_guardiano`: tutto ciò che
+seguiva il blocco dello Studio è finito dentro di lei, dopo i suoi `return`. Il diff di quel commit
+tocca `main.py` con la sola aggiunta, e non sposta altro: per questo non si vedeva. Partiva tutto
+solo con lo Studio `attivo`, `studio_ascolta: attiva` e lo speaker; altrimenti, a Calliope che
+partiva senza dire niente:
+- `s.guardiano` restava None: niente giudizio su domande e frasi per minori e ospiti
+  (`t.usa_guardia` falso), niente filtro delle risposte, niente guardiano ai giochi;
+- `attiva_minori` non si chiamava: niente `minore_gestisci` e `richiesta_tutore`, e `s.attiva_minori`
+  a None faceva cadere con un `TypeError` la fine di una registrazione (`ciclo.py`);
+- gli avvisi restavano senza cassetto e ricostruzione della trascrizione, e
+  `calliope conserva --svuota` non li toglieva;
+- i segnali dei cancelli rimasti aperti non riprendevano dopo un riavvio.
+
+**La correzione.** Tutto questo ora sta in `_regole_e_guardiano`, chiamata alla fine di
+`_minori_e_guardiano` senza condizioni, e `_ripasso_da_ascoltare` si occupa solo del ripasso. Il
+comportamento senza minore resta quello di prima di `abc962e8`: il guardiano si crea ma si carica
+solo con `guardiano_ospiti`, i tool dei minori no (arrivano con la registrazione di un minore). Lo
+Studio conosce il guardiano (`s.studio.guardiano`, #386) anche in ombra.
+
+**La prova.** `prove/prova_avvio_guardiano.py` lancia quel passo dell'avvio con guardiano e cancelli
+finti in ogni combinazione di Studio (spento, ombra, attivo, guasto), ripasso e speaker, con i
+contrari. Sul codice di prima cadeva in tutte le combinazioni tranne quella con tutto acceso.
+Non provato sulla DGX (dove lo Studio è attivo, quindi il difetto non si vedeva) né col modello del
+guardiano vero.

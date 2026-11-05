@@ -820,6 +820,7 @@ class Avvio:
             except Exception as e:  # noqa: BLE001 — non ferma l'avvio
                 print(f"[STUDIO] importazioni non riprese: {type(e).__name__}: {e}", flush=True)
             self._ripasso_da_ascoltare()
+        self._regole_e_guardiano()
 
     def _podcast_ripresa(self):
         """Il podcast ferma vLLM a macchina libera (#387, studio/podcast_motore.py): chi aspetta il motore lo sa, alla
@@ -877,6 +878,12 @@ class Avvio:
                 print("[STUDIO] podcast a due voci: si prepara a macchina libera", flush=True)
         except Exception as e:  # noqa: BLE001 — resta il riassunto
             print(f"[STUDIO] podcast non preparato: {type(e).__name__}: {e}", flush=True)
+
+    def _regole_e_guardiano(self):
+        """Avvisi, cancelli, tool dei minori e guardiano (05/11, #394): non dipendono da Studio,
+        ripasso e speaker. *[storico: dal 31/10, `abc962e8`, stavano per sbaglio dopo i `return` di
+        `_ripasso_da_ascoltare`]*"""
+        cfg, s = self.cfg, self.s
         # Gli avvisi di pericolo (14/10 sera): l'audio nel cassetto del tutore, la trascrizione
         # di un avviso di prima ricostruita dalla stanza o dalla conversazione del minore, e
         # `calliope conserva --svuota` che li toglie
