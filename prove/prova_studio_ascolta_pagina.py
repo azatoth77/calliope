@@ -22,6 +22,7 @@ Con CALLIOPE_FOTO=<cartella> gli screenshot. ~25 s.
     python prove/prova_studio_ascolta_pagina.py
 """
 
+import hashlib
 import json
 import math
 import shutil
@@ -206,6 +207,17 @@ def scenario_podcast(t, st, vid):
     from calliope.studio import podcast as PO
     from calliope.studio import ascolta as A
     st.cfg.studio_podcast = "attiva"
+    # Le voci finte: la firma le comprende (05/11, revisione della PR #398)
+    voci = Path(st.cfg.memory_db).parent / "voci-finte"
+    voci.mkdir(parents=True, exist_ok=True)
+    finte = set()
+    for chiave in ("studio_podcast_voce_a", "studio_podcast_voce_b"):
+        (voci / f"{chiave}.onnx").write_bytes(chiave.encode())
+        (voci / f"{chiave}.onnx.json").write_text("{}", encoding="utf-8")
+        setattr(st.cfg, chiave, str(voci / f"{chiave}.onnx"))
+        finte.add(hashlib.sha256(chiave.encode()).hexdigest())
+    st.cfg.piper_voice = st.cfg.studio_podcast_voce_a
+    PO.hash_ammessi = lambda chiave: finte
     firma = st._firma_podcast(vid)
     c = PO.cartella_podcast(st.cfg, vid)
     c.mkdir(parents=True, exist_ok=True)

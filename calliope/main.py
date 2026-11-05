@@ -872,7 +872,7 @@ class Avvio:
             from .studio import podcast_audio as _podcast_audio
             prep = s.studio.podcast_preparatore = _podcast_audio.prepara(
                 s.studio, getattr(s, "podcast_ripresa", None), getattr(s, "lavori", None), speaker,
-                log=lambda m: print(m, flush=True))
+                log=lambda m: print(m, flush=True), impronta=s.registry.embed)
             if prep is not None:
                 atexit.register(prep.close)
                 print("[STUDIO] podcast a due voci: si prepara a macchina libera", flush=True)

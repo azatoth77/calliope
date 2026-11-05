@@ -33,8 +33,10 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import shutil
+import threading
 import unicodedata
 from pathlib import Path
 
@@ -47,6 +49,11 @@ from . import riassunto_controllo as C
 SPENTA, ATTIVA = "spenta", "attiva"
 MODI = (SPENTA, ATTIVA)
 CARTELLA_PODCAST = "podcast"       # i file finiti: podcast/<verifica>/<firma>-<parte>.wav
+CARTELLA_RIFERIMENTI = "podcast_riferimenti"
+CHIAVI_VOCI = ("studio_podcast_voce_a", "studio_podcast_voce_b")
+CHIAVE_VOCE_CALLIOPE = "piper_voice"
+VOCI_DEL_PODCAST = ("voce_paola", "voce_serena_alta")    # id del catalogo: 05/11, l'ascolto di Dario
+_LOCK_IMPRONTE = threading.Lock()
 CARTELLA_LAVORO = "podcast_lavoro"  # la sola cartella scrivibile del container: si svuota a ogni sessione
 
 # La versione entra nella firma: un prompt, un elenco o un taglio nuovi rifanno i copioni
@@ -121,9 +128,10 @@ def modo(cfg) -> str:
     return m if m in MODI else SPENTA
 
 
-def firma(argomenti: list[dict], pagine: list[dict], numeri=()) -> str:
-    """La firma del riassunto (il testo di ogni pagina), con i numeri degli argomenti, che il podcast dice."""
-    righe = [VERSIONE, R.firma(argomenti, pagine), sorted((int(i), int(n)) for i, n in numeri)]
+def firma(argomenti: list[dict], pagine: list[dict], numeri=(), voci=()) -> str:
+    """La firma del riassunto (il testo di ogni pagina), con i numeri degli argomenti, che il podcast dice, e le impronte
+    delle due voci: con un'altra voce un podcast pronto scade e i suoi pezzi non si mescolano ai nuovi."""
+    righe = [VERSIONE, R.firma(argomenti, pagine), sorted((int(i), int(n)) for i, n in numeri), list(voci)]
     return hashlib.sha256(("podcast:" + json.dumps(righe)).encode()).hexdigest()[:16]
 
 
@@ -505,6 +513,116 @@ def togli_lavoro(base) -> None:
         shutil.rmtree(d, ignore_errors=True)
 
 
+# ─────────────────────────── le voci ───────────────────────────
+class VoceNonUsabile(Exception):
+    """Una delle voci non c'è o non vale: il podcast non parte e non ne cerca un'altra. `motivo` è l'esito del giro."""
+
+    def __init__(self, motivo: str, nome: str, messaggio: str):
+        super().__init__(messaggio)
+        self.motivo, self.nome = motivo, nome
+
+
+def percorso_voce(cfg, chiave: str) -> str:
+    """La voce di Piper di una chiave della configurazione: mai una persona reale (`studio_podcast_voce_a`, `_b`)."""
+    p = str(getattr(cfg, chiave, "") or "")
+    if p and not os.path.isabs(p):
+        p = os.path.join(str(getattr(cfg, "config_dir", "") or os.getcwd()), p)
+    return p
+
+
+def hash_ammessi(chiave: str) -> set[str]:
+    """L'elenco è per contenuto: un elenco di nomi lasciava passare `giorgio.onnx`, una copia rinominata, un'altra qualità.
+    Si accettano solo i modelli del catalogo, col loro SHA-256: paola e serena-high per le due voci, scelte all'ascolto;
+    per la voce di Calliope, che dice l'avviso e i pezzi a una voce, tutte le voci ufficiali. Una voce nuova va aggiunta qui."""
+    from ..installa.catalogo import VOCI as CATALOGO
+    return {v[3][1] for v in CATALOGO if chiave == CHIAVE_VOCE_CALLIOPE or v[0] in VOCI_DEL_PODCAST}
+
+
+def _come_installarla(nome: str) -> str:
+    from ..installa.catalogo import VOCI as CATALOGO
+    for v in CATALOGO:
+        if nome == f"it_IT-{v[1]}-{v[2]}":
+            return f" (`calliope stato --installa {v[0]}`)"
+    return ""
+
+
+def _file_impronte(cfg) -> Path | None:
+    from . import dati as D
+    base = D.cartella_di(cfg)
+    return base / CARTELLA_RIFERIMENTI / "impronte.json" if base is not None else None
+
+
+def leggi_impronte(cfg) -> dict:
+    """{percorso: {sha, dim, ora, riferimento}}: niente di personale, le voci di questa macchina."""
+    f = _file_impronte(cfg)
+    try:
+        d = json.loads(f.read_text(encoding="utf-8")) if f is not None else {}
+    except (OSError, ValueError):
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
+def scrivi_impronte(cfg, d: dict) -> None:
+    f = _file_impronte(cfg)
+    if f is None:
+        return
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        t = f.with_name(f"{f.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+        t.write_text(json.dumps(d), encoding="utf-8")
+        os.replace(t, f)
+    except OSError:      # in sola lettura si ricalcola: costa un hash
+        pass
+
+
+def impronta_voce(cfg, percorso: str) -> str | None:
+    """Lo SHA-256 del modello, ricalcolato solo se cambiano dimensione o data. Una voce tolta tiene l'ultima impronta vista,
+    così la firma non cambia e un podcast già pronto non si butta. None: mai vista."""
+    with _LOCK_IMPRONTE:
+        d = leggi_impronte(cfg)
+        x = d.get(percorso) or {}
+        try:
+            st = os.stat(percorso)
+        except OSError:
+            return x.get("sha")
+        if x.get("sha") and x.get("dim") == st.st_size and x.get("ora") == st.st_mtime_ns:
+            return x["sha"]
+        h = hashlib.sha256()
+        try:
+            with open(percorso, "rb") as fh:
+                for pezzo in iter(lambda: fh.read(1 << 20), b""):
+                    h.update(pezzo)
+        except OSError:
+            return x.get("sha")
+        d[percorso] = {**x, "sha": h.hexdigest(), "dim": st.st_size, "ora": st.st_mtime_ns}
+        scrivi_impronte(cfg, d)
+        return d[percorso]["sha"]
+
+
+def riferimento_fatto(cfg, percorso: str, sha: str) -> None:
+    """Il riferimento su disco viene da questa voce."""
+    with _LOCK_IMPRONTE:
+        d = leggi_impronte(cfg)
+        d[percorso] = {**(d.get(percorso) or {}), "riferimento": sha}
+        scrivi_impronte(cfg, d)
+
+
+def controlla_voce(cfg, chiave: str) -> str:
+    """Il percorso della voce, o `VoceNonUsabile`. Anche con il riferimento già su disco: una voce tolta si dice, sempre."""
+    percorso = percorso_voce(cfg, chiave)
+    nome = Path(percorso).stem
+    if not (os.path.isfile(percorso) and os.path.isfile(percorso + ".json")):
+        raise VoceNonUsabile("voce_mancante", nome, f"manca la voce {nome}{_come_installarla(nome)}: il podcast non parte")
+    if impronta_voce(cfg, percorso) not in hash_ammessi(chiave):
+        raise VoceNonUsabile("voce_non_ammessa", nome, f"la voce {nome} (`{chiave}`) non è fra quelle ammesse: il podcast non parte")
+    return percorso
+
+
+def controlla_voci(cfg) -> None:
+    for chiave in (*CHIAVI_VOCI, CHIAVE_VOCE_CALLIOPE):
+        controlla_voce(cfg, chiave)
+
+
 # ─────────────────────────── i metodi di Studio ───────────────────────────
 class Podcast:
     """Il podcast a due voci (mixin di `servizio.Studio`). L'audio lo prepara `podcast_audio.Preparatore`."""
@@ -519,9 +637,19 @@ class Podcast:
         return self.misure.setdefault("podcast", {
             "pronti": 0, "scarsi": 0, "corti": 0, "lunghi": 0, "scaduti": 0, "detti": 0})
 
+    def _impronte_voci(self) -> list[str | None]:
+        return [impronta_voce(self.cfg, percorso_voce(self.cfg, k)) for k in CHIAVI_VOCI]
+
+    def _voci_ok(self) -> bool:
+        try:
+            controlla_voci(self.cfg)
+        except VoceNonUsabile:
+            return False
+        return True
+
     def _firma_podcast(self, vid) -> str:
         return firma(self._argomenti_per_carte(vid), self._pagine_di(vid),
-                     [(a["id"], a["numero"]) for a in self._argomenti_numerati(vid)])
+                     [(a["id"], a["numero"]) for a in self._argomenti_numerati(vid)], self._impronte_voci())
 
     def _riga_podcast(self, vid) -> dict | None:
         return self.dati.uno("SELECT * FROM studio_podcast WHERE verifica = ?", (int(vid),))
@@ -531,6 +659,8 @@ class Podcast:
         dall'ultimo copione. Vuoto da spenta, col ripasso spento, in sola lettura, con lo Studio non «attivo»."""
         if (self.podcast_modo() != ATTIVA or not self.per_modello() or not self.ascolto_acceso()
                 or not self.dati.scrivibile):
+            return []
+        if not self._voci_ok():      # un copione che nessuno può dire: il modello non si scomoda
             return []
         out = []
         for v in self.dati.tutti("SELECT * FROM studio_verifiche WHERE stato = 'aperta' AND "
@@ -622,6 +752,8 @@ class Podcast:
         r = self._riga_podcast(v["id"])
         if r is None:
             return None, None
+        if None in self._impronte_voci():    # una voce mai vista qui: non si può dire che il podcast sia scaduto, né buono
+            return None, None
         base, _e = G.firma_e_errori(r.get("firma"))
         if base != self._firma_podcast(v["id"]):
             self._scarta_podcast(v["id"])
@@ -649,6 +781,8 @@ class Podcast:
         if (self.podcast_preparatore is None or not self.per_modello() or v.get("stato") != "aperta"
                 or str(v.get("data")) < self._oggi().isoformat()):
             return None
+        if not self._voci_ok():      # non si prepara, e va detto: né «da solo» né silenzio
+            return "Il podcast a due voci adesso non si può preparare: non ha le sue voci" + (". Intanto c'è il riassunto." if c_e else ".")
         return ("Il podcast a due voci si prepara da solo, quando la macchina è libera"
                 + (": intanto c'è il riassunto." if c_e else "."))
 

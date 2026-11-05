@@ -23,6 +23,7 @@ finto, un Docker finto, un Whisper finto, un modello finto; persone e pagine di 
 """
 
 import datetime
+import hashlib
 import io
 import json
 import shutil
@@ -32,6 +33,8 @@ import threading
 import types
 import wave
 from pathlib import Path
+
+import numpy as np
 
 QUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(QUI.parent))
@@ -425,8 +428,28 @@ verifica("un audio vuoto non torna", not PA.confronta(B1, "")["ok"])
 print("— il lettore")
 
 
+def _voce_finta(nome):
+    return f"voce finta {nome}".encode()
+
+
+def _sha_finta(nome):
+    return hashlib.sha256(_voce_finta(nome)).hexdigest()
+
+
+_HASH_VERI = P.hash_ammessi
+_FINTE = {_sha_finta(n) for n in ("it_IT-paola-medium", "it_IT-serena-high", "it_IT-serena-altra")}
+P.hash_ammessi = lambda chiave: _FINTE       # i file finti al posto dei modelli veri; quelli veri si guardano qui sotto
+
+
 def cfg_nuova(nome, modo="attiva"):
     c = Config()
+    voci = TMP / (nome + "-voci")
+    voci.mkdir(parents=True, exist_ok=True)
+    for v in ("it_IT-paola-medium", "it_IT-serena-high"):
+        (voci / f"{v}.onnx").write_bytes(_voce_finta(v))
+        (voci / f"{v}.onnx.json").write_text("{}", encoding="utf-8")
+    c.studio_podcast_voce_a, c.studio_podcast_voce_b = str(voci / "it_IT-paola-medium.onnx"), str(voci / "it_IT-serena-high.onnx")
+    c.piper_voice = str(voci / "it_IT-serena-high.onnx")
     c.memory_db = str(TMP / nome)
     c.studio_modo = "attivo"
     c.studio_cartella = str(TMP / (nome + "-studio"))
@@ -1122,84 +1145,146 @@ m = Mondo("riferimenti")
 m.prep.crea_motore = lambda cede: (_ for _ in ()).throw(OSError("voce"))
 verifica("nemmeno i riferimenti: vLLM non si tocca", m.prep.passo() == "motore_OSError" and not m.d.azioni())
 
-print("— le due voci: paola e serena, senza ripieghi (05/11, l'ascolto di Dario)")
+print("— le due voci: paola e serena, per contenuto e senza ripieghi (05/11, l'ascolto di Dario)")
 _cf = Config()
 verifica("di serie paola e serena-high", _cf.studio_podcast_voce_a.endswith("it_IT-paola-medium.onnx")
          and _cf.studio_podcast_voce_b.endswith("it_IT-serena-high.onnx"))
 verifica("il banco di serie con serena", "giorgio" not in (QUI.parent / "prove/manuali/banco_podcast.py").read_text(encoding="utf-8"))
 verifica("il file d'esempio con serena", "studio_podcast_voce_b: voices/it_IT-serena-high.onnx"
          in (QUI.parent / "calliope.yaml").read_text(encoding="utf-8"))
-verifica("l'attribuzione di serena", "committa" in (QUI.parent / "TERZE-PARTI.md").read_text(encoding="utf-8"))
+_terze = (QUI.parent / "TERZE-PARTI.md").read_text(encoding="utf-8")
+verifica("l'attribuzione di serena, col modello che si usa", "committa" in _terze and "serena/high" in _terze
+         and "committa/it_IT-serena-medium" not in _terze)
+_SERENA_ALTA, _PAOLA = "7462fbdf03727fb4c0c161286ad538fe6436b7e4b1c3059ef52930032475955f", "6fc918b5a0ea6137382833dddfa567bffbe6a5060c02043c87192ee59c04210c"
+_GIORGIO = "6bfc837a53dd420a7d10e6d237eee2d7d276ee5cb3bf521bfa2b2446d0ff1dc9"
+verifica("gli hash veri del catalogo: le due voci, e giorgio no", _HASH_VERI("studio_podcast_voce_b") == {_SERENA_ALTA, _PAOLA}
+         and _GIORGIO not in _HASH_VERI("studio_podcast_voce_a"))
+verifica("…e nemmeno per la voce di Calliope", _GIORGIO not in _HASH_VERI("piper_voice") and _SERENA_ALTA in _HASH_VERI("piper_voice"))
 
 
 class _VocePiperFinta:
     fatte = 0
+    muta = False
 
     def __init__(self, voce, pronuncia=None):
         self.voce = voce
 
     def in_wav(self, testo):
         type(self).fatte += 1
-        return PA.in_wav_byte(b"\0\0" * 2205, 22050)
+        return PA.in_wav_byte((b"\0\0" if self.muta else (5000).to_bytes(2, "little")) * 44100, 22050)
 
 
-def _voci_su_disco(nome, *voci):
-    c = TMP / nome
-    c.mkdir(parents=True, exist_ok=True)
-    for v in voci:
-        (c / f"{v}.onnx").write_bytes(b"x")
-        (c / f"{v}.onnx.json").write_text("{}", encoding="utf-8")
-    return c
-
-
-def _mondo_voci(nome, *voci, voce_b="it_IT-serena-high.onnx"):
-    """Il motore vero con le voci su disco: solo i controlli sui riferimenti, MOSS non è sul disco e non serve arrivarci."""
+def _mondo_voci(nome):
     m = Mondo(nome)
-    c = _voci_su_disco(nome + "-voci", *voci)
-    cfg = m.st.cfg
-    cfg.studio_podcast_voce_a, cfg.studio_podcast_voce_b = str(c / "it_IT-paola-medium.onnx"), str(c / voce_b)
     m.chieste = []
-    m.prep.crea_motore = PA.crea_motore_moss(cfg, lambda p, m=m: m.chieste.append(Path(p).stem) or object())
-    return m, c
+    m.voce_per = lambda p, m=m: m.chieste.append(Path(p).stem) or object()
+    m.prep.crea_motore = PA.crea_motore_moss(m.st.cfg, m.voce_per)
+    return m, Path(m.st.cfg.studio_podcast_voce_a).parent
+
+
+def _esito_voce(cfg, chiave):
+    try:
+        P.controlla_voce(cfg, chiave)
+    except P.VoceNonUsabile as e:
+        return e.motivo
+    return "ok"
 
 
 _vero_vp = PA.S.VocePiper
 PA.S.VocePiper = _VocePiperFinta
 try:
     registro.clear()
-    m, c = _mondo_voci("senza-serena", "it_IT-paola-medium", "it_IT-giorgio-medium")
+    m, c = _mondo_voci("senza-serena")
+    (c / "it_IT-serena-high.onnx").unlink()
     verifica("manca serena: il podcast non parte e vLLM non si tocca", m.prep.passo() == "voce_mancante"
              and not m.d.azioni() and not m.r.segno.exists() and not m.r.in_ripresa(), str(m.d.azioni()))
-    verifica("…e non torna a giorgio, che pure è sul disco", "it_IT-giorgio-medium" not in m.chieste, str(m.chieste))
     verifica("…lo dice, con la voce e come installarla", any("manca la voce it_IT-serena-high" in r
              and "--installa voce_serena_alta" in r for r in registro), str(registro[-3:]))
     verifica("…e nei conti", m.prep.misure["voce_non_usabile"] == "it_IT-serena-high")
     verifica("…e si riprova fra un'ora, non a ogni giro", m.prep.passo() == "pausa" and not m.d.azioni())
+    verifica("…senza un copione nuovo per nessuno", m.st.verifiche_per_podcast() == [])
 
-    m, c = _mondo_voci("senza-paola", "it_IT-serena-high")
+    m, c = _mondo_voci("senza-paola")
+    (c / "it_IT-paola-medium.onnx").unlink()
     verifica("manca paola: lo stesso", m.prep.passo() == "voce_mancante" and not m.d.azioni() and not m.chieste)
-
-    m, c = _mondo_voci("serena-senza-json", "it_IT-paola-medium", "it_IT-serena-high")
+    m, c = _mondo_voci("serena-senza-json")
     (c / "it_IT-serena-high.onnx.json").unlink()
     verifica("il modello senza il suo .json: manca", m.prep.passo() == "voce_mancante" and not m.d.azioni())
+    m, c = _mondo_voci("mai-vista")
+    m.st.cfg.studio_podcast_voce_b = str(c / "mai-vista.onnx")
+    verifica("una voce mai vista: non si butta il copione di prima e non se ne scrive uno",
+             m.st._riga_podcast(m.vid) is not None and m.st.podcast_da_preparare() == [] and m.st.verifiche_per_podcast() == []
+             and m.st._riga_podcast(m.vid) is not None)
 
-    m, c = _mondo_voci("giorgio-a-mano", "it_IT-paola-medium", "it_IT-giorgio-medium", voce_b="it_IT-giorgio-medium.onnx")
-    verifica("giorgio messo a mano nel file locale: non vale", m.prep.passo() == "voce_non_ammessa"
-             and not m.d.azioni() and "it_IT-giorgio-medium" not in m.chieste, str(m.chieste))
+    print("— il controllo è per contenuto (revisione della PR #398, punto 3)")
+    m, c = _mondo_voci("per-contenuto")
+    cfg = m.st.cfg
+    vera = str(c / "it_IT-serena-high.onnx")
+    def _prova_nome(nome, contenuto, chiave="studio_podcast_voce_b"):
+        (c / nome).write_bytes(contenuto)
+        (c / (nome + ".json")).write_text("{}", encoding="utf-8")
+        setattr(cfg, chiave, str(c / nome))
+        return _esito_voce(cfg, chiave)
+    for nome in ("giorgio.onnx", "it_IT-giorgio-low.onnx", "it_IT-serena-high-copia.onnx", "it_IT-serena-high.onnx"):
+        verifica(f"il contenuto di giorgio, con un altro nome ({nome})", _prova_nome(nome, _voce_finta("it_IT-giorgio-medium")) == "voce_non_ammessa")
+    verifica("un'altra voce mai scelta (leonardo): nemmeno", _prova_nome("x.onnx", _voce_finta("it_IT-leonardo-medium")) == "voce_non_ammessa")
+    verifica("contrario: serena con un altro nome passa", _prova_nome("rinominata.onnx", _voce_finta("it_IT-serena-high")) == "ok")
+    verifica("giorgio come voce di Calliope nel podcast: non vale", _prova_nome("c.onnx", _voce_finta("it_IT-giorgio-medium"), "piper_voice") == "voce_non_ammessa")
+    try:
+        PA.crea_motore_moss(cfg, m.voce_per)(lambda: None)
+        _no = False
+    except P.VoceNonUsabile as e:
+        _no = e.motivo == "voce_non_ammessa"
+    verifica("…il motore non si crea, e Piper non la carica mai", _no and "c" not in m.chieste, str(m.chieste))
+    m2, c2 = _mondo_voci("hash-una-volta")
+    _aperti = []
+    _open_vero = open
+    def _open_conta(p, *a, **k):
+        if str(p).endswith(".onnx"):
+            _aperti.append(p)
+        return _open_vero(p, *a, **k)
+    P.open = _open_conta
+    for _ in range(3):
+        P.impronta_voce(m2.st.cfg, m2.st.cfg.studio_podcast_voce_a)
+    del P.open
+    verifica("l'hash non si rifà a ogni domanda", not _aperti, str(_aperti))
 
+    print("— il riferimento si rifà quando non vale (punto 4)")
     _VocePiperFinta.fatte = 0
-    m, c = _mondo_voci("voci-ci-sono", "it_IT-paola-medium", "it_IT-serena-high")
-    mot = PA.crea_motore_moss(m.st.cfg, lambda p, m=m: m.chieste.append(Path(p).stem) or object())(lambda: None)
+    m, c = _mondo_voci("riferimenti-giusti")
+    crea = PA.crea_motore_moss(m.st.cfg, m.voce_per)
+    mot = crea(lambda: None)
     verifica("con le due voci: i due riferimenti giusti", mot.rif_a.name == "it_IT-paola-medium.wav"
              and mot.rif_b.name == "it_IT-serena-high.wav" and m.chieste == ["it_IT-paola-medium", "it_IT-serena-high"], str(m.chieste))
     verifica("il riferimento è la frase fissa, generata una volta", _VocePiperFinta.fatte == 2)
-    PA.crea_motore_moss(m.st.cfg, lambda p, m=m: m.chieste.append(Path(p).stem) or object())(lambda: None)
+    crea(lambda: None)
     verifica("…e alla sessione dopo non si rigenera", _VocePiperFinta.fatte == 2)
+    mot.rif_b.write_bytes(b"")
+    crea(lambda: None)
+    verifica("un WAV vuoto si rifà", _VocePiperFinta.fatte == 3 and PA._riferimento_buono(mot.rif_b.read_bytes()))
+    mot.rif_b.write_bytes(PA.in_wav_byte(b"\0\0" * 44100, 22050))
+    crea(lambda: None)
+    verifica("un WAV muto si rifà", _VocePiperFinta.fatte == 4)
+    (c / "it_IT-serena-high.onnx").write_bytes(_voce_finta("it_IT-serena-altra"))
+    crea(lambda: None)
+    verifica("un modello cambiato rifà il suo riferimento, non l'altro", _VocePiperFinta.fatte == 5)
+    (c / "it_IT-serena-high.onnx").write_bytes(_voce_finta("it_IT-serena-high"))
+    crea(lambda: None)
+    _VocePiperFinta.muta = True
+    mot.rif_b.write_bytes(b"")
+    try:
+        crea(lambda: None)
+        _no = False
+    except PM.Guasto:
+        _no = True
+    _VocePiperFinta.muta = False
+    verifica("Piper che dà silenzio: guasto, prima di fermare vLLM", _no)
     (c / "it_IT-serena-high.onnx").unlink()
     verifica("voce tolta col riferimento rimasto: si dice lo stesso", m.prep.passo() == "voce_mancante" and not m.d.azioni())
 
     registro.clear()
-    m, c = _mondo_voci("avvio-senza-voce", "it_IT-paola-medium")
+    m, c = _mondo_voci("avvio-senza-voce")
+    (c / "it_IT-serena-high.onnx").unlink()
     m.st.cfg.stt_url = "http://127.0.0.1:1/v1"
     m.st.lettore = types.SimpleNamespace(guardia=None, occupato=lambda: False)
     pp = PA.prepara(m.st, m.r, None, types.SimpleNamespace(voce_per=lambda p: object()), log=registro.append, avvia=False)
@@ -1207,6 +1292,170 @@ try:
              and not any("paola" in r for r in registro), str(registro))
 finally:
     PA.S.VocePiper = _vero_vp
+
+print("— la firma comprende le voci (punto 1)")
+verifica("voci diverse, firma diversa", P.firma([], [], (), ["a", "b"]) != P.firma([], [], (), ["a", "c"]))
+verifica("le due voci scambiate: firma diversa", P.firma([], [], (), ["a", "b"]) != P.firma([], [], (), ["b", "a"]))
+m = Mondo("firma-voci")
+c = Path(m.st.cfg.studio_podcast_voce_a).parent
+m.prep.passo()
+vv_f = m.st.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (m.vid,))
+verifica("c'è un podcast pronto", m.st.podcast_pronto(vv_f))
+f0 = m.st._firma_podcast(m.vid)
+verifica("con le voci di adesso resta", m.st.podcast_ancora(m.vid, f0))
+(c / "it_IT-serena-high.onnx").unlink()
+verifica("voce tolta: la firma non cambia e il podcast pronto resta", m.st._firma_podcast(m.vid) == f0 and m.st.podcast_pronto(vv_f))
+(c / "it_IT-serena-high.onnx").write_bytes(_voce_finta("it_IT-serena-altra"))
+verifica("voce cambiata: la firma cambia", m.st._firma_podcast(m.vid) != f0)
+verifica("…una sessione in corso si ferma", not m.st.podcast_ancora(m.vid, f0))
+verifica("…il podcast pronto non c'è più", not m.st.podcast_pronto(vv_f) and m.st._riga_podcast(m.vid) is None)
+verifica("…e nemmeno i suoi file: niente pezzi vecchi coi nuovi", not list(P.cartella_podcast(m.st.cfg, m.vid).glob("*"))
+         if P.cartella_podcast(m.st.cfg, m.vid).exists() else True)
+verifica("…il copione si rifà, una volta sola", [d["id"] for d in m.st.verifiche_per_podcast()] == [m.vid])
+
+print("— lo schermo dice la verità sulle voci (punto 2)")
+m = Mondo("nota-voci")
+c = Path(m.st.cfg.studio_podcast_voce_a).parent
+vv_n = m.st.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (m.vid,))
+m.st.dati.scrivi("DELETE FROM studio_podcast WHERE verifica = ?", (m.vid,))
+verifica("con le voci: si prepara da solo", "si prepara da solo" in (m.st.podcast_nota(vv_n) or ""), str(m.st.podcast_nota(vv_n)))
+(c / "it_IT-serena-high.onnx").unlink()
+_n = m.st.podcast_nota(vv_n) or ""
+verifica("senza una voce non lo promette, e lo dice", "si prepara" not in _n and "non si può preparare" in _n, _n)
+verifica("…senza nomi di file sullo schermo", "serena" not in _n.lower() and ".onnx" not in _n, _n)
+verifica("…e senza promettere un riassunto che non c'è", "riassunto" not in _n, _n)
+(c / "it_IT-serena-high.onnx").write_bytes(_voce_finta("it_IT-giorgio-medium"))
+_n = m.st.podcast_nota(vv_n) or ""
+verifica("con una voce non ammessa: lo stesso", "non si può preparare" in _n, _n)
+m.prep = None
+m.st.podcast_preparatore = None
+verifica("contrario: se nessuno lo prepara non si dice niente", m.st.podcast_nota(vv_n) is None)
+
+print("— gli scambi di voce, in ombra (punto 6)")
+_b = [{"voce": "A", "detto": "il cloro forma lo ione quando acquista un elettrone", "tipo": "frase"},
+      {"voce": "B", "detto": "il sodio forma lo ione quando ne perde uno soltanto", "tipo": "frase"},
+      {"voce": "A", "detto": "il cloruro di sodio ha una formula semplice davvero", "tipo": "frase"}]
+_s = [{"start": 0.0, "end": 3.0, "text": _b[0]["detto"]}, {"start": 3.0, "end": 6.0, "text": _b[1]["detto"]},
+      {"start": 6.0, "end": 9.0, "text": _b[2]["detto"]}]
+_t, _mi = PA.tratti_di_una_voce(_b, _s)
+verifica("ogni tratto con la voce della sua battuta", [x["voce"] for x in _t] == ["A", "B", "A"] and _mi == 0, str(_t))
+_misto = [{"start": 0.0, "end": 6.0, "text": _b[0]["detto"] + " " + _b[1]["detto"]}, _s[2]]
+_t, _mi = PA.tratti_di_una_voce(_b, _misto)
+verifica("un tratto a cavallo di due voci non si giudica: cieco, e contato", [x["voce"] for x in _t] == ["A"] and _mi == 1, str(_t))
+_t, _mi = PA.tratti_di_una_voce(_b, [{"start": 0.0, "end": 0.5, "text": _b[0]["detto"]}, {"start": 1.0, "end": 3.0, "text": "il cloro"}])
+verifica("sotto un secondo o con poche parole: nemmeno", not _t and _mi == 2)
+_ra, _rb = np.array([1.0, 0.0]), np.array([0.0, 1.0])
+_wav9 = PA.in_wav_byte(b"\0\0" * (24000 * 9), 24000)
+_chiamate = []
+def _imp(voce_terzo, chiamate=_chiamate):
+    def f(y, r):
+        chiamate.append(len(y) / r)
+        return _rb if len(chiamate) % 3 in (2,) or (len(chiamate) % 3 == 0 and voce_terzo == "B") else _ra
+    return f
+_v = PA.misura_voci(_wav9, _b, _s, _imp("B"), _ra, _rb)
+verifica("il terzo tratto è detto dalla voce sbagliata: margine negativo, con i tempi", [(x["voce"], x["da"], x["a"], x["margine"]) for x in _v["sospetti"]]
+         == [("A", 6.0, 9.0, -1.0)] and _v["tratti"] == 3 and _v["margine_min"] == -1.0, str(_v))
+verifica("il tratto intero, mai finestre", _chiamate == [3.0, 3.0, 3.0], str(_chiamate))
+verifica("solo conti: nessuna parola nella misura", "cloro" not in json.dumps(_v) and "sodio" not in json.dumps(_v))
+_chiamate.clear()
+_v = PA.misura_voci(_wav9, _b, _s, _imp("A"), _ra, _rb)
+verifica("contrario: le voci giuste, nessun sospetto", not _v["sospetti"] and _v["margine_min"] == 1.0, str(_v))
+verifica("la soglia è il margine zero", PA.SCAMBIO_MARGINE == 0.0)
+
+
+def _mondo_scambi(nome, impronta):
+    m = Mondo(nome)
+    c = Path(m.st.cfg.studio_podcast_voce_a).parent
+    (c / "rif-a.wav").write_bytes(PA.in_wav_byte(b"\0\0" * 16000, 16000))
+    (c / "rif-b.wav").write_bytes(PA.in_wav_byte(b"\0\0" * 16000, 16000))
+    crea0 = m.crea
+    def crea(cede, m=m):
+        x = crea0(cede)
+        x.rif_a, x.rif_b = c / "rif-a.wav", c / "rif-b.wav"
+        return x
+    m.prep.crea_motore = crea
+    whisper0 = m.whisper
+    def whisper(wav, m=m):
+        t = PA.Trascritto(whisper0(wav))
+        if wav in m.detti:
+            parole = str(t).split()
+            pezzi_ = [" ".join(parole[i:i + 6]) for i in range(0, len(parole), 6)]
+            t.segmenti = tuple({"start": float(i), "end": i + 1.5, "text": x} for i, x in enumerate(pezzi_))
+        return t
+    m.prep.ritrascrivi = whisper
+    m.prep.impronta = impronta
+    return m
+
+
+registro.clear()
+_rif = iter([_ra, _rb])
+_quante = [0]
+def _imp_tutto_b(y, r):
+    _quante[0] += 1
+    return next(_rif, _rb)
+m = _mondo_scambi("scambi", _imp_tutto_b)
+verifica("il giro finisce come prima", m.prep.passo() == "finito")
+_st = json.loads(next(P.cartella_podcast(m.st.cfg, m.vid).glob("*-stato.json"), Path(TMP / "x")).read_text(encoding="utf-8")) if list(P.cartella_podcast(m.st.cfg, m.vid).glob("*-stato.json")) else {"pezzi": {}}
+_vv = [x.get("voci") for x in _st["pezzi"].values()]
+verifica("la misura è nel pezzo", _vv and all(v and "tratti" in v and "ms" in v for v in _vv), str(_vv)[:200])
+verifica("i sospetti nel registro, senza parole", any("forse scambiata" in r for r in registro), str(registro[-4:]))
+verifica("e nelle misure", m.prep.misure["voci"]["sospetti"] > 0 and m.prep.misure["voci"]["tratti"] > 0, str(m.prep.misure["voci"]))
+verifica("in ombra: nessun pezzo rigenerato né scartato", m.prep.misure["rigenerati"] == 0 and m.prep.misure["a_una_voce"] == 0
+         and all(x["stato"] == "ok" and x["tentativi"] == 1 for x in _st["pezzi"].values()), str(m.prep.misure))
+_a = m.st.podcast_stato(m.vid)["audio"]
+verifica("e nei conti del podcast, che resta pronto", _a["esito"] == "pronto" and _a["conti"]["voci"]["sospetti"] > 0, str(_a["conti"].get("voci")))
+_rif_chiamate = _quante[0]
+verifica("i riferimenti una volta sola nella sessione", _rif_chiamate == m.prep.misure["voci"]["tratti"] + 2, f"{_rif_chiamate} {m.prep.misure['voci']}")
+
+registro.clear()
+def _imp_rotta(y, r):
+    raise RuntimeError("impronta")
+m = _mondo_scambi("scambi-rotti", _imp_rotta)
+verifica("una misura che si rompe non ferma il pezzo", m.prep.passo() == "finito" and m.prep.misure["a_una_voce"] == 0
+         and any("misura delle voci non riuscita" in r for r in registro), str(registro[-3:]))
+m = _mondo_scambi("scambi-senza-modello", None)
+verifica("senza il modello niente misura, e il giro è lo stesso", m.prep.passo() == "finito" and m.prep.misure["voci"]["tratti"] == 0)
+m = Mondo("scambi-senza-tempi")
+m.prep.impronta = lambda y, r: _ra
+verifica("Whisper senza i tempi: niente misura", m.prep.passo() == "finito" and m.prep.misure["voci"]["tratti"] == 0)
+verifica("usa il modello già caricato", "impronta=s.registry.embed" in (QUI.parent / "calliope/main.py").read_text(encoding="utf-8")
+         and "SpeakerEmbedder" not in (QUI.parent / "calliope/studio/podcast_audio.py").read_text(encoding="utf-8"))
+
+
+class _RispostaW:
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {"text": " una frase", "segments": [{"start": 0.0, "end": 1.0, "text": " una frase"}]}
+
+
+class _ClientW:
+    chiesto = {}
+
+    def __init__(self, **k):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def post(self, url, files=None, data=None):
+        type(self).chiesto = data
+        return _RispostaW()
+
+
+import httpx  # noqa: E402
+_cl = httpx.Client
+httpx.Client = _ClientW
+try:
+    _tr = PA.ritrascrivi_http("http://127.0.0.1:1/v1", "m")(PA.in_wav_byte(b"\0\0" * 1600, 16000))
+finally:
+    httpx.Client = _cl
+verifica("Whisper con i tempi nella stessa passata", _ClientW.chiesto["response_format"] == "verbose_json" and _tr == " una frase"
+         and isinstance(_tr, str) and _tr.segmenti[0]["end"] == 1.0)
 m = Mondo("memoria-giri")
 def _fm(wav, m=m):
     m.mem = 3000 if wav in m.detti else m.mem

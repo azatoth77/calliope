@@ -279,7 +279,29 @@ L'altezza non le separa, il timbro sì, e MOSS non le avvicina nel corso del pez
 **Lo scambio di voce di chimica-01 è vero, e il controllo non lo vede.** A 27,2–29,5 s la battuta è `[S1]` nel testo dato a MOSS («Il cloruro
 di sodio…», voce A), ma il tratto vale 0,77 con Serena e 0,15 con paola, e le finestre di 1,5 s dicono Serena senza stacchi da 22 a 32 s, attraverso
 le battute B, A, B: le parole sono tutte giuste, detta dalla voce sbagliata. `confronta` guarda solo il testo. È 1 tratto su 66 (i 20 misti non si
-giudicano; con giorgio 0 su 59, sugli stessi copioni): non è un blocco, resta un difetto noto. Un controllo con l'impronta si potrebbe aggiungere, non è fatto.
+giudicano; con giorgio 0 su 59, sugli stessi copioni): non è un blocco, resta un difetto noto. *[storico, fino alla voce qui sotto: «Un controllo con l'impronta si potrebbe aggiungere, non è fatto.»]*
+
+### La revisione della PR #398 e gli scambi in ombra (05/11)
+
+- **La firma comprende le voci.** Sono gli SHA-256 dei due modelli: con un'altra voce il podcast pronto scade, il copione si rifà e i pezzi vecchi non si
+  mescolano ai nuovi. Una voce **tolta** tiene l'ultima impronta vista (`podcast_riferimenti/impronte.json`): il podcast già fatto resta, e il giro dice `voce_mancante`. La voce
+  di Calliope (`piper_voice`) non è nella firma: dice l'avviso e i pezzi a una voce, composti tutti insieme alla fine, e cambiarla non deve far riscrivere ogni copione.
+- **Lo schermo.** Senza una voce usabile `podcast_nota` dice «adesso non si può preparare», non «si prepara da solo». E il modello non scrive copioni che nessuno può dire.
+- **Le voci per contenuto.** L'elenco dei nomi lasciava passare `giorgio.onnx`, un'altra qualità e le copie. Ora `hash_ammessi` accetta gli SHA-256 del catalogo: `voce_paola` e `voce_serena_alta` per le
+  due voci, tutte le voci ufficiali per `piper_voice` (nel podcast, non altrove). Un elenco di hash *da escludere* non reggeva: bastava un'altra esportazione. Il prezzo: una voce nuova, anche sul banco, va messa nell'elenco;
+  l'hash si ricalcola solo se cambiano dimensione o data del file.
+- **Il riferimento si rifà** se il modello è cambiato, se il WAV è vuoto o muto o più corto di un secondo. Piper che dà silenzio è un guasto prima di fermare vLLM.
+- **È la stessa voce del banco?** Sì, senza MOSS: il riferimento del codice (`carica_voce` + `VocePiper`, CPU) contro quello del banco ha correlazione 0,00–0,04, ma due generazioni dello stesso codice fra loro
+  anche (0,01–0,03): Piper estrae il rumore a ogni sintesi (`noise_scale` 0,6), e la forma d'onda non dice niente. CAM++ dice 0,97–0,98, come due generazioni del codice (0,97), altezza 205–215 Hz contro 210, con paola 0,13–0,15. Sul banco
+  gli scambi non cambiano con l'uno o con l'altro riferimento. Non provato: MOSS con il riferimento rigenerato, e Piper sulla GPU.
+
+**Gli scambi di voce, solo misura.** `misura_voci`, sul pezzo tenuto: CAM++ su ogni tratto intero di Whisper, il margine è il coseno col riferimento atteso meno quello con l'altro, sotto zero è sospetto. Finisce in `x["voci"]`,
+nei `conti` del podcast e nel registro, solo tempi e numeri. **Non rigenera e non scarta**: un caso vero solo, e i falsi stimati dalla revisione fino a circa il 2,4 %. Mai finestre da 1,5 s: 3 falsi su 192.
+**I tratti misti restano ciechi**: 20 su 86, a cavallo di due battute o sotto un secondo o con poche parole; uno scambio lì dentro non si vede.
+
+Rimisura coi 6 pezzi di prima e il codice vero: 66 tratti, 20 misti, 1 sospetto, chimica-01 27,2–29,5 s, margine −0,62 (−0,64 col riferimento del codice), minimo dei buoni +0,23. **Il costo**: 54–57 ms a tratto, ricampionamento
+compreso, non i 33 attesi (che erano la sola impronta): 3,5–3,8 s sui 6 pezzi, contro un fermo di vLLM di 758 s (0,5 %). È il CAM++ già caricato per chi parla (`SpeakerRegistry.embed`), su CPU con i suoi 2 thread e il suo lock: nessun modello né memoria in più, e la
+voce è ferma per definizione. Whisper fa la stessa passata con `verbose_json`, solo con i tempi; un Whisper senza tempi lascia la misura vuota. Il pezzo aspetta la misura: spostarla dopo la ripartenza complicherebbe lo stato per risparmiare 0,5 %.
 
 ### La revisione indipendente della PR #393 (05/11)
 
