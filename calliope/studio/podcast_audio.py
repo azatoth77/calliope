@@ -33,6 +33,7 @@ from __future__ import annotations
 import difflib
 import io
 import json
+import difflib
 import os
 import re
 import threading
@@ -43,10 +44,15 @@ from pathlib import Path
 
 from . import ascolta as S
 from . import podcast as P
+from .podcast import VoceNonUsabile, controlla_voce
 from .podcast_motore import Ceduto, Guasto, MotoreMoss, TESTO_RIFERIMENTO, memoria_disponibile_mb
 
 # ─────────────────────────── soglie (dal banco: `docs/aree/studio.md`, 04/11) ───────────────────────
-VOCI_NON_AMMESSE = ("it_IT-giorgio-medium",)    # viene da una persona vera (MLS speaker 8181), licenza ambigua: 05/11, Dario
+# Gli scambi di voce, in ombra (05/11, `misura_voci`): il margine sul banco è −0,63 nel caso vero, almeno +0,21 nei tratti buoni
+SCAMBIO_MARGINE = 0.0
+TRATTO_PAROLE_MIN = 4         # un tratto di Whisper si giudica con almeno tante parole allineate al copione…
+TRATTO_QUOTA = 0.70           # …di una voce sola: gli altri sono misti, e restano ciechi
+TRATTO_MIN_S = 1.0            # le finestre da 1,5 s hanno dato 3 falsi su 192: mai pezzi di tratto
 RIGENERA_MAX = 2              # i tentativi in più su un pezzo che non torna
 SOGLIA_FRASE = 0.60           # delle parole piene di una battuta, ritrovate: dal banco del 05/11, le frasi giuste arrivano a 0,60–0,67 (formule, «lo ione»), i salti veri a 0
 SOGLIA_INVENTATO = 0.10       # delle parole sentite, in più rispetto al copione (MOSS sul banco: al più 4,5 %)
@@ -293,6 +299,59 @@ def ha_voce(wav_byte: bytes) -> bool:
     return bool(a) and max(abs(x) for x in a[:: max(1, len(a) // 20000)]) > 300
 
 
+# ─────────────────────────── chi ha detto la battuta ───────────────────────────
+def tratti_di_una_voce(battute: list[dict], segmenti) -> tuple[list[dict], int]:
+    """([{voce, da, a}], quanti non si giudicano). La voce di un tratto è quella delle battute a cui si allineano le sue parole.
+    **I tratti misti restano ciechi**: uno scambio dentro un tratto a cavallo di due battute non si vede."""
+    att, voce = [], []
+    for b in battute:
+        w = _parole(b["detto"])
+        att += w
+        voce += [b["voce"]] * len(w)
+    sent, di = [], []
+    for i, s in enumerate(segmenti):
+        w = _parole(str(s.get("text") or ""))
+        sent += w
+        di += [i] * len(w)
+    conti = [{"A": 0, "B": 0} for _ in segmenti]
+    for bl in difflib.SequenceMatcher(None, att, sent, autojunk=False).get_matching_blocks():
+        for k in range(bl.size):
+            conti[di[bl.b + k]][voce[bl.a + k]] += 1
+    out = []
+    for s, c in zip(segmenti, conti):
+        t = c["A"] + c["B"]
+        if t >= TRATTO_PAROLE_MIN and max(c.values()) / t >= TRATTO_QUOTA and float(s["end"]) - float(s["start"]) >= TRATTO_MIN_S:
+            out.append({"voce": "A" if c["A"] >= c["B"] else "B", "da": float(s["start"]), "a": float(s["end"])})
+    return out, len(segmenti) - len(out)
+
+
+def _a_16k(wav_byte: bytes):
+    import numpy as np
+    pcm, _r = pcm_e_rate(per_whisper(wav_byte))
+    return np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
+
+
+def _coseno(a, b) -> float:
+    import numpy as np
+    return float(np.dot(a, b) / max(1e-9, float(np.linalg.norm(a) * np.linalg.norm(b))))
+
+
+def misura_voci(wav_byte: bytes, battute: list[dict], segmenti, impronta, rif_a, rif_b) -> dict:
+    """Solo conti: {tratti, misti, sospetti: [{voce, da, a, margine}], margine_min}. Il margine è il coseno con il riferimento
+    della voce attesa meno quello con l'altra, sul tratto intero. Non scarta e non rigenera: sul banco un caso vero solo."""
+    x = _a_16k(wav_byte)
+    tratti, misti = tratti_di_una_voce(battute, segmenti)
+    sospetti, margini = [], []
+    for t in tratti:
+        e = impronta(x[int(t["da"] * WHISPER_RATE):int(t["a"] * WHISPER_RATE)], WHISPER_RATE)
+        propria, altra = (rif_a, rif_b) if t["voce"] == "A" else (rif_b, rif_a)
+        m = round(_coseno(e, propria) - _coseno(e, altra), 3)
+        margini.append(m)
+        if m < SCAMBIO_MARGINE:
+            sospetti.append({"voce": t["voce"], "da": round(t["da"], 1), "a": round(t["a"], 1), "margine": m})
+    return {"tratti": len(tratti), "misti": misti, "sospetti": sospetti, "margine_min": min(margini) if margini else None}
+
+
 # ─────────────────────────── i WAV ───────────────────────────
 def pcm_e_rate(wav_byte: bytes) -> tuple[bytes, int]:
     with wave.open(io.BytesIO(wav_byte), "rb") as w:
@@ -323,16 +382,51 @@ def per_whisper(wav_byte: bytes) -> bytes:
     return in_wav_byte(porta_a(pcm, r, WHISPER_RATE), WHISPER_RATE)
 
 
-def ritrascrivi_http(stt_url: str, modello: str, lingua: str = "it", timeout_s: float = 300.0):
-    """Il Whisper dei turni, senza prompt (non si allunga il suo prompt, e il prompt di Calliope qui non c'entra)."""
+class Trascritto(str):
+    """Il testo di Whisper, e i suoi tratti coi tempi: li usa solo `misura_voci`."""
+    segmenti: tuple = ()
+
+
+def _trascritto(j: dict) -> Trascritto:
+    """Il testo sono i tratti uniti, così come sono: su whisper.cpp il `text` di `verbose_json` è spezzato a token («dell'uran io»,
+    «Capito .») e diverso da `json`, e `confronta` scartava un pezzo buono. Le parole a cavallo di due tratti si riuniscono da sole."""
+    segmenti = tuple(j.get("segments") or ())
+    testo = "".join(str(s.get("text") or "") for s in segmenti) if segmenti else ""
+    t = Trascritto(testo if testo.strip() else str(j.get("text") or ""))
+    t.segmenti = segmenti
+    return t
+
+
+def ritrascrivi_http(stt_url: str, modello: str, lingua: str = "it", timeout_s: float = 300.0, log=print):
+    """Il Whisper dei turni, senza prompt (non si allunga il suo prompt, e il prompt di Calliope qui non c'entra). `verbose_json`
+    è la stessa trascrizione, coi tempi: nessuna passata in più. Un server che non conosce quel formato non è un Whisper giù: si
+    ricade su `json`, senza tratti, e manca solo la misura degli scambi."""
+    solo_json = []
+
     def chiedi(wav_byte: bytes) -> str:
         import httpx
+        corpo = per_whisper(wav_byte)
         with httpx.Client(timeout=timeout_s, trust_env=False) as c:
-            r = c.post(stt_url.rstrip("/") + "/audio/transcriptions",
-                       files={"file": ("pezzo.wav", per_whisper(wav_byte), "audio/wav")},
-                       data={"model": modello, "language": lingua, "temperature": "0", "response_format": "json"})
+            def manda(formato: str):
+                return c.post(stt_url.rstrip("/") + "/audio/transcriptions", files={"file": ("pezzo.wav", corpo, "audio/wav")},
+                              data={"model": modello, "language": lingua, "temperature": "0", "response_format": formato})
+            stato = None
+            if not solo_json:
+                r = manda("verbose_json")
+                stato = r.status_code
+                try:
+                    r.raise_for_status()
+                    j = r.json()
+                    if isinstance(j, dict) and ("text" in j or "segments" in j):
+                        return _trascritto(j)
+                except (httpx.HTTPStatusError, ValueError):
+                    pass
+            r = manda("json")     # se non risponde nemmeno così, è giù davvero: solleva
         r.raise_for_status()
-        return str(r.json().get("text") or "")
+        if not solo_json and (stato is None or stato < 500):
+            solo_json.append(True)
+            log("   [STUDIO] podcast: Whisper non dà i tempi (`verbose_json`): niente misura degli scambi di voce")
+        return Trascritto(str(r.json().get("text") or ""))
     return chiedi
 
 
@@ -357,7 +451,7 @@ class Preparatore:
 
     def __init__(self, studio, ripresa, crea_motore, ritrascrivi, voce_calliope, voce_ferma, lavori_vivi,
                  lettore_libero=None, vllm_libero=None, memoria=memoria_disponibile_mb, log=print,
-                 orologio=time.monotonic, dorme=time.sleep):
+                 orologio=time.monotonic, dorme=time.sleep, impronta=None):
         self.studio = studio
         self.cfg = studio.cfg
         self.ripresa = ripresa
@@ -372,8 +466,11 @@ class Preparatore:
         self.log = log
         self.orologio = orologio
         self.dorme = dorme
+        self.impronta = impronta                 # `SpeakerRegistry.embed`: il CAM++ già caricato, nessun modello in più
+        self._impronte_rif = {}
         self.misure = {"sessioni": 0, "cedute": {}, "pezzi": 0, "rigenerati": 0, "a_una_voce": 0, "pronti": 0,
-                       "scarsi": 0, "fermo_s": 0.0, "ultima": None}
+                       "scarsi": 0, "fermo_s": 0.0, "ultima": None,
+                       "voci": {"tratti": 0, "misti": 0, "sospetti": 0, "ms": 0}}
         self._riprova_dopo = 0.0
         self._chiuso = False
         self._sveglia = threading.Event()
@@ -663,6 +760,7 @@ class Preparatore:
                                                 "sentite", "copre")}
             x["confronto"]["motivi"] = sorted({mo for f in e["frasi"] for mo in f["motivi"]})
             if e["ok"]:
+                x["voci"] = self._misura_voci(motore, p, wav, testo)
                 os.replace(prova, file_ok)
                 x["stato"] = "ok"
                 break
@@ -673,6 +771,34 @@ class Preparatore:
         conti["pezzi_fatti"] += 1
         self.misure["pezzi"] += 1
         self._salva(c, firma, st)
+
+    def _misura_voci(self, motore, p: dict, wav: bytes, testo) -> dict | None:
+        """In ombra: MOSS ha scambiato le voci? Le parole giuste con la voce sbagliata `confronta` non le vede. Niente qui può
+        fermare il pezzo. Sul pezzo tenuto soltanto, col tempo misurato: vLLM è fermo."""
+        segmenti = getattr(testo, "segmenti", ())
+        a, b = getattr(motore, "rif_a", None), getattr(motore, "rif_b", None)
+        if self.impronta is None or not segmenti or a is None or b is None:
+            return None
+        t0 = time.perf_counter()
+        try:
+            chiavi = [(str(f), Path(f).stat().st_mtime_ns) for f in (a, b)]     # un riferimento rifatto si rilegge
+            for k in chiavi:
+                if k not in self._impronte_rif:
+                    self._impronte_rif[k] = self.impronta(_a_16k(Path(k[0]).read_bytes()), WHISPER_RATE)
+            v = misura_voci(wav, p["battute"], segmenti, self.impronta, self._impronte_rif[chiavi[0]], self._impronte_rif[chiavi[1]])
+        except Exception as e:  # noqa: BLE001 — è una misura
+            self.log(f"   [STUDIO] podcast: misura delle voci non riuscita ({type(e).__name__})")
+            return None
+        v["ms"] = round((time.perf_counter() - t0) * 1000)
+        m = self.misure["voci"]
+        m["tratti"] += v["tratti"]
+        m["misti"] += v["misti"]
+        m["sospetti"] += len(v["sospetti"])
+        m["ms"] += v["ms"]
+        for s in v["sospetti"]:
+            self.log(f"   [STUDIO] podcast: pezzo {p['n']}, voce {s['voce']} forse scambiata a {s['da']}–{s['a']} s "
+                     f"(margine {s['margine']:+.2f})")
+        return v
 
     # ── alla fine ──
     def _finisci(self, d: dict, c: Path, st: dict) -> None:
@@ -692,7 +818,11 @@ class Preparatore:
                                          if st["pezzi"][str(p["n"])]["stato"] == "ok")}
         conti["pezzi_esito"] = [{"n": p["n"], "stato": st["pezzi"][str(p["n"])]["stato"],
                                  "tentativi": st["pezzi"][str(p["n"])].get("tentativi"),
-                                 "motivi": (st["pezzi"][str(p["n"])].get("confronto") or {}).get("motivi")} for p in pezzi]
+                                 "motivi": (st["pezzi"][str(p["n"])].get("confronto") or {}).get("motivi"),
+                                 "voci": st["pezzi"][str(p["n"])].get("voci")} for p in pezzi]
+        voci = [x["voci"] for x in st["pezzi"].values() if x.get("voci")]
+        conti["voci"] = {"tratti": sum(v["tratti"] for v in voci), "misti": sum(v["misti"] for v in voci),
+                         "sospetti": sum(len(v["sospetti"]) for v in voci)} if voci else None
         conti["copre"] = _media([(x.get("confronto") or {}).get("copre") for x in st["pezzi"].values()
                                  if x.get("stato") == "ok"])
         if a_una / max(1, len(pezzi)) > UNA_VOCE_MAX:
@@ -764,53 +894,33 @@ def _media(xs: list) -> float | None:
 
 
 # ─────────────────────────── il montaggio ───────────────────────────
-def percorso_voce(cfg, chiave: str) -> str:
-    """La voce di Piper di una delle due voci del podcast: mai una persona reale (`studio_podcast_voce_a`, `_b`)."""
-    p = str(getattr(cfg, chiave, "") or "")
-    if p and not os.path.isabs(p):
-        p = os.path.join(str(getattr(cfg, "config_dir", "") or os.getcwd()), p)
-    return p
+def _riferimento_buono(dati: bytes) -> bool:
+    """Un WAV che si legge, di almeno un secondo, con la voce dentro."""
+    try:
+        pcm, r = pcm_e_rate(dati)
+    except (wave.Error, EOFError, OSError):
+        return False
+    return len(pcm) // 2 >= r and ha_voce(dati)
 
 
-class VoceNonUsabile(Exception):
-    """Una delle due voci non c'è o non vale: il podcast non parte e non ne cerca un'altra. `motivo` è l'esito del giro."""
-
-    def __init__(self, motivo: str, nome: str, messaggio: str):
-        super().__init__(messaggio)
-        self.motivo, self.nome = motivo, nome
-
-
-def _come_installarla(nome: str) -> str:
-    from ..installa.catalogo import VOCI
-    for v in VOCI:
-        if nome == f"it_IT-{v[1]}-{v[2]}":
-            return f" (`calliope stato --installa {v[0]}`)"
-    return ""
-
-
-def controlla_voce(cfg, chiave: str) -> str:
-    """Il percorso della voce, o `VoceNonUsabile`. Anche con il riferimento già su disco: una voce tolta si dice, sempre."""
-    percorso = percorso_voce(cfg, chiave)
-    nome = Path(percorso).stem
-    if nome in VOCI_NON_AMMESSE:
-        raise VoceNonUsabile("voce_non_ammessa", nome, f"la voce {nome} non si usa più (`{chiave}`)")
-    if not (os.path.isfile(percorso) and os.path.isfile(percorso + ".json")):
-        raise VoceNonUsabile("voce_mancante", nome, f"manca la voce {nome}{_come_installarla(nome)}: il podcast non parte")
-    return percorso
-
-
-def riferimento(cfg, voce_per, chiave: str, pronuncia=None) -> Path:
-    """Il WAV di riferimento di una voce, generato con Piper una volta (nessun dato di nessuno: la frase è fissa)."""
+def riferimento(cfg, carica_voce, chiave: str, pronuncia=None) -> Path:
+    """Il WAV di riferimento di una voce, generato con Piper (nessun dato di nessuno: la frase è fissa). Si rifà se il modello
+    è cambiato o il file non vale: un riferimento vecchio darebbe a MOSS la voce di prima."""
     from . import dati as D
     percorso = controlla_voce(cfg, chiave)
-    c = D.cartella_di(cfg) / "podcast_riferimenti"
+    sha = P.impronta_voce(cfg, percorso)
+    c = D.cartella_di(cfg) / P.CARTELLA_RIFERIMENTI
     c.mkdir(parents=True, exist_ok=True)
     f = c / (Path(percorso).stem + ".wav")
-    if not f.exists():
-        dati = S.VocePiper(voce_per(percorso), pronuncia).in_wav(TESTO_RIFERIMENTO)
+    fatto = (P.leggi_impronte(cfg).get(percorso) or {}).get("riferimento") == sha
+    if not (fatto and f.is_file() and _riferimento_buono(f.read_bytes())):
+        dati = S.VocePiper(carica_voce(percorso), pronuncia).in_wav(TESTO_RIFERIMENTO)
+        if not _riferimento_buono(dati):
+            raise Guasto("riferimento_vuoto")
         t = f.with_name(f.name + ".tmp")
         t.write_bytes(dati)
         os.replace(t, f)
+        P.riferimento_fatto(cfg, percorso, sha)
     return f
 
 
@@ -818,17 +928,21 @@ def radice_moss(cfg) -> Path:
     return Path(str(getattr(cfg, "studio_podcast_moss", "") or "~/calliope-motore/moss")).expanduser()
 
 
-def crea_motore_moss(cfg, voce_per, pronuncia=None):
+def crea_motore_moss(cfg, carica_voce, pronuncia=None):
+    """`carica_voce(percorso)` deve leggere il modello dal disco: con la voce in cache di `Speaker.voce_per` un riferimento rifatto
+    dopo un modello cambiato sarebbe la voce vecchia, segnata come nuova."""
     def crea(cede):
         return MotoreMoss(radice_moss(cfg), P.cartella_lavoro(cfg),
-                          riferimento(cfg, voce_per, "studio_podcast_voce_a", pronuncia),
-                          riferimento(cfg, voce_per, "studio_podcast_voce_b", pronuncia), cede=cede)
+                          riferimento(cfg, carica_voce, "studio_podcast_voce_a", pronuncia),
+                          riferimento(cfg, carica_voce, "studio_podcast_voce_b", pronuncia), cede=cede)
     return crea
 
 
-def prepara(studio, ripresa, lavori, speaker, log=print, avvia: bool = True) -> Preparatore | None:
-    """Il preparatore di questa installazione, o None: podcast spento, niente Whisper a server, niente voci."""
+def prepara(studio, ripresa, lavori, speaker, log=print, avvia: bool = True, impronta=None) -> Preparatore | None:
+    """Il preparatore di questa installazione, o None: podcast spento, niente Whisper a server, niente voci. `impronta`:
+    `SpeakerRegistry.embed`, il CAM++ già caricato per sapere chi parla; senza, niente misura degli scambi."""
     from .. import arbitro_memoria as am
+    from ..tts import carica_voce
     cfg = studio.cfg
     if P.modo(cfg) != P.ATTIVA or speaker is None or ripresa is None:
         return None
@@ -838,14 +952,18 @@ def prepara(studio, ripresa, lavori, speaker, log=print, avvia: bool = True) -> 
     if not cfg.stt_url:
         log("[STUDIO] podcast: senza Whisper a server (`stt_url`) non parte")
         return None
-    for chiave in ("studio_podcast_voce_a", "studio_podcast_voce_b"):   # si sa subito, non alla prima notte con un podcast da fare
+    for chiave in P.CHIAVI_VOCI:   # si sa subito, non alla prima notte con un podcast da fare
         try:
             controlla_voce(cfg, chiave)
         except VoceNonUsabile as e:
             log(f"[STUDIO] podcast: {e}")
     pron = getattr(speaker, "pronuncia", None)
     studio.podcast_pronuncia = pron
-    voce = S.VocePiper(speaker.voce_per(cfg.piper_voice), pron)
+    servizio, di_calliope = P.voce_di_servizio(cfg)
+    if not di_calliope:
+        log(f"[STUDIO] podcast: la voce di Calliope {Path(str(cfg.piper_voice)).stem} non è del catalogo: "
+            f"l'avviso e i pezzi a una voce li dice {Path(servizio).stem}")
+    voce = S.VocePiper(speaker.voce_per(servizio), pron)
     lettore = getattr(studio, "lettore", None)
     guardia = getattr(lettore, "guardia", None)
 
@@ -856,10 +974,10 @@ def prepara(studio, ripresa, lavori, speaker, log=print, avvia: bool = True) -> 
         # Senza i suoi segnali (`arbitro_memoria: ombra`) quiete() direbbe sempre sì: qui vale no
         return bool(am.QUIETE.segnali) and am.quiete(secondi)
     preparatore = Preparatore(
-        studio, ripresa, crea_motore_moss(cfg, speaker.voce_per, pron),
-        ritrascrivi_http(cfg.stt_url, cfg.stt_modello, cfg.language), voce, turni_fermi, vivi,
+        studio, ripresa, crea_motore_moss(cfg, lambda p: carica_voce(cfg, p), pron),
+        ritrascrivi_http(cfg.stt_url, cfg.stt_modello, cfg.language, log=log), voce, turni_fermi, vivi,
         lettore_libero=(lambda: not (lettore and lettore.occupato())) if lettore is not None else None,
-        vllm_libero=guardia.motivo if guardia is not None else None, log=log)
+        vllm_libero=guardia.motivo if guardia is not None else None, log=log, impronta=impronta)
     if avvia:
         preparatore.avvia()
     return preparatore
