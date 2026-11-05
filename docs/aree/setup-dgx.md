@@ -208,7 +208,7 @@ calliope motore whisper-lento stato|memoria|ferma|avvia|disinstalla
   pausa dell'arbitro; rete Docker sua, solo 127.0.0.1: rischi in `prove/LEGGIMI.md`).
   `vllm.sh` non scarica pesi: dice il comando, da lanciare solo con il consenso.
 - **Podcast dello Studio** (#387, `studio_podcast`, spenta di serie; [studio](studio.md)): prima di accenderlo `calliope motore
-  moss adotta ~/prove-voci` (o `installa`, 28 GB, una volta), che finisce con la verifica degli hash; poi le due voci di Piper
+  moss adotta ~/prove-voci` (o `installa`, 28 GB, una volta), che pota ciò che non serve e finisce con la verifica degli hash; poi le due voci di Piper
   in `studio_podcast_voce_a` e `_b`. Di notte (`studio_podcast_fascia`) ferma vLLM con `docker stop` e lo riparte con `docker
   start`: lo stesso container. Un segno `podcast_vllm_fermo.json` nella cartella dello Studio vuol dire che una sessione è caduta:
   Calliope lo riprende da sola all'avvio; a mano `docker start calliope-vllm`. Serve `arbitro_memoria: ombra`, senza non parte.

@@ -93,6 +93,7 @@ FONTI = ("riassunto", "pagine", "podcast")
 # Il podcast (04/11, #387): il modello ha scritto le battute, e due voci che non sono Calliope le dicono
 PODCAST_INTRO = "È un riassunto scritto da me, detto da due voci: per i dettagli il libro resta la fonte."
 PODCAST_NON_PRONTO = "Il podcast non è ancora pronto: intanto ti dico il riassunto."
+PODCAST_NON_PRONTO_SOLO = "Il podcast non è ancora pronto."      # se il riassunto non c'è: non si promette
 PODCAST_PEZZO_A_UNA_VOCE = "Questo pezzo a due voci non è venuto bene: te lo dico io."
 # Perché si leggono le pagine al posto del riassunto, per stato del copione (`_riassunto_vivo`)
 AVVISI_FONTE = {"scarso": "Il riassunto non ha passato i miei controlli: ti leggo le pagine.",
@@ -445,12 +446,13 @@ def _sezione_voci(sezione: list[dict], nomi) -> list[str]:
 
 def componi(args: list[dict], pagine: list[dict], carte: list[dict], cosa: str,
             nomi=(), solo_pagine: set | None = None, con_carte: bool = True,
-            sezioni: dict | None = None, per_voce: bool = False) -> Copione:
+            sezioni: dict | None = None, per_voce: bool = False, titoli_ok=None) -> Copione:
     """Il copione: `args` gli argomenti del piano numerati ({id, numero, titolo, pagine}),
     `pagine` tutte quelle della verifica (le tolte escluse), `carte` le attive del piano.
     `sezioni` {argomento: [frase]}, dal copione controllato (`riassunto.py`): al posto delle pagine di
     quell'argomento; gli altri leggono le pagine, dicendolo. Le sezioni di fila fanno una parte fino a
-    `PARTE_RIASSUNTO_S`. **L'avviso una volta a ogni inizio di ascolto:** sullo schermo in testa a ogni parte,
+    `PARTE_RIASSUNTO_S`. `titoli_ok`: gli argomenti col titolo controllato; gli altri dicono solo il numero
+    (revisione della PR #393: il titolo arrivava alla voce senza giudice né guardiano). **L'avviso una volta a ogni inizio di ascolto:** sullo schermo in testa a ogni parte,
     perché una parte toccata o un file scaricato stanno da soli; a voce (`per_voce`) la lettura è una, e
     basta quello in testa."""
     cp = Copione(cosa)
@@ -520,7 +522,8 @@ def componi(args: list[dict], pagine: list[dict], carte: list[dict], cosa: str,
                 par = cp.nuovo_par()
                 cp.voci.append(Voce(CALLIOPE, f"Argomento {arg['numero']}.", n, par, argomento=arg["id"]))
                 # Il titolo nella voce di Calliope, come tutto il riassunto, se passa le stesse regole
-                titolo, _s = frasi_pagina(arg.get("titolo"), nomi, True)
+                titolo, _s = (frasi_pagina(arg.get("titolo"), nomi, True)
+                              if titoli_ok is None or arg["id"] in titoli_ok else ([], {}))
                 cp.voci += [Voce(CALLIOPE, f, n, par, argomento=arg["id"]) for pp in titolo for f in pp]
                 cp.voci += [Voce(CALLIOPE, f, n, par, argomento=arg["id"]) for f in frasi_sez]
             cp.parti.append({"n": n, "tipo": "riassunto", "argomento": argomenti_p[0]["numero"],
@@ -1048,7 +1051,7 @@ class Ascolti:
         if fonte != "pagine" and args:
             sezioni, _stato = self._riassunto_vivo(v)
         cp = componi(args, pagine, carte, cosa, self._nomi_ascolto(), solo, con_carte, sezioni,
-                     per_voce=per_voce)
+                     per_voce=per_voce, titoli_ok=self._titoli_riassunto(v) if sezioni else None)
         if not cp.voci:
             raise ValueError("niente")
         return cp
@@ -1132,8 +1135,9 @@ class Ascolti:
                     if self.podcast_pronto(v):
                         cosa, numero = "tutto", None      # il podcast è uno: non ha «oggi» né argomenti
                     else:
-                        fonte = None                      # resta il riassunto, dicendolo
-                        intro.append(PODCAST_NON_PRONTO)
+                        fonte = None                      # resta ciò che c'è, dicendolo
+                        intro.append(PODCAST_NON_PRONTO if self._riassunto_vivo(v)[1] == "pronto"
+                                     else PODCAST_NON_PRONTO_SOLO)
                 cp = self._copione(chi, v, cosa, numero, fonte, per_voce=True)
                 pos = 0
                 avviso = self._avviso_fonte(v, cosa, cp, fonte)

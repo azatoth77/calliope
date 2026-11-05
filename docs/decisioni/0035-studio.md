@@ -1072,18 +1072,21 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     amministra ha scelto MOSS-TTSD dopo il banco di ascolto del 04/11. Finché non c'è, resta il riassunto; se non passa i controlli,
     anche. `studio_podcast`, «spenta» di serie (il numero si sistema all'unione).
     - **Il copione è quello del punto 57**, stessi cancelli, nessuna validazione umana. **Le battute senza fonte non sono testo del
-      modello:** cenni da due elenchi chiusi, attaccati a una battuta con la fonte, che cadono con lei; nessun campo libero. Le domande
+      modello:** cenni da due elenchi chiusi, attaccati a una battuta con la fonte, che cadono con lei; nessun campo libero, e nessun cenno
+      che conferma (*[storico fino al 05/11: «Esatto.», «Giusto.», «Certo.»]*). Le domande
       sulla materia non ci sono: conterrebbero un nome. Il criterio del punto 57 sulle battute passa 3 giri su 3 (ostili 0 su 101,
       scambi e negazioni 1,0–1,7 %, vere 78–83 %).
-    - **MOSS chiede `trust_remote_code`:** container senza rete né capacità, radice in sola lettura, pesi e codice per hash, mai
-      scaricati a ogni avvio, una sola cartella scrivibile. In `calliope/` nessuna dipendenza: `in_wav(testo) → wav`.
+    - **I titoli passano dagli stessi cancelli**, nel podcast e nel riassunto: il codice, un giudizio loro, il guardiano; altrimenti resta il
+      numero (revisione della PR #393).
+    - **MOSS chiede `trust_remote_code`:** container senza rete né capacità, radice in sola lettura, per hash tutto ciò che viene eseguito
+      (ambiente e immagine compresi), un file in più non torna, mai scaricato a ogni avvio, una sola cartella scrivibile. In `calliope/` nessuna dipendenza: `in_wav(testo) → wav`.
     - **vLLM si ferma con `docker stop` e riparte con `docker start`:** lo stesso container, così la pausa dell'arbitro non si può
       perdere; il confronto c'è lo stesso. Sempre, con un segno su disco e un controllo all'avvio di Calliope. Un agente chiesto
       intanto aspetta e lo dice.
     - **Solo a macchina libera**: nessun turno, nessun lavoro, la voce ferma, memoria; un segno della voce toglie MOSS subito e il
       lavoro fatto resta. **Di notte** di serie, non per la sicurezza: un'interruzione costa 4 minuti a chi chiede un agente, e il primo
       turno dopo paga lo swap (8,6 s misurati).
-    - **Ogni pezzo si ritrascrive e si confronta col copione**, numeri compresi: rigenerato un numero limitato di volte, poi a una
+    - **Ogni pezzo si ritrascrive e si confronta col testo di prima della pulizia**, numeri col segno, nomi, ordinali e formule compresi: rigenerato un numero limitato di volte, poi a una
       voce dicendolo; oltre metà, niente podcast. Whisper non è la verità: da solo sbaglia 1 frase su 78.
     - **Due voci che non sono persone**: riferimenti generati con Piper, mai i campioni di MOSS, che sembrano personaggi pubblici.
     - **L'audio resta finché c'è la verifica**: non si rifà a richiesta, perché fermerebbe vLLM. Stessi permessi, prova aperta, firma

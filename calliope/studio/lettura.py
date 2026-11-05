@@ -1794,6 +1794,11 @@ class Lettore:
                     lambda mirata: self._una_lista(mod.corpo_scoperte(self.modello, v, rif, mirata, M), m, vid,
                                                    cosa, mod.leggi, mod.parziale)[0],
                     lambda f: self._giudizio_frase(f, M, m, v, titoli.get(f.get("argomento"), "")))
+                # Il titolo si dice in testa alla sua sezione: passa dagli stessi cancelli (revisione della PR #393)
+                for sez in ris["sezioni"]:
+                    t = titoli.get(sez["argomento"])
+                    sez["titolo"] = t if t and self._titolo_passa(t, m, v) else None
+                    ris["conti"]["titoli_fuori"] = ris["conti"].get("titoli_fuori", 0) + (not sez["titolo"])
                 if dopo is not None:
                     ris = dopo(ris)
             m["secondi_giudizi"] = round(m["secondi_giudizi"] + time.monotonic() - t1, 2)
@@ -1842,6 +1847,18 @@ class Lettore:
                        f"su {c['lettura_s']:.0f} s di pagine ({s:.1f} s"
                        + (f"; fuori: {motivi}" if motivi else "") + ")")
         return esito
+
+    def _titolo_passa(self, titolo: str, m: dict, v: dict) -> bool:
+        """Il titolo di un argomento: non ha una frase da citare, ma un giudizio suo (è il nome di un argomento di quella
+        materia?) e lo stesso guardiano. Una risposta che non si legge è un no."""
+        from . import riassunto as R
+        r = self._chiedi_corpo(R.corpo_giudizio_titolo(self.modello, titolo, v.get("materia") or ""))
+        if not r.get("fine"):
+            raise ErroreServer("stream senza fine")
+        m["token_in"] += int(r.get("prompt") or 0)
+        m["token_out"] += int(r.get("eval") or 0)
+        m["giudizi"] += 1
+        return R.leggi_giudizio(r.get("content")) and self.studio.riassunto_guardia(v["persona"], titolo) is None
 
     def _giudizio_frase(self, f: dict, M, m: dict, v: dict, titolo: str) -> str | None:
         """Il giudizio indipendente e il guardiano su una frase rimasta: None se resta, o il motivo. Una

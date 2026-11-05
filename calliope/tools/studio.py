@@ -1876,7 +1876,7 @@ def _ascolta(ctx: ToolContext, azione: str = "", cosa: str = "", numero=None, ve
                                          "«oggi» o «tutto»."}
             f = str(fonte).strip().lower()
             if f == "podcast" and svc.podcast_modo() != "attiva":
-                return _f("Il podcast qui non è acceso: se vuoi ti dico il riassunto.", ok=False)
+                return _f("Il podcast qui non è acceso.", ok=False)
             lett = svc.ascolto_prepara(chi, v["id"], cosa, n, "inizia",
                                        fonte=f if f in ("pagine", "podcast") else None)
     except ProvaAperta:

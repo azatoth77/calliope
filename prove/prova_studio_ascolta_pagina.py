@@ -189,6 +189,17 @@ def scenario_pc(t, stanza):
     B.foto(t, "studio-ascolta-pc.png")
 
 
+def finche(t, sel, cond, volte=4):
+    """Tocca e aspetta; sotto carico il tocco può cadere su un nodo appena ridisegnato: si riprova, se il tasto c'è ancora."""
+    for _i in range(volte):
+        if t.v(f"!!document.querySelector({json.dumps(sel)})"):
+            t.tocca(sel)
+        ok = aspetta(cond, 6)
+        if ok:
+            return ok
+    return False
+
+
 def scenario_podcast(t, st, vid):
     """Il podcast (04/11, #387): il tasto accanto al riassunto, la frase in testa, le parti già pronte."""
     import wave
@@ -221,10 +232,21 @@ def scenario_podcast(t, st, vid):
     verifica("il pezzo a una voce si dice", "a una voce" in testo(t), testo(t)[:300])
     t.tocca('.studio-h-ascolta .studio-a .studio-h-primo[data-ascolta="parte"]')
     verifica("il podcast suona, senza sintesi a richiesta", bool(suona(t)), stato(t))
+    # Sotto carico (l'hook) la pagina si ridisegna fra un tocco e l'altro: si tocca a pagina ferma, e si riprova
     t.tocca('.studio-h-ascolta button[data-ascolta="pausa"]')
-    t.tocca('.studio-h-ascolta button[data-ascolta="fonte"]')
-    ok = aspetta(lambda: "due voci" not in testo(t), 6)
-    verifica("si torna indietro", bool(ok), testo(t)[:300])
+    aspetta(lambda: not (stato(t) or {}).get("suona"), 8)
+    verifica("si torna indietro", bool(finche(t, '.studio-h-ascolta button[data-ascolta="fonte"]',
+                                              lambda: "due voci" not in testo(t))), testo(t)[:300])
+    # Revisione della PR #393, punto 3: il podcast va via a pagina aperta, e la pagina non resta ferma
+    finche(t, sel, lambda: "due voci" in testo(t))
+    st.dati.scrivi("DELETE FROM studio_podcast WHERE verifica = ?", (vid,))
+    ok = finche(t, '.studio-h-ascolta .studio-a .studio-h-primo[data-ascolta="parte"]',
+                lambda: "due voci" not in testo(t) and not t.v(f"!!document.querySelector({json.dumps(sel)})"))
+    verifica("il podcast sparito a pagina aperta: si torna a ciò che c'è", bool(ok), testo(t)[:300])
+    verifica("…`fonte` non resta «podcast»", (stato(t) or {}).get("fonte") != "podcast", stato(t))
+    verifica("…e «Ascolta» suona", bool(finche(t, '.studio-h-ascolta .studio-a .studio-h-primo[data-ascolta="parte"]',
+                                               lambda: (stato(t) or {}).get("suona"))), stato(t))
+    t.tocca('.studio-h-ascolta button[data-ascolta="pausa"]')
     st.inizia_prova(LEO, vid)
     verifica("una prova aperta lo vieta", st.ascolto_parti(LEO, vid, "podcast")["prova"])
 

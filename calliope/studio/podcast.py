@@ -50,7 +50,7 @@ CARTELLA_PODCAST = "podcast"       # i file finiti: podcast/<verifica>/<firma>-<
 CARTELLA_LAVORO = "podcast_lavoro"  # la sola cartella scrivibile del container: si svuota a ogni sessione
 
 # La versione entra nella firma: un prompt, un elenco o un taglio nuovi rifanno i copioni
-VERSIONE = 1
+VERSIONE = 2
 VOCI = ("A", "B")
 DI_FILA_MAX = 2                    # le battute di fila della stessa voce
 QUOTA_RACCORDI = 0.5               # dei cenni per battuta con la fonte, al più
@@ -61,9 +61,11 @@ PEZZO_CAR = 900
 PEZZO_MIN_CAR = 500                # a un argomento nuovo si va a capo da qui in su
 
 RACCORDI_PRIMA = ("E poi?", "Perché?", "Come mai?", "In che senso?", "E quindi?", "Cioè?", "E dopo?")
-RACCORDI_DOPO = ("Esatto.", "Capito.", "Giusto.", "Interessante.", "Ah, ecco.", "Certo.", "Chiaro.")
-# Quelli che può mettere il codice: non confermano e non chiedono niente, vanno dopo qualunque frase
-RACCORDI_NEUTRI = ("Capito.", "Interessante.", "Chiaro.", "Ah, ecco.")
+# Niente «Esatto.», «Giusto.», «Certo.» (revisione della PR #393): una voce che conferma una frase che può essere sbagliata
+# le dà un'autorità che non ha, e costano poco. Solo cenni che non confermano niente
+RACCORDI_DOPO = ("Capito.", "Interessante.", "Ah, ecco.", "Chiaro.")
+# Quelli che può mettere il codice, dopo qualunque frase
+RACCORDI_NEUTRI = RACCORDI_DOPO
 
 
 def _chiave(t) -> str:
@@ -226,6 +228,11 @@ def con_battute(ris: dict) -> dict:
     cenni_tot = frasi_viste = dal_codice = 0
     for s in ris["sezioni"]:
         battute = []
+        infedeli = [f for f in s["frasi"] if not fedele(f["testo"])]
+        if infedeli:
+            mot = ris["conti"].setdefault("motivi", {})
+            mot["pulizia"] = mot.get("pulizia", 0) + len(infedeli)
+            s["frasi"] = [f for f in s["frasi"] if f not in infedeli]
         tetto = math.ceil(len(s["frasi"]) * QUOTA_RACCORDI)
         cenni, ultimo = 0, None
         for i, f in enumerate(s["frasi"]):
@@ -256,6 +263,7 @@ def con_battute(ris: dict) -> dict:
                 cenni, ultimo = cenni + 1, dopo
         s["battute"] = battute
         cenni_tot += cenni
+    ris["sezioni"] = [s for s in ris["sezioni"] if s["frasi"]]
     ris["conti"]["cenni"] = cenni_tot
     ris["conti"]["cenni_del_codice"] = dal_codice
     voci = [b["voce"] for s in ris["sezioni"] for b in s["battute"] if b["tipo"] == "frase"]
@@ -267,6 +275,8 @@ def con_battute(ris: dict) -> dict:
 # ─────────────────────────── ciò che si dà a MOSS ───────────────────────────
 _NUMERO = re.compile(r"(?<![\w,.])(\d{1,3}(?:[. ]\d{3})+|\d+)(?:,(\d+))?(?![\w])(?![.,]\d)")
 _TRATTINO = re.compile(r"(?<=\w)\s*[-–—]\s*(?=\w)")
+# Il segno di un numero: «-196», «a -2», «(-5», mai «1519-1521» né «anni-luce»
+_NEGATIVO = re.compile(r"(?<![\w)\]])[-−–](?=\d)")
 
 
 def intero_detto(n: int) -> str:
@@ -288,6 +298,9 @@ def intero_detto(n: int) -> str:
     return " ".join(parti)
 
 
+_NON_UN_NOME = frozenset("in di a da su per con tra fra e o ma che se nel nella al alla del della dal dalla sul sulla".split())
+
+
 def numeri_in_lettere(testo: str) -> str:
     """I numeri in cifre di una frase, in lettere: «4,6» → «quattro virgola sei», «100 000» → «centomila»."""
     def sost(m: re.Match) -> str:
@@ -297,20 +310,44 @@ def numeri_in_lettere(testo: str) -> str:
             dopo = " ".join(intero_detto(int(c)) for c in d) if d.startswith("0") else intero_detto(int(d))
             return f"{intero_detto(n)} virgola {dopo}"
         if n == 1:
-            # «1 metro» è «un metro»; a fine frase resta «uno»
+            # «1 metro» è «un metro»; a fine frase, dopo un segno o davanti a «in» resta «uno»
             w = re.match(r"\s+([a-zà-ÿ]+)", m.string[m.end():])
-            if w:
+            prima = m.string[:m.start()].rstrip().rsplit(" ", 1)[-1].lower()
+            if w and prima not in ("meno", "più") and w.group(1).lower() not in _NON_UN_NOME:
                 return "una" if w.group(1).endswith("a") else "un"
+            return "uno"
         return intero_detto(n)
     return _NUMERO.sub(sost, testo)
 
 
 def detto(testo: str) -> str:
-    """La frase come va detta: unità, formule, sigle e simboli a parole, numeri in lettere, niente trattini
-    (`normalize_text` di MOSS li toglie e attacca le parole: «anniluce»). È anche ciò con cui si confronta
-    l'audio."""
+    """La frase come va detta: unità, formule, sigle e simboli a parole, numeri in lettere, il segno a parole («meno
+    centonovantasei»), niente trattini (`normalize_text` di MOSS li toglie e attacca le parole: «anniluce»). Il
+    trattino e il segno vanno distinti prima: «bolle a -196 gradi» è diventato «bolle a 196 gradi» (revisione della PR
+    #393); `fedele` e `confronta` guardano il testo di prima di questa pulizia."""
     from ..pronuncia import per_ripasso
-    return " ".join(_TRATTINO.sub(" ", numeri_in_lettere(per_ripasso(testo))).split())
+    t = _NEGATIVO.sub("meno ", per_ripasso(testo))
+    return " ".join(_TRATTINO.sub(" ", numeri_in_lettere(t)).split())
+
+
+def valori_di(testo: str) -> list[float]:
+    """I valori di un testo, col segno, da come è scritto: quelli che nessuna pulizia può cambiare."""
+    from . import unita as U
+    from . import riassunto_controllo as C
+    t = re.sub(r"(?<!\d)(\d{1,3})((?:\.\d{3})+)(?!\d)", lambda m: m.group(1) + m.group(2).replace(".", ""),
+               str(testo or "").replace("%", " per cento "))
+    return [round(v, 9) for v, _u in U.leggi(C._normale(t))]
+
+
+def fedele(testo: str) -> bool:
+    """Ciò che si dice ha tutti i valori della frase controllata, col loro segno. Se la pulizia ne ha cambiato uno la
+    battuta non si dice: una rete sotto `detto`, che questa frase non l'ha mai vista."""
+    dopo = valori_di(detto(testo))
+    for v in valori_di(testo):
+        if v not in dopo:
+            return False
+        dopo.remove(v)
+    return True
 
 
 def per_moss(battuta_detta: str, pronuncia=None) -> str:
@@ -333,7 +370,9 @@ def pezzi(sezioni: list[dict], argomenti: list[dict], nomi=(), pronuncia=None, m
     for s in sezioni:
         aid = int(s["argomento"])
         a = per_id.get(aid) or {}
-        titolo, _s = S.frasi_pagina(a.get("titolo"), nomi, True)
+        # Solo il titolo che ha passato il codice, il giudice e il guardiano (`Lettore._copione_controllato`):
+        # senza, resta il numero, che lo scrive il codice
+        titolo, _s = S.frasi_pagina(s.get("titolo"), nomi, True) if s.get("titolo") else ([], {})
         testa = f"Argomento {a.get('numero', '')}.".replace(" .", ".")
         testi = [testa] + [f for pp in titolo for f in pp]
         prima = s["battute"][0]["voce"] if s["battute"] else "A"
@@ -535,15 +574,18 @@ class Podcast:
         r, a = self._podcast_valido(v)
         if self.podcast_modo() != ATTIVA or (a or {}).get("esito") == "pronto":
             return None
+        # «intanto c'è il riassunto» solo se c'è davvero (revisione della PR #393)
+        c_e = self._riassunto_vivo(v)[1] == R.PRONTO
         if (a or {}).get("esito") == "scarso":
-            return "Il podcast non ha passato i miei controlli: resta il riassunto."
+            return "Il podcast non ha passato i miei controlli" + (": resta il riassunto." if c_e else ".")
         if r is not None and r["esito"] not in (R.PRONTO, G.ERRORE):
             return None
         # Dire «si prepara» è vero solo se qualcuno lo sta preparando (come il riassunto, #386)
         if (self.podcast_preparatore is None or not self.per_modello() or v.get("stato") != "aperta"
                 or str(v.get("data")) < self._oggi().isoformat()):
             return None
-        return "Il podcast a due voci si prepara da solo, quando la macchina è libera: intanto c'è il riassunto."
+        return ("Il podcast a due voci si prepara da solo, quando la macchina è libera"
+                + (": intanto c'è il riassunto." if c_e else "."))
 
     def _copione_podcast(self, v: dict, per_voce: bool = False) -> S.Copione | None:
         """Il copione con le parti già pronte, se c'è un audio finito di adesso, con le parole che svegliano di

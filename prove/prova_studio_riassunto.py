@@ -676,10 +676,10 @@ verifica("la richiesta: niente tool, temperatura 0, thinking spento, lo schema e
          "tools" not in corpo and corpo["options"]["temperature"] == 0 and corpo["think"] is False
          and corpo["format"]["properties"]["sezioni"] and corpo["options"]["num_predict"] >= 800)
 stato = st.riassunto_stato(vid)
-verifica("un giudizio per frase, ognuno con la sua fonte", len(lt._chiedi_corpo.giudizi) == 6
+verifica("un giudizio per frase, ognuno con la sua fonte, e uno per titolo (#393)", len(lt._chiedi_corpo.giudizi) == 8
          and stato["conti"]["giudicate"] == 6 and "Palos" in json.dumps(
              lt._chiedi_corpo.giudizi[1], ensure_ascii=False))
-verifica("il guardiano le vede tutte", len(st.guardiano.viste) == 6)
+verifica("il guardiano le vede tutte, coi titoli", len(st.guardiano.viste) == 8)
 giudizio_1 = lt._chiedi_corpo.giudizi[0]["messages"][1]["content"]
 verifica("terza revisione: il giudice vede le sole frasi citate, non la pagina",
          "Le navi portavano spezie" not in giudizio_1 and "La traversata dell'Atlantico" not in giudizio_1)

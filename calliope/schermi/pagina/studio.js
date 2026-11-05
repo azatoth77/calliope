@@ -2940,6 +2940,9 @@
     if (!ascolta || ascolta.vid !== vid) return;
     ascolta.attesa = false;
     if (!r.ok) { ascolta.esito = String(r.dati.errore || "Non riesco a leggere il ripasso: riprova tra poco."); disegnaHome(); return; }
+    // Il podcast è andato via a pagina aperta (le pagine cambiate, la verifica): senza questo la pagina continuava a chiederlo,
+    // e «Ascolta» rispondeva sempre «Il ripasso è cambiato»
+    if (ascolta.fonte === "podcast" && r.dati.fonte !== "podcast") { ascolta.fonte = undefined; ascolta.parte = 0; buttaAudio(); }
     if (ascolta.dati && ascolta.dati.firma && r.dati.firma !== ascolta.dati.firma) buttaAudio();
     ascolta.dati = r.dati;
     if (r.dati.prova) chiudiPerProva();

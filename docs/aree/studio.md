@@ -158,11 +158,13 @@ riassunto. `studio_podcast`, «spenta» di serie.
 **Il copione** (`studio/podcast.py`) è il metodo del riassunto: stesse frasi numerate, stesso `R.valida`, stesso giudice,
 stesso guardiano (`Lettore._copione_controllato`, ora una funzione sola per tutti e due). **Le battute senza fonte:** il
 modello non ne scrive. Ogni battuta con la fonte può portarsi due campi, `prima` e `dopo`, detti dall'altra voce, con
-valori da due elenchi chiusi (`RACCORDI_PRIMA`, `RACCORDI_DOPO`: «E poi?», «Perché?», «Capito.», «Esatto.»…), enum nello
+valori da due elenchi chiusi (`RACCORDI_PRIMA`, `RACCORDI_DOPO`: «E poi?», «Perché?», «Capito.», «Interessante.»…), enum nello
 schema e confronto esatto nel codice (`normalizza`, di nuovo in `con_battute`). Niente valori, niente nomi, nessun campo
-libero: «Esatto.» scritto come testo cade per lunghezza, «Quanta acqua porta?» per la forma, e un cenno cade con la sua
+libero: un cenno scritto come testo cade per lunghezza, «Quanta acqua porta?» per la forma, e un cenno cade con la sua
 battuta. Le domande sulla materia non ci sono, perché conterrebbero un nome. Il modello non ne metteva (0 su 28 al primo
-giro): sotto una battuta su tre il codice aggiunge i neutri (`RACCORDI_NEUTRI`, che non confermano niente). Le voci le
+giro): sotto una battuta su tre il codice ne aggiunge. **Niente cenni che confermano** (*[storico fino al 05/11: c'erano «Esatto.»,
+«Giusto.», «Certo.»]*): dopo una frase che può essere sbagliata danno un'autorità che lei non ha, il giro della revisione ha
+sentito «gela intorno a 2 gradi» seguita da «Esatto!», e toglierli costa poco. Le voci le
 rimette a posto il codice: non più di due battute di fila, e chi chiede non è chi ha appena parlato (il primo copione
 faceva dire a una voce «In che senso?» dopo la sua stessa frase).
 
@@ -249,10 +251,51 @@ richieste mirate con pochi argomenti («tagliate a max_tokens»): si tengono le 
 file non è normalizzato. La licenza di giorgio è ambigua (`voices/LEGGIMI.md`, nota 3), le voci vengono da audiolibri: una riga di
 configurazione cambia `studio_podcast_voce_b`; serena (dati sintetici, CC-BY-4.0) è l'alternativa, non provata qui.
 
+### La revisione indipendente della PR #393 (05/11)
+
+Ha detto «da correggere» su quattordici punti, che qui sopra restano come erano solo dove non cambiano.
+
+- **Il segno.** `detto` mangiava il «-»: «-196 gradi» diventava «bolle a 196 gradi», 8 frasi su 13 nel suo giro, e `confronta` passava perché
+  confrontava col testo già pulito. Il segno ora si dice («meno centonovantasei», «meno uno in unità elementari»). `fedele` scarta la battuta se la
+  pulizia cambia un valore (motivo `pulizia`), e `confronta` prende i valori dal `testo`, non dal `detto`, e li cerca col segno fra quelli sentiti.
+- **I titoli** arrivavano alla voce senza giudice né guardiano, **anche nel riassunto** (`ascolta.componi`): stesso varco, stessa correzione. Ora in
+  `_copione_controllato`: il codice, un giudizio suo (`corpo_giudizio_titolo`: col giudizio delle frasi il modello li bocciava tutti, 4 su 4) e il
+  guardiano. Un titolo fermato lascia solo «Argomento 1.». `riassunto.VERSIONE` passa a 3: i copioni si rifanno.
+- **Il confronto**: la radice in comune non basta più (faceva passare solfato per solfito). `_simile`: stessa iniziale e stessa fine, una lettera, due da 9
+  in su. `_scambio` segnala le coppie che si somigliano e vogliono dire altro (insolubile, ipertonica, nitrito), anche se il resto della frase torna.
+  Nomi (fra le parole sentite, con `_nome_simile` per le storpiature), ordinali, formule devono esserci tutti. Inventate al più il 10 % (*[storico: 30 %]*).
+- **Gli hash**: l'elenco copre l'ambiente intero, l'immagine e rifiuta i file in più; `pota` lascia di MOSS-TTSD solo `generation_utils.py` e la licenza,
+  così i campioni di voce non stanno nemmeno sul disco. I `.pyc` non si leggono dalla cartella (`PYTHONPYCACHEPREFIX`). **`installa` senza git**, che
+  nell'immagine non c'è: `moss_installa.py`, tutte le versioni fissate. Sulla DGX l'installazione vera senza i pesi dà la stessa impronta di `adotta`
+  (21 s, 6021 file); `narwhals` era nell'ambiente del banco ma non nel suo freeze, ora è fissato. Un `numpy.py` e un `x.py` nell'ambiente: «Non torna».
+- **Prima i controlli, poi il fermo**: MOSS e riferimenti si guardano prima di toccare vLLM; `prenota` dice a tutti che si ferma e poi si riguardano
+  voce e lavori, così un lavoro entrato nel frattempo non trova vLLM fermo; `memoria_bassa` aspetta; il container sparito non si aspetta 15 minuti; con
+  MOSS ancora vivo vLLM non parte, ci riprova al giro dopo; la verifica tolta non salta registro e riscaldamento; Whisper vuoto su un audio con la voce è un guasto
+  suo, si riprova alla sessione dopo, e solo dopo 3 volte vale un no; «c'è il riassunto» solo se c'è. La pagina non resta ferma se il podcast sparisce.
+
+**Le misure nuove, separate da quelle del 04/11** (05/11 notte, DGX, `prove/manuali/studio/podcast/orsea.json`, materiale nuovo, 15 frasi di cui 7 col segno):
+
+| | |
+|---|---|
+| Copione | 51 s, 15 frasi, 6 cenni, 74 s su 264 s di pagine (voluti 66) |
+| Sessione | vLLM fermo 573 s per 107 s di audio, 3 pezzi; ripartenza 254 s; stesso `Id`, `Env`, `Cmd`, `RestartPolicy`, `is_paused` falso |
+| Generazione | fattore 1,29–1,56 (1,56 un pezzo da 7 s); torch 23,6 GB, RSS 5,87 GB |
+| Segno | 7 frasi su 7 dette col «meno», 13 valori su 13 sentiti, 0 a una voce; a mano nelle trascrizioni: «meno 196», «meno 2», «meno 21», «meno 40», «meno 120», «meno 1» |
+| Rigenerati | 1 su 3: «si apre a meno 120 metri» sentito «almeno 120»; col secondo seme giusto. È proprio il difetto che il controllo deve vedere |
+| Copertura | parole piene 93,3 % sui 3 pezzi; il materiale ha `copertura_pagina` 0,44: la chimica è arrivata con una frase sola, quindi solfato e solubile non sono stati sentiti davvero |
+| Titoli, col modello vero | buoni 5 su 8 (uno fermato lascia il numero), ostili 0 su 8; sul copione vero 5 su 6 |
+
+**Quante frasi buone perde il confronto stretto**, sugli stessi audio del 04/11 riletti col codice finale: MOSS 1 frase su 50 (2 %, 1 pezzo su 10), per un nome, 0 numeri persi su 24;
+Piper 18 su 78 (23 %), 0 numeri persi su 38 (*[la prima versione, coi nomi cercati per posizione e «il Quattrocento» preso per un nome, MOSS 4 su 50]*). Un pezzo segnato a torto costa
+un minuto di generazione; dopo tre è a una voce. Un nome che Whisper non conosce («Calicut» sentito «Caligatto») resta segnato: è il costo scelto, da riguardare col materiale vero. Piper non passa da
+questo controllo in esercizio: la cifra dice quanto Whisper capisce peggio quella voce, non che il pezzo sia sbagliato.
+
+**Non annotato come difetto, ma resta.** Whisper che risponde sempre vuoto fa una sessione all'ora per pezzo, 3 volte. Il pezzo a una voce non è ritrascritto: dice `detto`, che `fedele` ha controllato.
+
 Prove: `prova_studio_podcast.py` (motore, Docker, Whisper e modello finti, compreso il riavvio di vLLM in ogni guasto),
 `prova_studio_ascolta_pagina.py` (il tasto nella pagina vera), `prove/manuali/banco_podcast.py`, `banco_studio.py --fasi podcast`.
 **Non provato:** la Calliope installata (la versione sulla DGX è ancora senza questo codice), un agente vero chiesto durante il
-riavvio, la lettura a voce vera e dal satellite, `calliope motore moss installa`, `adotta`, le pagine vere, l'ascolto a orecchio.
+riavvio, la lettura a voce vera e dal satellite, lo scaricamento dei pesi di `installa` (provati codice, ambiente, un file con `hf`), le pagine vere, l'ascolto a orecchio.
 
 ## Il riassunto da ascoltare (04/11, issue #386, ramo `issue-386-riassunto`)
 

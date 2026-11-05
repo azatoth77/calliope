@@ -48,11 +48,13 @@ from .podcast_motore import Ceduto, Guasto, MotoreMoss, TESTO_RIFERIMENTO, memor
 # ─────────────────────────── soglie (dal banco: `docs/aree/studio.md`, 04/11) ───────────────────────
 RIGENERA_MAX = 2              # i tentativi in più su un pezzo che non torna
 SOGLIA_FRASE = 0.70           # delle parole piene di una battuta, ritrovate
-SOGLIA_INVENTATO = 0.30       # delle parole sentite, in più rispetto al copione
+SOGLIA_INVENTATO = 0.10       # delle parole sentite, in più rispetto al copione (MOSS sul banco: al più 4,5 %)
 UNA_VOCE_MAX = 0.5            # dei pezzi: oltre, niente podcast
 PAVIMENTO_MB = 4000           # durante la sessione, sotto si ferma tutto (la guardia del banco)
 ATTESA_MEMORIA_S = 60.0       # dopo il fermo di vLLM la memoria torna in qualche secondo
 ANCORA_OGNI_S = 5.0
+INVENTATE_POCHE = 4           # in un pezzo corto una manciata non è una percentuale
+VUOTI_MAX = 3                 # Whisper che risponde vuoto su un audio con la voce: si riprova, poi vale un no
 PAUSA_DOPO_GUASTO_S = 3600.0
 PAUSA_FRA_SESSIONI_S = 1800.0
 GIRO_S = 60.0
@@ -70,36 +72,121 @@ o ma che si ne ci d c""".split())
 _NEGAZIONI = frozenset(("non", "mai", "nessun", "nessuno", "nessuna", "senza", "meno", "piu"))
 
 
+def _pulito(testo: str) -> str:
+    """Le migliaia e il per cento di Whisper, prima di `_normale`."""
+    return re.sub(r"(?<!\d)(\d{1,3})((?:\.\d{3})+)(?!\d)", lambda m: m.group(1) + m.group(2).replace(".", ""),
+                  str(testo or "")).replace("%", " per cento ")
+
+
 def _parole(testo: str) -> list[str]:
-    """Le parole di un testo con i numeri in cifre, in tutti e due i versi: Whisper scrive «1.492», il copione
-    «millequattrocentonovantadue»."""
+    """Le parole di un testo con i numeri in cifre e il loro segno, in tutti e due i versi: Whisper scrive «1.492» e
+    «-196», il copione «millequattrocentonovantadue» e «meno centonovantasei»."""
     from . import riassunto_controllo as C
-    # I separatori delle migliaia che Whisper mette: «5.800», «100.000»
-    t = re.sub(r"(?<!\d)(\d{1,3})((?:\.\d{3})+)(?!\d)", lambda m: m.group(1) + m.group(2).replace(".", ""),
-               str(testo or ""))
-    t = C._normale(t.replace("%", " per cento "))
+    t = C._normale(_pulito(testo))
     t = unicodedata.normalize("NFKD", t)
     t = "".join(c for c in t if not unicodedata.combining(c)).casefold()
     # La virgola dei decimali: «99,8» di Whisper e «99.8» di `_in_cifre`
-    return [x.replace(",", ".") for x in re.findall(r"\d+(?:[.,]\d+)?|[a-z]+", t)]
+    return [x.replace(",", ".") for x in re.findall(r"(?<![\w.,])-?\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?|[a-z]+", t)]
+
+
+def _norma(w: str) -> str:
+    t = unicodedata.normalize("NFKD", str(w or ""))
+    return "".join(c for c in t if not unicodedata.combining(c)).casefold()
+
+
+def _distanza(a: str, b: str) -> int:
+    if abs(len(a) - len(b)) > 2:
+        return 3
+    prima = list(range(len(b) + 1))
+    for i, x in enumerate(a, 1):
+        ora = [i]
+        for j, y in enumerate(b, 1):
+            ora.append(min(prima[j] + 1, ora[j - 1] + 1, prima[j - 1] + (x != y)))
+        prima = ora
+    return prima[-1]
+
+
+# Le coppie che cambiano il senso con poche lettere: la lista non convergerebbe sul significato, ma queste si somigliano
+# abbastanza da passare per una storpiatura di Whisper (revisione della PR #393)
+_PREFISSI_NEGATIVI = ("in", "im", "ir", "il", "dis", "a", "an", "s", "non", "anti", "de")
+_OPPOSTI = (("iper", "ipo"), ("endo", "eso"), ("macro", "micro"), ("omo", "etero"), ("mono", "poli"), ("sopra", "sotto"),
+            ("pre", "post"), ("inter", "intra"), ("ana", "cata"))
+_CHIMICA = re.compile(r"^(?:solf|nitr|clor|carbon|fosf|oss|idross|idr|ferr|cupr|sod|potass|calc|magnes|ammon|acet|alcol|"
+                      r"brom|iod|fluor|zinc|manganes|cromat|permangan)")
+_FINALI_CHIMICI = re.compile(r"(?:ato|ati|ito|iti|uro|uri|oso|osa|osi|ico|ica|ici)$")
+_VOCALI = "aeiou"
+
+
+def _scambio(a: str, b: str) -> bool:
+    """`a` è diventata `b`, che le somiglia e vuol dire un'altra cosa: insolubile e solubile, ipotonico e ipertonico, solfato e
+    solfito. Non è una storpiatura, anche se la frase intorno torna."""
+    if a == b or a[:1].isdigit() or b[:1].isdigit() or len(a) < 4 or len(b) < 4:
+        return False
+    corta, lunga = (a, b) if len(a) < len(b) else (b, a)
+    if lunga.endswith(corta) and lunga[:len(lunga) - len(corta)] in _PREFISSI_NEGATIVI:
+        return True
+    if any((a.startswith(x) and b.startswith(y)) or (a.startswith(y) and b.startswith(x)) for x, y in _OPPOSTI):
+        return _distanza(a[2:], b[2:]) <= 3 or a[-5:] == b[-5:]
+    # Due composti dello stesso elemento: finale diverso, composto diverso
+    if _CHIMICA.match(a) and _CHIMICA.match(b) and a[:4] == b[:4] and _FINALI_CHIMICI.search(a) and _FINALI_CHIMICI.search(b):
+        return a[-3:] != b[-3:]
+    return False
 
 
 def _simile(a: str, b: str) -> bool:
-    """Whisper storpia i nomi («Kuiper», «cromosfera»): la stessa radice, o una lettera su cinque. Mai sui numeri."""
+    """Whisper storpia i nomi («Kuiper», «cromosfera», «Tordesillas»): al più una lettera, due da 9 in su, con la stessa
+    iniziale e la stessa fine; oppure l'ultima vocale («sole», «soli»). Mai sui numeri, le negazioni e gli scambi. La
+    radice in comune non basta più: faceva passare solfato per solfito (revisione della PR #393)."""
     if a == b:
         return True
-    if a[:1].isdigit() or b[:1].isdigit() or a in _NEGAZIONI or b in _NEGAZIONI:
+    if a[:1].isdigit() or b[:1].isdigit() or a in _NEGAZIONI or b in _NEGAZIONI or _ORDINALE(a) or _ORDINALE(b):
         return False
-    if len(a) >= 5 and len(b) >= 5 and a[:5] == b[:5]:
+    if len(a) < 5 or len(b) < 5 or _scambio(a, b):
+        return False
+    if a[0] != b[0] and {a[0], b[0]} != {"c", "k"}:
+        return False
+    if len(a) == len(b) and a[:-1] == b[:-1] and a[-1] in _VOCALI and b[-1] in _VOCALI:
         return True
-    return len(a) >= 5 and difflib.SequenceMatcher(None, a, b, autojunk=False).ratio() >= 0.8
+    return _distanza(a, b) <= (2 if min(len(a), len(b)) >= 9 else 1) and a[-2:] == b[-2:]
+
+
+def _ORDINALE(w: str) -> bool:
+    from . import riassunto_controllo as C
+    if not C._ORDINALI:
+        C._ordinali("primo")          # le tabelle si riempiono al primo uso
+    return w in C._ORDINALI
+
+
+_NOME = re.compile(r"(?<![\w])[A-ZÀ-Ý][a-zà-ÿ]{1,}")
+
+
+def _nome_simile(n: str, x: str) -> bool:
+    """Un nome storpiato da Whisper («Calicut», «Caligatto»): la stessa iniziale e gran parte delle lettere. Whisper non conosce
+    i nomi stranieri, e questo non deve far rifare un pezzo giusto; Colombo non è Magellano, Napoli non è Napoleone."""
+    if _simile(n, x):
+        return True
+    if len(n) < 5 or len(x) < 4 or n[0] != x[0] or _scambio(n, x):
+        return False
+    return difflib.SequenceMatcher(None, n, x, autojunk=False).ratio() >= 0.7
+
+
+def nomi_di(testo: str) -> set[str]:
+    """Le parole con la maiuscola di una frase, in forma confrontabile, senza le grammaticali in testa («Il»)."""
+    from . import riassunto_controllo as C
+    from . import unita as U
+    # «il Quattrocento» è un numero, «La Terza» un ordinale: hanno i loro controlli
+    return {n for n in (_norma(x) for x in _NOME.findall(str(testo or "")))
+            if n not in C._GRAMMATICA and U.parola_numero(n) is None and not _ORDINALE(n)}
 
 
 def confronta(battute: list[dict], trascritto: str) -> dict:
-    """{ok, frasi, sbagliate, numeri, numeri_persi, inventate, parole}: il copione di un pezzo contro ciò che si
-    sente. Una battuta con la fonte è a posto se si ritrovano abbastanza parole piene, tutti i numeri e la
-    negazione; i cenni e i titoli non contano (non affermano niente, e MOSS può mangiarne uno). Solo numeri: il
-    testo non esce di qui."""
+    """{ok, frasi, sbagliate, numeri, numeri_persi, inventate, parole}: il copione di un pezzo contro ciò che si sente. Una
+    battuta con la fonte è a posto se si ritrovano abbastanza parole piene e **tutte** quelle che da sole cambiano la frase: i
+    numeri col loro segno, le negazioni, gli ordinali, i nomi, le formule; e nessuna parola è diventata una che le somiglia e
+    vuol dire un'altra cosa. **I valori si guardano sul testo di prima della pulizia** (`testo`, non `detto`): una pulizia che
+    perde un segno non può dare ragione a sé stessa (revisione della PR #393). I cenni e i titoli non contano (non affermano
+    niente, e MOSS può mangiarne uno). Solo numeri e nomi di motivi: il testo non esce di qui."""
+    from . import riassunto_controllo as C
     att: list[str] = []
     dove: list[int] = []
     for i, b in enumerate(battute):
@@ -107,8 +194,10 @@ def confronta(battute: list[dict], trascritto: str) -> dict:
         att += w
         dove += [i] * len(w)
     sent = _parole(trascritto)
+    valori_sentiti = P.valori_di(trascritto)
     trovate = [False] * len(att)
     usate = [False] * len(sent)
+    scambiate = [False] * len(att)
     sm = difflib.SequenceMatcher(None, att, sent, autojunk=False)
     for op, i1, i2, j1, j2 in sm.get_opcodes():
         if op == "equal":
@@ -118,21 +207,38 @@ def confronta(battute: list[dict], trascritto: str) -> dict:
             # Le storpiature di Whisper: la parola simile nello stesso tratto
             for k in range(i1, i2):
                 for h in range(j1, j2):
-                    if not usate[h] and _simile(att[k], sent[h]):
+                    if usate[h]:
+                        continue
+                    if _simile(att[k], sent[h]):
                         trovate[k] = usate[h] = True
                         break
+                    if _scambio(att[k], sent[h]):
+                        scambiate[k] = True
+    testo_norma = _norma(trascritto)
+    restano = list(valori_sentiti)
+    sent_set = set(sent)
     frasi = []
     numeri = numeri_persi = 0
     for i, b in enumerate(battute):
         if b.get("tipo") != "frase":
             continue
         idx = [k for k, d in enumerate(dove) if d == i]
+        testo = b.get("testo") or b.get("detto") or ""
         piene = [k for k in idx if att[k] not in _VUOTE or att[k] in _NEGAZIONI]
-        nums = [k for k in idx if att[k][:1].isdigit()]
         negs = [k for k in idx if att[k] in _NEGAZIONI]
+        ordinali = [k for k in idx if _ORDINALE(att[k])]
+        # I nomi fra le parole sentite, non per posizione: sull'allineamento un nome ripetuto scattava a torto (il banco)
+        nomi_persi = [n for n in nomi_di(testo) if n not in sent_set and not any(_nome_simile(n, x) for x in sent_set)]
         copre = (sum(trovate[k] for k in piene) / len(piene)) if piene else 1.0
-        persi = sum(not trovate[k] for k in nums)
-        numeri += len(nums)
+        # I valori del testo scritto, col segno, fra quelli sentiti: mai da ciò che è passato dalla pulizia
+        attesi = P.valori_di(testo)
+        persi = 0
+        for v in attesi:
+            if v in restano:
+                restano.remove(v)
+            else:
+                persi += 1
+        numeri += len(attesi)
         numeri_persi += persi
         motivi = []
         if copre < SOGLIA_FRASE:
@@ -141,13 +247,34 @@ def confronta(battute: list[dict], trascritto: str) -> dict:
             motivi.append("numero")
         if any(not trovate[k] for k in negs):
             motivi.append("negazione")
+        if any(not trovate[k] for k in ordinali):
+            motivi.append("ordinale")
+        if nomi_persi:
+            motivi.append("nome")
+        if any(scambiate[k] for k in idx):
+            motivi.append("scambio")
+        for f in C._formule(testo):
+            from ..pronuncia import _formula_detta
+            d = _formula_detta(f) or ""
+            if _norma(f) not in re.sub(r"[^\w]", "", testo_norma) and _norma(d) not in testo_norma:
+                motivi.append("formula")
         frasi.append({"copre": round(copre, 3), "motivi": motivi})
     inventate = sum(not u for u in usate)
     sbagliate = sum(bool(f["motivi"]) for f in frasi)
-    troppe = bool(sent) and inventate / len(sent) > SOGLIA_INVENTATO
+    troppe = inventate > max(INVENTATE_POCHE, len(sent) * SOGLIA_INVENTATO)
     return {"ok": bool(frasi) and not sbagliate and not troppe, "frasi": frasi, "sbagliate": sbagliate,
             "numeri": numeri, "numeri_persi": numeri_persi, "inventate": inventate, "parole": len(att),
-            "sentite": len(sent), "copre": round(sum(f["copre"] for f in frasi) / max(1, len(frasi)), 3)}
+            "sentite": len(sent), "troppe": troppe,
+            "copre": round(sum(f["copre"] for f in frasi) / max(1, len(frasi)), 3)}
+
+
+def ha_voce(wav_byte: bytes) -> bool:
+    """C'è qualcosa da sentire? Un audio muto non è colpa di Whisper."""
+    import array
+    pcm, _r = pcm_e_rate(wav_byte)
+    a = array.array("h")
+    a.frombytes(pcm[: len(pcm) // 2 * 2])
+    return bool(a) and max(abs(x) for x in a[:: max(1, len(a) // 20000)]) > 300
 
 
 # ─────────────────────────── i WAV ───────────────────────────
@@ -274,6 +401,17 @@ class Preparatore:
             return motivo
         return self.sessione(per[0])
 
+    def _motore_pronto(self, d: dict):
+        """Il motore e i suoi file, **prima** di fermare vLLM: senza MOSS sul disco, o con un file che non torna, non si
+        tocca niente (revisione della PR #393: era uno stop e uno start a ogni ora). (motore, motivo)."""
+        try:
+            motore = self.crea_motore(self._cede)
+            f = getattr(motore, "pronto_su_disco", None)
+            male = f() if callable(f) else []
+        except Exception as e:  # noqa: BLE001 — anche i riferimenti che non si generano
+            return None, f"motore_{type(e).__name__}"
+        return motore, ("motore_non_pronto" if male else None)
+
     def motivo(self) -> str | None:
         """Perché adesso non si parte; None se si può fermare vLLM."""
         cfg = self.cfg
@@ -346,24 +484,37 @@ class Preparatore:
         """Un podcast, una finestra: vLLM fermo, i pezzi che mancano, vLLM di nuovo in piedi. Sempre."""
         cfg = self.cfg
         vid, firma = d["id"], d["firma"]
-        c = self._cartella(vid)
-        st = self._stato(c, firma)
-        self.in_sessione = True
         self._d = d
         self._ancora = (0.0, True)
         self._fine = self.orologio() + float(getattr(cfg, "studio_podcast_tetto_min", 60) or 60) * 60
-        fine, motore = "finito", None
+        motore, male = self._motore_pronto(d)
+        if male:
+            self.log(f"   [STUDIO] podcast: {male}, vLLM non si tocca (`calliope motore moss verifica`)")
+            self._riprova_dopo = self.orologio() + PAUSA_DOPO_GUASTO_S
+            self._d = None
+            return male
+        # La finestra fra `motivo` e il fermo: prima si dice a tutti che il motore si ferma, poi si riguarda. Un lavoro entrato
+        # prima di qui è fra i vivi; uno che entra dopo vede `in_ripresa` e aspetta (revisione della PR #393)
+        self.ripresa.prenota({"verifica": vid})
+        no = self._cede() or ("vllm_occupato" if self.vllm_libero() else None)
+        if no:
+            self.ripresa.disdici()
+            self._d = None
+            return no
+        c = self._cartella(vid)
+        st = self._stato(c, firma)
+        self.in_sessione = True
+        fine = "finito"
         m = self.misure
         m["sessioni"] += 1
         st["sessioni"] = int(st.get("sessioni") or 0) + 1
         conti = {"verifica": vid, "carico_s": None, "pezzi_fatti": 0, "rigenerati": 0}
         self.log(f"   [STUDIO] podcast della verifica {vid}: fermo vLLM ({len(d['pezzi'])} pezzi)")
         try:
-            self.ripresa.ferma({"verifica": vid})
+            self.ripresa.ferma_ora()
             motivo = self._aspetta_memoria()
             if motivo:
                 raise Ceduto(motivo)
-            motore = self.crea_motore(self._cede)
             motore.avvia()
             conti["carico_s"] = getattr(motore, "carico_s", None)
             for p in d["pezzi"]:
@@ -378,21 +529,23 @@ class Preparatore:
             fine = f"errore_{type(e).__name__}"
             self._riprova_dopo = self.orologio() + PAUSA_DOPO_GUASTO_S
         finally:
-            if motore is not None:
-                try:
-                    motore.ferma()
-                except Exception as e:  # noqa: BLE001
-                    self.log(f"   [STUDIO] container di MOSS non tolto: {type(e).__name__}")
-            ripartito = False
             try:
-                ripartito = self.ripresa.riparti()
+                motore.ferma()
+            except Exception as e:  # noqa: BLE001 — lo vede `riparti`, che prova ancora
+                self.log(f"   [STUDIO] container di MOSS non tolto: {type(e).__name__}")
+            try:
+                self.ripresa.riparti()
             except Exception as e:  # noqa: BLE001 — `passo` riprova
                 self.log(f"   [STUDIO] vLLM non ripartito: {type(e).__name__}")
+            ripartito = bool(self.ripresa.ripartito)
             self.in_sessione = False
             self._d = None
             fermo = self.ripresa.ultimo_fermo_s or 0.0
             st["fermo_s"] = round(float(st.get("fermo_s") or 0) + fermo, 1)
-            self._salva(c, firma, st)
+            try:
+                self._salva(c, firma, st)
+            except OSError as e:     # la verifica tolta intanto: la cartella non c'è più, e il resto va fatto lo stesso
+                self.log(f"   [STUDIO] stato del podcast non scritto: {type(e).__name__}")
             m["fermo_s"] = round(m["fermo_s"] + fermo, 1)
             m["ultima"] = {**conti, "fine": fine, "fermo_s": fermo, "ripartito": ripartito,
                            "differenze": list(self.ripresa.ultime_differenze)}
@@ -404,7 +557,8 @@ class Preparatore:
                     self.dopo_sessione()
                 except Exception as e:  # noqa: BLE001
                     self.log(f"   [STUDIO] riscaldamento dopo il podcast: {type(e).__name__}")
-        if fine == "tetto":
+        # Senza un'attesa `memoria_bassa` era uno stop e uno start a ogni giro (revisione della PR #393)
+        if fine in ("tetto", "memoria_bassa", "memoria_insufficiente"):
             self._riprova_dopo = self.orologio() + PAUSA_FRA_SESSIONI_S
         if fine == "finito":
             self._finisci(d, c, st)
@@ -456,9 +610,20 @@ class Preparatore:
             if m:
                 raise Ceduto(m)      # il pezzo fatto resta: la sessione dopo lo controlla senza rifarlo
             testo = self.ritrascrivi(wav)
+            if not testo.strip() and ha_voce(wav):
+                # L'audio c'è e Whisper non ha sentito niente: è un guasto suo, non un pezzo sbagliato. Una volta adesso, poi
+                # alla sessione dopo; solo se continua vale un no (revisione della PR #393)
+                self.dorme(5.0)
+                testo = self.ritrascrivi(wav)
+                if not testo.strip():
+                    x["vuoti"] = int(x.get("vuoti") or 0) + 1
+                    self._salva(c, firma, st)
+                    if x["vuoti"] <= VUOTI_MAX:
+                        raise Guasto("whisper_vuoto")
             e = confronta(p["battute"], testo)
             x["confronto"] = {k: e[k] for k in ("ok", "sbagliate", "numeri", "numeri_persi", "inventate", "parole",
                                                 "sentite", "copre")}
+            x["confronto"]["motivi"] = sorted({mo for f in e["frasi"] for mo in f["motivi"]})
             if e["ok"]:
                 os.replace(prova, file_ok)
                 x["stato"] = "ok"
@@ -487,14 +652,16 @@ class Preparatore:
                  "frasi": sum(b["tipo"] == "frase" for p in pezzi for b in p["battute"]),
                  "frasi_a_due_voci": sum(b["tipo"] == "frase" for p in pezzi for b in p["battute"]
                                          if st["pezzi"][str(p["n"])]["stato"] == "ok")}
+        conti["pezzi_esito"] = [{"n": p["n"], "stato": st["pezzi"][str(p["n"])]["stato"],
+                                 "tentativi": st["pezzi"][str(p["n"])].get("tentativi"),
+                                 "motivi": (st["pezzi"][str(p["n"])].get("confronto") or {}).get("motivi")} for p in pezzi]
         conti["copre"] = _media([(x.get("confronto") or {}).get("copre") for x in st["pezzi"].values()
                                  if x.get("stato") == "ok"])
         if a_una / max(1, len(pezzi)) > UNA_VOCE_MAX:
             self.studio.podcast_audio_finito(vid, firma, {"esito": "scarso", "firma": firma, "parti": [], "conti": conti})
             self.studio._togli_audio_podcast(vid)
             self.misure["scarsi"] += 1
-            self.log(f"   [STUDIO] podcast della verifica {vid}: {a_una} pezzi su {len(pezzi)} non tornano, resta il "
-                     "riassunto")
+            self.log(f"   [STUDIO] podcast della verifica {vid}: {a_una} pezzi su {len(pezzi)} non tornano, niente podcast")
             return
         try:
             parti = self._componi(d, c, st)

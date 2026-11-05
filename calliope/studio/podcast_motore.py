@@ -6,9 +6,15 @@ modelli in questo processo: solo `docker` e file.
 `rate`; un altro motore si mette al suo posto cambiando solo chi lo crea (principio 2). Gira in un container con
 `--network none`, `--cap-drop ALL`, radice in sola lettura, pesi e codice montati in sola lettura e una sola
 cartella scrivibile, che dopo la sessione si svuota: MOSS chiede `trust_remote_code`, e quel codice non deve poter
-uscire né cambiare i suoi file. Pesi e codice sono fissati per hash (`setup/linux/motore/moss.sha256`): i `.py` e la
-configurazione si ricontrollano a ogni sessione, i pesi per dimensione (l'hash intero lo fa `calliope motore moss
-verifica`, una volta all'installazione). Non si scarica niente a ogni avvio.
+uscire né cambiare i suoi file. **Tutto ciò che viene eseguito è fissato per hash** (`setup/linux/motore/moss.sha256`,
+`controlla_file`): i pesi e il loro codice, il `generation_utils.py`, l'ambiente intero (`venv/moss`, un'impronta sola
+dell'albero, collegamenti compresi), l'immagine; **un file in più è un file che non torna**: un `numpy.py` accanto a
+`generation_utils.py` verrebbe importato al posto di quello vero. A ogni sessione tutto meno l'hash dei pesi, che non si
+eseguono e si guardano per dimensione (l'hash intero lo fa `calliope motore moss verifica`). I `.pyc` non si leggono dalla
+cartella: `PYTHONPYCACHEPREFIX` nel container. Non si scarica niente a ogni avvio.
+
+Si lancia anche da solo (`python3 podcast_motore.py verifica|elenco|pota DIR`): è ciò che usa `moss.sh`, col python3 di
+sistema e senza il resto di Calliope.
 
 **`ControlloVllm`** ferma vLLM con `docker stop` e lo riparte con `docker start`, cioè lo stesso container: argomenti,
 ambiente, porte, rete, politica di riavvio e la modalità sviluppo (`VLLM_SERVER_DEV_MODE`, la pausa dell'arbitro)
@@ -69,6 +75,9 @@ def _esegui(argv: list[str], timeout: float = 60.0) -> subprocess.CompletedProce
     return subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False)
 
 
+ALBERI = ("venv/moss",)      # un'impronta sola: migliaia di file che si controllano insieme
+
+
 # ─────────────────────────── vLLM ───────────────────────────
 def impostazioni_di(inspect: dict) -> dict:
     """Ciò che deve restare uguale dopo il riavvio, da `docker inspect`: mai l'ora, lo stato o l'indirizzo IP."""
@@ -99,6 +108,7 @@ class ControlloVllm:
         self.chiedi = chiedi or self._chiedi_http
         self.dorme = dorme
         self.orologio = orologio
+        self.sparito = False       # il container non c'è più: inutile aspettarlo
 
     def _chiedi_http(self, percorso: str) -> dict | None:
         """GET: il JSON, {} se la risposta non è JSON, None se non risponde."""
@@ -143,9 +153,14 @@ class ControlloVllm:
         return p is None or not p.get("is_paused")
 
     def riavvia(self, tetto_s: float = RIPARTE_MAX_S) -> bool:
-        """`docker start` (se è già acceso non fa niente) e l'attesa che risponda, entro `tetto_s`."""
+        """`docker start` (se è già acceso non fa niente) e l'attesa che risponda, entro `tetto_s`. Un container che non
+        c'è più non si aspetta: `sparito`."""
+        self.sparito = False
         try:
-            self.esegui(["docker", "start", self.container], timeout=60)
+            r = self.esegui(["docker", "start", self.container], timeout=60)
+            if r.returncode != 0 and self._inspect() is None:
+                self.sparito = True
+                return False
         except (OSError, subprocess.SubprocessError):
             return False
         fine = self.orologio() + tetto_s
@@ -191,24 +206,54 @@ class Ripresa:
         return True
 
     # ── la sessione ──
-    def ferma(self, info: dict) -> dict | None:
-        """Scrive il segno e ferma vLLM. Il segno prima: se si cade fra i due, all'avvio `docker start` non fa
-        niente. Le impostazioni di adesso, per il confronto."""
+    def prenota(self, info: dict) -> None:
+        """Da qui chi ha bisogno di vLLM aspetta: il segno su disco e `in_ripresa`, prima di fermare e prima dell'ultimo
+        controllo di chi ferma. Le impostazioni di adesso, per il confronto."""
         prima = self.vllm.impostazioni()
-        self._t0, self._prima = self.orologio(), prima
+        self._prima = prima
         self._fermo.set()
         self._scrivi({**info, "quando": time.time(), "prima": prima})
+
+    def disdici(self) -> None:
+        """Non si ferma più: niente è stato toccato."""
+        self._togli_segno()
+        self._fermo.clear()
+        self._prima = None
+
+    def ferma_ora(self) -> None:
+        self._t0 = self.orologio()
         self.vllm.ferma()
-        return prima
+
+    def ferma(self, info: dict) -> dict | None:
+        """Scrive il segno e ferma vLLM. Il segno prima: se si cade fra i due, all'avvio `docker start` non fa
+        niente."""
+        self.prenota(info)
+        self.ferma_ora()
+        return self._prima
 
     def riparti(self) -> bool:
-        """Sempre, con o senza errori: vLLM di nuovo in piedi, non in pausa, con le stesse impostazioni. Il segno va
-        via solo se è vero; altrimenti il prossimo `controlla` riprova, e all'avvio anche."""
+        """Sempre, con o senza errori: MOSS via, vLLM di nuovo in piedi, non in pausa, con le stesse impostazioni. Il segno va
+        via solo se è vero; altrimenti il prossimo `controlla` riprova, e all'avvio anche. **MOSS ancora vivo: vLLM non
+        parte**, non ci starebbero insieme (24,7 GB e 48). Se il container di vLLM non c'è più non si aspetta niente: si
+        dice, e chi vuole un lavoro trova il guasto vero invece di aspettare 15 minuti."""
         with self._lock:
+            self.ripartito = False
+            try:
+                self.togli_motore()
+            except Exception as e:  # noqa: BLE001
+                self.log(f"   [STUDIO] MOSS ancora vivo ({e}): vLLM non riparte finché non è tolto")
+                return False
             prima = self._prima
             if prima is None:
                 prima = self._leggi().get("prima")
             ok = self.vllm.riavvia(self.tetto_s)
+            if self.vllm.sparito:
+                self.ultime_differenze = ["container"]
+                self.log("   [STUDIO] il container di vLLM non c'è più: `PAUSA=1 calliope motore vllm agente avvia`")
+                self._togli_segno()
+                self._fermo.clear()
+                self._t0, self._prima = None, None
+                return True
             pausa_ok = ok and self.vllm.non_in_pausa()
             self.ultime_differenze = differenze(prima, self.vllm.impostazioni()) if ok else []
             if self._t0 is not None:
@@ -234,10 +279,6 @@ class Ripresa:
             return True
         self._fermo.set()
         self.log("   [STUDIO] podcast caduto a metà: riparto vLLM")
-        try:
-            self.togli_motore()
-        except Exception as e:  # noqa: BLE001 — vLLM riparte lo stesso
-            self.log(f"   [STUDIO] container di MOSS non tolto: {type(e).__name__}")
         try:
             self.pulisci()
         except Exception:  # noqa: BLE001
@@ -293,30 +334,123 @@ class Ripresa:
 
 # ─────────────────────────── MOSS ───────────────────────────
 def togli_container(esegui=_esegui, nome: str = CONTAINER_MOSS) -> None:
-    """Solo il nostro container, per il suo nome esatto."""
+    """Solo il nostro container, per il suo nome esatto. Se resta, `Guasto`: ignorarlo lascerebbe MOSS accanto a vLLM."""
     esegui(["docker", "rm", "-f", nome], timeout=60)
+    if esegui(["docker", "inspect", "-f", "{{.State.Running}}", nome]).returncode == 0:
+        raise Guasto("moss_non_tolto")
+
+
+def _sha(p: Path) -> str:
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        while True:
+            b = f.read(1 << 22)
+            if not b:
+                return h.hexdigest()
+            h.update(b)
+
+
+def _file_sotto(radice: Path):
+    """Tutti i file e i collegamenti simbolici sotto `radice`, in ordine, senza seguire i collegamenti. (percorso, rel)."""
+    for d, nomi_d, nomi_f in os.walk(radice, followlinks=False):
+        nomi_d.sort()
+        for n in sorted(nomi_f + [x for x in nomi_d if os.path.islink(os.path.join(d, x))]):
+            p = Path(d) / n
+            yield p, p.relative_to(radice).as_posix()
+
+
+def impronta_albero(radice: Path, rel: str) -> tuple[str, int]:
+    """(un'impronta, quanti file) di un albero: percorsi, contenuti e destinazioni dei collegamenti. L'ora no."""
+    h = hashlib.sha256()
+    n = 0
+    base = Path(radice) / rel
+    for p, r in sorted(_file_sotto(base), key=lambda x: x[1]):
+        v = ("L:" + os.readlink(p)) if p.is_symlink() else _sha(p)
+        h.update(f"{r}\0{v}\n".encode())
+        n += 1
+    return h.hexdigest(), n
+
+
+def leggi_elenco(elenco: Path) -> dict:
+    """{immagine, file: {rel: (sha, byte)}, alberi: {rel: (impronta, n)}}."""
+    out: dict = {"immagine": None, "file": {}, "alberi": {}}
+    for riga in Path(elenco).read_text(encoding="utf-8").splitlines():
+        if not riga.strip() or riga.startswith("#"):
+            continue
+        a, b, *resto = riga.split(None, 2)
+        if a == "immagine":
+            out["immagine"] = b
+        elif a == "albero":
+            n, rel = resto[0].split(None, 1)
+            out["alberi"][rel] = (b, int(n))
+        else:
+            out["file"][resto[0]] = (a, int(b))
+    return out
 
 
 def controlla_file(radice: Path, elenco: Path, tutti: bool = False) -> list[str]:
-    """I file diversi dall'elenco `sha256  dimensione  percorso`: i nomi, mai il resto. Con `tutti` anche l'hash dei
-    pesi (minuti); di serie i pesi solo per dimensione."""
+    """Ciò che non torna con l'elenco, i nomi soltanto: un file diverso, uno che manca, **uno in più**, un collegamento
+    simbolico fuori dagli alberi. Con `tutti` anche l'hash dei pesi (minuti); di serie i pesi solo per dimensione, perché non
+    si eseguono."""
+    radice = Path(radice)
+    e = leggi_elenco(elenco)
     male = []
-    for riga in elenco.read_text(encoding="utf-8").splitlines():
-        if not riga.strip() or riga.startswith("#"):
-            continue
-        atteso, dim, rel = riga.split(None, 2)
+    for rel, (atteso, dim) in e["file"].items():
         f = radice / rel
         try:
-            if f.stat().st_size != int(dim):
+            if f.is_symlink() or f.stat().st_size != dim:
                 male.append(rel)
-                continue
-            if rel.endswith(".safetensors") and not tutti:
-                continue
-            if hashlib.sha256(f.read_bytes()).hexdigest() != atteso:
+            elif (tutti or not rel.endswith(".safetensors")) and _sha(f) != atteso:
                 male.append(rel)
         except OSError:
             male.append(rel)
+    for rel, (imp, n) in e["alberi"].items():
+        if impronta_albero(radice, rel) != (imp, n):
+            male.append(rel)
+    if radice.is_dir():
+        for p, r in _file_sotto(radice):
+            if not any(r.startswith(a + "/") for a in e["alberi"]) and r not in e["file"]:
+                male.append(f"in più: {r}")
     return male
+
+
+def pota(radice: Path) -> None:
+    """Ciò che non serve e non si esegue, su una copia appena fatta: le cache di `hf` e di Python, i testi, e di
+    MOSS-TTSD solo `generation_utils.py` e la licenza (i campioni di voce del progetto non restano nemmeno sul disco). Una
+    regola fissa, non l'elenco: un file estraneo resta, e la verifica lo rifiuta."""
+    import shutil as _sh
+    radice = Path(radice)
+    for d, nomi_d, _f in os.walk(radice):
+        for n in list(nomi_d):
+            if n in ("__pycache__", ".cache", ".git"):
+                _sh.rmtree(os.path.join(d, n), ignore_errors=True)
+                nomi_d.remove(n)
+    for d in ("pesi/moss-ttsd", "pesi/moss-tokenizer"):
+        for n in ("README.md", ".gitattributes"):
+            try:
+                (radice / d / n).unlink()
+            except OSError:
+                pass
+    src = radice / "src" / "MOSS-TTSD"
+    if src.is_dir():
+        for p in list(src.iterdir()):
+            if p.name not in ("generation_utils.py", "LICENSE"):
+                _sh.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink()
+
+
+def scrivi_elenco(radice: Path, elenco: Path, testa: str = "", immagine: str = "") -> int:
+    radice = Path(radice)
+    righe = [f"# {testa}".rstrip(), "# sha256, byte, percorso; «albero»: un'impronta sola; «immagine»: l'Id di Docker."]
+    if immagine:
+        righe.append(f"immagine {immagine}")
+    for a in ALBERI:
+        imp, n = impronta_albero(radice, a)
+        righe.append(f"albero {imp} {n} {a}")
+    file = [(p, r) for p, r in _file_sotto(radice) if not any(r.startswith(a + "/") for a in ALBERI)]
+    for p, r in sorted(file, key=lambda x: x[1]):
+        righe.append(f"{_sha(p)} {p.stat().st_size} {r}")
+    Path(elenco).write_text("\n".join(righe) + "\n", encoding="utf-8")
+    return len(file)
 
 
 def elenco_hash() -> Path:
@@ -335,7 +469,7 @@ def argomenti_docker(radice: Path, lavoro: Path, script: Path, uid: int, gid: in
             "--memory", MEMORIA_CONTAINER, "--memory-swap", MEMORIA_CONTAINER, "--pids-limit", "512",
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only",
             "--tmpfs", "/tmp:rw,exec,size=2g,mode=1777", "--user", f"{uid}:{gid}",
-            "-e", "HOME=/tmp", "-e", "HF_HOME=/tmp/hf", "-e", "HF_HUB_OFFLINE=1", "-e", "TRANSFORMERS_OFFLINE=1",
+            "-e", "PYTHONPYCACHEPREFIX=/tmp/pyc", "-e", "PYTHONNOUSERSITE=1", "-e", "HOME=/tmp", "-e", "HF_HOME=/tmp/hf", "-e", "HF_HUB_OFFLINE=1", "-e", "TRANSFORMERS_OFFLINE=1",
             "-e", "NUMBA_CACHE_DIR=/tmp", "-e", "MPLCONFIGDIR=/tmp", "-e", "TMPDIR=/tmp",
             "-v", f"{radice}:/pv:ro", "-v", f"{lavoro}:/lavoro", "-v", f"{script}:/moss_lavoro.py:ro",
             "--workdir", "/tmp", "--entrypoint", "/pv/venv/moss/bin/python", immagine, "/moss_lavoro.py"]
@@ -366,11 +500,16 @@ class MotoreMoss:
         self._n = 0
 
     def pronto_su_disco(self) -> list[str]:
-        """I file che non tornano con l'elenco fissato (vuoto: si può partire). Senza elenco, tutto."""
+        """Ciò che non torna con l'elenco fissato (vuoto: si può partire), immagine compresa. Senza elenco, tutto."""
         e = elenco_hash()
         if not e.is_file():
             return ["elenco"]
-        return controlla_file(self.radice, e)
+        male = controlla_file(self.radice, e)
+        attesa = leggi_elenco(e)["immagine"]
+        r = self.esegui(["docker", "image", "inspect", "--format", "{{.Id}}", IMMAGINE])
+        if attesa and (r.returncode != 0 or r.stdout.strip() != attesa):
+            male.append("immagine")
+        return male
 
     def _vivo(self) -> bool:
         r = self.esegui(["docker", "inspect", "-f", "{{.State.Running}}", self.nome])
@@ -459,3 +598,21 @@ def memoria_disponibile_mb() -> int | None:
     except (OSError, ValueError, IndexError):
         pass
     return None
+
+
+if __name__ == "__main__":
+    import sys
+    azione, cartella = sys.argv[1], Path(sys.argv[2]).expanduser()
+    if azione == "verifica":
+        no = controlla_file(cartella, elenco_hash(), tutti=True)
+        for x in no:
+            print("NON TORNA ", x)
+        print("Non torna: il podcast non parte." if no else "Tutto come in moss.sha256.")
+        sys.exit(1 if no else 0)
+    if azione == "pota":
+        pota(cartella)
+    elif azione == "elenco":
+        print(scrivi_elenco(cartella, elenco_hash(), sys.argv[3] if len(sys.argv) > 3 else "", sys.argv[4] if len(sys.argv) > 4 else ""),
+              "file e", len(ALBERI), "albero")
+    else:
+        sys.exit(f"azione sconosciuta: {azione}")
