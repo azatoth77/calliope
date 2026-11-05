@@ -25,6 +25,9 @@
 
 *Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al 06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
+- **vLLM fermo per il podcast dello Studio** (04/11, #387, `Lavori.attesa_motore`, [studio](studio.md)): a macchina libera il podcast
+  ferma vLLM con `docker stop`. Un lavoro chiesto intanto non trova un guasto: `verifica` dice «ok, non caricato», proposta e avvio
+  dicono «circa quattro minuti», `_esegui` aspetta (`Ripresa.attendi`, si annulla) e la scheda lo scrive.
 - **Arbitro con vLLM sulla stessa GPU** (04/10, `arbitro.py`, prova `prova_arbitro_vllm.py`,
   misura `prove/misura_arbitro_vllm.py`): sulla DGX la voce (Ollama) e l'agente (vLLM) hanno la
   stessa GPU, ma l'arbitro fermava solo un agente sullo stesso Ollama. Ora vale con

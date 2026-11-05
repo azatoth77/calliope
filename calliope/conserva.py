@@ -735,7 +735,7 @@ TABELLE_STUDIO = ("studio_verifiche", "studio_materiali", "studio_pagine", "stud
                   "studio_prove", "studio_indicazioni", "studio_stelle", "studio_premi",
                   "studio_duelli", "studio_pratica", "studio_importazioni",
                   "studio_esercizi",
-                  "studio_preparazioni", "studio_riassunti")
+                  "studio_preparazioni", "studio_riassunti", "studio_podcast")
 # Le preferenze che non scadono col tempo ma vanno via con i dati della persona (27/10):
 # (tabella, colonna della persona). L'accento scelto in Io › Aspetto (schermi/aspetto.py)
 TABELLE_PREFERENZE = (("aspetto_preferenze", "persona"),)

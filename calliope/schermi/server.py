@@ -2379,9 +2379,9 @@ def crea_app(hub: Schermi) -> Starlette:
             return _json({"errore": "richiesta non valida"}, 400)
         parte, firma = dati.get("parte"), dati.get("firma")
         fonte = dati.get("fonte")
-        if fonte not in (None, "riassunto", "pagine"):
+        if fonte not in (None, "riassunto", "pagine", "podcast"):
             return _json({"errore": "richiesta non valida"}, 400)
-        fonte = "pagine" if fonte == "pagine" else None
+        fonte = fonte if fonte in ("pagine", "podcast") else None
         if azione == "audio" and (not _intero(parte) or not 1 <= parte <= 500 or (
                 firma is not None and (not isinstance(firma, str) or len(firma) > 32))):
             return _json({"errore": "richiesta non valida"}, 400)

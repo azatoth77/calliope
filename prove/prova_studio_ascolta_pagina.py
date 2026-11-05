@@ -189,6 +189,68 @@ def scenario_pc(t, stanza):
     B.foto(t, "studio-ascolta-pc.png")
 
 
+def finche(t, sel, cond, volte=4):
+    """Tocca e aspetta; sotto carico il tocco può cadere su un nodo appena ridisegnato: si riprova, se il tasto c'è ancora."""
+    for _i in range(volte):
+        if t.v(f"!!document.querySelector({json.dumps(sel)})"):
+            t.tocca(sel)
+        ok = aspetta(cond, 6)
+        if ok:
+            return ok
+    return False
+
+
+def scenario_podcast(t, st, vid):
+    """Il podcast (04/11, #387): il tasto accanto al riassunto, la frase in testa, le parti già pronte."""
+    import wave
+    from calliope.studio import podcast as PO
+    from calliope.studio import ascolta as A
+    st.cfg.studio_podcast = "attiva"
+    firma = st._firma_podcast(vid)
+    c = PO.cartella_podcast(st.cfg, vid)
+    c.mkdir(parents=True, exist_ok=True)
+    parti = []
+    for n in (1, 2):
+        with wave.open(str(c / A.nome_file(firma, n)), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(24000)
+            w.writeframes(b"".join(int(3000 * math.sin(i / 8)).to_bytes(2, "little", signed=True) for i in range(72000)))
+        parti.append({"n": n, "secondi": 3.0, "intro_s": 1.0, "una_voce": n == 2, "argomenti": [], "frasi": 2})
+    st.dati.scrivi("INSERT OR REPLACE INTO studio_podcast (verifica, persona, firma, esito, quando, contenuto, conti, audio) "
+                   "VALUES (?, 'l1', ?, 'pronto', '2026-11-04T22:00:00', ?, '{}', ?)",
+                   (vid, firma, json.dumps({"sezioni": [], "pezzi": [{"n": 1, "battute": [], "moss": "", "argomenti": []}]}),
+                    json.dumps({"esito": "pronto", "firma": firma, "parti": parti, "conti": {}})))
+    t.tocca('.studio-h-ascolta button[data-ascolta="chiudi"]')
+    aspetta(lambda: t.v("!!document.querySelector('.studio-h-ascolta button[data-ascolta=\"apri\"]')"), 6)
+    t.tocca('.studio-h-ascolta button[data-ascolta="apri"]')
+    sel = '.studio-h-ascolta button[data-ascolta="fonte"][data-dati*="podcast"]'
+    verifica("il tasto del podcast", bool(aspetta(lambda: t.v(f"!!document.querySelector({json.dumps(sel)})"), 8)), testo(t)[:300])
+    t.tocca(sel)
+    ok = aspetta(lambda: "due voci" in testo(t) and t.v("document.querySelectorAll('.studio-a-parte').length") == 2, 8)
+    verifica("la frase in testa e le sue parti", bool(ok) and "Podcast" in testo(t), testo(t)[:300])
+    verifica("il pezzo a una voce si dice", "a una voce" in testo(t), testo(t)[:300])
+    t.tocca('.studio-h-ascolta .studio-a .studio-h-primo[data-ascolta="parte"]')
+    verifica("il podcast suona, senza sintesi a richiesta", bool(suona(t)), stato(t))
+    # Sotto carico (l'hook) la pagina si ridisegna fra un tocco e l'altro: si tocca a pagina ferma, e si riprova
+    t.tocca('.studio-h-ascolta button[data-ascolta="pausa"]')
+    aspetta(lambda: not (stato(t) or {}).get("suona"), 8)
+    verifica("si torna indietro", bool(finche(t, '.studio-h-ascolta button[data-ascolta="fonte"]',
+                                              lambda: "due voci" not in testo(t))), testo(t)[:300])
+    # Revisione della PR #393, punto 3: il podcast va via a pagina aperta, e la pagina non resta ferma
+    finche(t, sel, lambda: "due voci" in testo(t))
+    st.dati.scrivi("DELETE FROM studio_podcast WHERE verifica = ?", (vid,))
+    ok = finche(t, '.studio-h-ascolta .studio-a .studio-h-primo[data-ascolta="parte"]',
+                lambda: "due voci" not in testo(t) and not t.v(f"!!document.querySelector({json.dumps(sel)})"))
+    verifica("il podcast sparito a pagina aperta: si torna a ciò che c'è", bool(ok), testo(t)[:300])
+    verifica("…`fonte` non resta «podcast»", (stato(t) or {}).get("fonte") != "podcast", stato(t))
+    verifica("…e «Ascolta» suona", bool(finche(t, '.studio-h-ascolta .studio-a .studio-h-primo[data-ascolta="parte"]',
+                                               lambda: (stato(t) or {}).get("suona"))), stato(t))
+    t.tocca('.studio-h-ascolta button[data-ascolta="pausa"]')
+    st.inizia_prova(LEO, vid)
+    verifica("una prova aperta lo vieta", st.ascolto_parti(LEO, vid, "podcast")["prova"])
+
+
 def main() -> int:
     import prova_telefono_pagina as PTP
     import prova_telefono_schermo as PTS
@@ -249,6 +311,7 @@ def main() -> int:
         try:
             pc._chiama("DOM.enable")
             scenario_pc(tp, stanza)
+            scenario_podcast(tp, st, vid)
             pc.pompa(0.3)
             errori = [r for r in pc.log if r.startswith(("ECCEZIONE", "ERROR")) or "Content Security" in r]
             verifica("PC: nessun errore JavaScript né violazione della CSP", not errori, "; ".join(errori)[:300])

@@ -98,6 +98,7 @@ CASI = {
     "studio_preparazione": ("attiva", " Attiva ", ("attivo", "attiva"), ["accesa", "sì", "prepara"]),
     # Il riassunto da ascoltare (04/11, #386)
     "studio_riassunto": ("attiva", " Attiva ", ("spento", "spenta"), ["accesa", "sì", "riassunto"]),
+    "studio_podcast": ("attiva", " Attiva ", ("spento", "spenta"), ["accesa", "sì", "podcast"]),
     "agenti_arbitro": ("mai", " MAI ", None, ["acceso", "talvolta"]),
     "agenti_sandbox_motore": ("processo", "Docker", None, ["acceso", "sì", "podman"]),
     "agenti_livello": ("amministra", "Amministra", None,

@@ -575,9 +575,22 @@ class Lavori:
                          "quando": time.monotonic(), **extra}
         return self.diagnosi
 
+    # Il podcast dello Studio ferma vLLM a macchina libera (#387, `podcast_motore.Ripresa`): chi chiede un lavoro
+    # intanto non trova un guasto, aspetta che riparta e lo sente dire. Lo mette main.py
+    attesa_motore = None
+
+    def motore_in_ripresa(self) -> bool:
+        r = self.attesa_motore
+        try:
+            return bool(r is not None and r.in_ripresa())
+        except Exception:  # noqa: BLE001 — un controllo in più non ferma i lavori
+            return False
+
     def verifica(self) -> dict:
         """Apre il tunnel se serve, chiede versione e modelli. Blocca (fino al tempo massimo
         del collegamento): mai dal thread della voce."""
+        if self.motore_in_ripresa():
+            return self._diag("ok", "attiva", "", "", caricato=False, in_ripresa=True)
         with self._verifica_lock:
             imp = self.imp
             if self.tunnel is not None:
@@ -1016,7 +1029,9 @@ class Lavori:
         dopo = APPROVAZIONE if lav.tipo == "estensione" else ""
         att = self.attivi()
         coda = f"; prima devo finire «{att[0].titolo}»" if att else ""
-        carico = ("; prima devo caricare il modello, ci vuole un minuto in più"
+        carico = ("; il motore dell'agente sta ripartendo, ci vogliono circa quattro minuti"
+                  if self.motore_in_ripresa() else
+                  "; prima devo caricare il modello, ci vuole un minuto in più"
                   if self.diagnosi.get("caricato") is False else "")
         # La specifica raffinata dall'analisi della richiesta (06/10): la persona sente cosa
         # si farà davvero prima del «sì»
@@ -1098,6 +1113,8 @@ class Lavori:
         self._salva_stato()
         if att:
             return frasi.scegli("lavori.in_coda", titolo=att[0].titolo)
+        if self.motore_in_ripresa():     # il podcast dello Studio aveva fermato vLLM (#387)
+            return frasi.scegli("lavori.avviato") + " Il motore dell'agente sta ripartendo: comincio fra circa quattro minuti."
         return frasi.scegli("lavori.avviato")     # catalogo delle frasi pronte (12/10)
 
     def stato(self, persona=None, tutti: bool = False) -> str:
@@ -1255,9 +1272,17 @@ class Lavori:
                 self._sandbox = None
                 self._salva_stato()
 
+    def _aspetta_motore(self, lav: Lavoro):
+        """Il motore sta ripartendo (#387): il lavoro aspetta, e la scheda e `lavoro_stato` lo dicono."""
+        if self.motore_in_ripresa():
+            lav.passo = "aspetta il motore dell'agente, che riparte in circa quattro minuti"
+            self.attesa_motore.attendi(annullato=lav.annulla.is_set)
+
     def _esegui(self, lav: Lavoro):
         ripresa = lav.risposta is not None
         lav.stato, lav.passo = "in_corso", "si collega all'agente"
+        self._aspetta_motore(lav)
+        lav.passo = "si collega all'agente"
         if not ripresa:
             lav.inizio = time.time()
         d = self.verifica()
