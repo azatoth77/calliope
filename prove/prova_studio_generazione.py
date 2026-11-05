@@ -981,6 +981,28 @@ verifica("con la generazione spenta o in ombra il terreno non gira e il ripasso 
          st.pagine_per_chi_studia(vid, st._pagine_di(vid)) == st._pagine_di(vid) and not st.verifiche_per_terreno())
 st.close()
 
+# La versione nella firma del terreno: i numeri delle frasi valgono solo con la divisione con cui sono stati scritti
+from calliope.studio import voce_sicura as VS_  # noqa: E402
+FERMA_ = "Il Po nasce dal Monviso e sfocia nell'Adriatico con un\ndelta molto ampio. Il fiume è navi-\ngabile. Le mitosi\n1. Cavour\n2. Mazzini"
+verifica("la divisione in frasi è questa: se la cambi, alza `voce_sicura.VERSIONE_TERRENO` e aggiorna qui",
+         G.frasi_di(FERMA_) == ["Il Po nasce dal Monviso e sfocia nell'Adriatico con un delta molto ampio.",
+                                "Il fiume è navigabile.", "Le mitosi", "1. Cavour", "2. Mazzini"], G.frasi_di(FERMA_))
+vd_ = {"firma": VS_.firma_testo(FERMA_), "ferme": [1], "fuori": False}
+verifica("con la stessa versione si salta la frase fermata",
+         "navigabile" not in VS_.testo_da_dire(FERMA_, vd_, G.frasi_di)[0])
+_v0 = VS_.VERSIONE_TERRENO
+VS_.VERSIONE_TERRENO = _v0 + 1
+verifica("con un'altra versione il giudizio non vale: la pagina non si dice",
+         VS_.testo_da_dire(FERMA_, vd_, G.frasi_di) == (None, VS_.NON_GIUDICATA))
+PA.azzera()
+st, vid, ids, lett = prepara("versione")
+giro(lett, ARGOMENTI, CARTE, DOMANDE)
+VS_.VERSIONE_TERRENO = _v0
+verifica("scritto con una versione e letto con l'altra: si rigiudica da solo", bool(st.verifiche_per_terreno()))
+lett.passo_terreno(st.verifiche_per_terreno()[0])
+verifica("e rigiudicato basta", not st.verifiche_per_terreno())
+st.close()
+
 # L'OCR
 OCR = ("La spedizione dei Mille, guidata da Giuseppe\nGaribaldi, partì da Quarto il 5 maggio 1860 e\nsbarcò a Mar-\n"
        "sala l'11 maggio. Il Regno d'Italia fu procla-\nmato nel 1861.\n1. Cavour\n2. Mazzini")

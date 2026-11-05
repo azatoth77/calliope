@@ -5,7 +5,8 @@
   [0031](0031-conservazione-dei-minori.md) («degli ospiti mai») e alla
   [0029](0029-conversazione-di-stanza.md) (punto 1, «mai l'audio su disco», e punto 5, il testo
   della stanza solo della famiglia): vale solo fino alla data scritta nel file locale, poi tornano
-  quelle.
+  quelle. Sulla DGX la data è il 12/11, prorogata fino al test (decisione di chi amministra del 05/11)
+  *[storico: il 05/11 fino al 05/11]*.
 - **Area**: [contesto-conversazione](../aree/contesto-conversazione.md),
   [stt-tts](../aree/stt-tts.md), [minori](../aree/minori.md); codice in `calliope/conserva.py`
   (`valutazione_attiva`, il solo posto che legge la data), `turnlog.py`, `stanza/tenuta.py`,

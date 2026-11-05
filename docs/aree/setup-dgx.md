@@ -31,7 +31,7 @@ scritta nei documenti; «non scritta» dove nessun documento la dice.
 |---|---|---|---|---|
 | `llm_profilo` | `gemma4-26b-ollama` (l'e4b resta caricato per il guardiano e il giudizio «rivolta») | vuoto (il modello di `llm_model`) | verificato il 16/10 | [voce-e-regole](voce-e-regole.md) |
 | `llm_reti_spente` | non nel locale dal 18/10 sera: le quattro spente (`spinta_promessa`, `spinta_richiesta`, `ricerca_promessa`, `domanda_insistita`) vengono dal profilo del 26B (#15). *[storico: `[domanda_insistita]` nel locale fino al 18/10]* | `[]` (tutte accese, o quelle del profilo) | 18/10 (#15) | [voce-e-regole](voce-e-regole.md) |
-| `conserva_valutazione_fino` | `"2026-11-05"`: si conserva tutto, ospiti compresi, testo e audio | vuoto (spento) | 18/10 sera, deciso da chi amministra (#173, decisione [0032](../decisioni/0032-valutazione-conserva-tutto.md)) | [contesto-conversazione](contesto-conversazione.md) |
+| `conserva_valutazione_fino` | `"2026-11-12"`: si conserva tutto, ospiti compresi, testo e audio *[storico: `"2026-11-05"` fino al 05/11]* | vuoto (spento) | 18/10 sera, deciso da chi amministra (#173, decisione [0032](../decisioni/0032-valutazione-conserva-tutto.md)); 05/11: prorogata fino al test, decisione di chi amministra | [contesto-conversazione](contesto-conversazione.md) |
 | `system1_dopo_tool` | `ombra` | `spento` | 15/10 | [voce-e-regole](voce-e-regole.md) |
 | `frasi_varianti` | `attivo` | `ombra` | non scritta (#28 è ancora aperta) | [personalita](personalita.md) |
 | `fine_turno` | `spenta` (era `ombra`) | `spenta` | 18/10: la griglia non ha nessuna soglia sotto l'1 % di tagli (#24) | [stt-tts](stt-tts.md) |
@@ -46,7 +46,7 @@ scritta nei documenti; «non scritta» dove nessun documento la dice.
 | `stanza_guardia` | `ombra` | `spenta` | 14/10 sera (#36) | [minori](minori.md) |
 | `stanza_lenta` | `true` | `false` | 14/10 sera | [stt-tts](stt-tts.md) |
 | `stanza_lenta_blocchi` | `ombra` (pausa 8 s) | `spento` | 15/10 | [stt-tts](stt-tts.md) |
-| `stanza_audio_banco_giorni` | `22` (era `7`), cioè fino al 05/11 | `0` | 14/10 sera; portata a 22 giorni il 18/10 (#33, #32): l'eccezione della 0029 scade il 05/11 invece del 21/10 | [stt-tts](stt-tts.md) |
+| `stanza_audio_banco_giorni` | `29`, cioè fino al 12/11 (il tetto è 30) *[storico: `7` fino al 18/10, `22` cioè fino al 05/11 fino al 05/11]* | `0` | 14/10 sera; portata a 22 giorni il 18/10 (#33, #32); 05/11: prorogata fino al test, decisione di chi amministra: l'eccezione della 0029 scade il 12/11 | [stt-tts](stt-tts.md) |
 | `stanza_conoscenti` | `true` | `false` | 14/10 sera (prova in auto); criterio non scritto (#38) | [stt-tts](stt-tts.md) |
 | `avvisi_audio` | `true` | `false` | non scritta; criterio non scritto (nessuna issue) | [minori](minori.md) |
 | `notizie_accese` | le due testate spente di serie (Il Post, Il Sole 24 Ore) | `[]` | non scritta | [biblioteca](biblioteca.md) |
@@ -60,14 +60,17 @@ scritta nei documenti; «non scritta» dove nessun documento la dice.
 | `fatture_emittente` | presente (i dati dell'ufficio restano fuori dal repository) | vuoto | — | [documenti-ufficio](documenti-ufficio.md) |
 | `studio_modo` | `attivo` | `spento` | 30/10: acceso per le prove di tutto il giro con un minore di casa | [studio](studio.md) |
 | `studio_mappa_genera` | `attiva` | `ombra` | 30/10 sera: chiesto da chi amministra prima del banco della mappa; il banco delle 23:40 dopo (concetti nelle pagine 100, 100 e 75 %, nessuna voce ostile pulita, mappe a isole: #328) | [studio](studio.md) |
+| `studio_carte_genera` | `attiva` | `ombra` | 05/11: dopo il criterio della PR #396 (#384), subito a chi studia | [studio](studio.md) |
+| `studio_domande_genera` | `attiva` | `ombra` | 05/11: dopo il criterio della PR #396 (#384) | [studio](studio.md) |
+| `studio_riassunto` | `attiva` | `ombra` | 05/11: criterio del banco, 0035 punto 57 (#386) | [studio](studio.md) |
 
 *Gli altri interruttori dello Studio* (31/10, tappa dell'epic #251; ricontrollati su
 `calliope/config.py`): sulla DGX non sono nel locale e valgono di serie. Accesi con lo Studio:
 `studio_lettura`, `studio_argomenti`, `studio_indicazioni`, `studio_importa`, `studio_serie`,
 `studio_stelle` (`true`), `studio_mappa_libera`, `studio_ascolta`, `studio_libreria` (`attiva`).
-In ombra: `studio_padronanza`, `studio_carte_genera`, `studio_domande_genera`,
-`studio_mappa_consigli`, `studio_esercizi`, `studio_preparazione` e, dal 04/11 (#386),
-`studio_riassunto` (`ombra`: «attiva» col criterio del banco, 0035 punto 57). Spento:
+In ombra: `studio_padronanza`, `studio_mappa_consigli`, `studio_esercizi`, `studio_preparazione`
+*[storico fino al 05/11: anche `studio_carte_genera`, `studio_domande_genera` e `studio_riassunto`,
+ora in tabella]*. Spento:
 `studio_duelli` (`false`). Chi ne accende uno sulla DGX lo aggiunge alla tabella; le generazioni
 si accendono solo dopo il loro banco ([studio](studio.md)). Dal 04/11 (#384) `studio_carte_genera` e
 `studio_domande_genera` su «attiva» vogliono dire «subito a chi studia, senza conferma»: le righe in

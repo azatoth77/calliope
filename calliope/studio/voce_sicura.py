@@ -57,8 +57,14 @@ RESTO_MIN_CAR = 40
 FUORI, NON_GIUDICATA = "fuori", "non_giudicata"
 
 
+# Il giudizio salvato dice i numeri delle frasi di `genera.frasi_di`: se `frasi_di` o `ricuci` dividono in altro modo, o se
+# cambia il giudizio, questo numero sale. Le pagine tornano non giudicate, quindi non si dicono finché non si rigiudicano;
+# altrimenti i numeri slitterebbero e si salterebbe la frase sbagliata (`prova_studio_generazione` tiene una divisione ferma)
+VERSIONE_TERRENO = 1
+
+
 def firma_testo(testo) -> str:
-    return hashlib.sha256(str(testo or "").encode()).hexdigest()
+    return hashlib.sha256(f"v{VERSIONE_TERRENO}\0{testo or ''}".encode()).hexdigest()
 
 
 def testo_da_dire(testo, verdetto: dict | None, frasi_di) -> tuple[str | None, str | None]:
