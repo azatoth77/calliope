@@ -137,7 +137,7 @@ def main():
     ap.add_argument("--moss", type=Path, default=Path("~/calliope-motore/moss"))
     ap.add_argument("--voci", type=Path, default=Path("~/calliope/voices"))
     ap.add_argument("--voce-a", default="it_IT-paola-medium.onnx")
-    ap.add_argument("--voce-b", default="it_IT-giorgio-medium.onnx")
+    ap.add_argument("--voce-b", default="it_IT-serena-high.onnx")
     ap.add_argument("--stt", default="http://127.0.0.1:8003/v1")
     ap.add_argument("--stt-modello", default="whisper-large-v3-turbo")
     ap.add_argument("--url", default="http://127.0.0.1:8000/v1")

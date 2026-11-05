@@ -46,6 +46,7 @@ from . import podcast as P
 from .podcast_motore import Ceduto, Guasto, MotoreMoss, TESTO_RIFERIMENTO, memoria_disponibile_mb
 
 # ─────────────────────────── soglie (dal banco: `docs/aree/studio.md`, 04/11) ───────────────────────
+VOCI_NON_AMMESSE = ("it_IT-giorgio-medium",)    # viene da una persona vera (MLS speaker 8181), licenza ambigua: 05/11, Dario
 RIGENERA_MAX = 2              # i tentativi in più su un pezzo che non torna
 SOGLIA_FRASE = 0.60           # delle parole piene di una battuta, ritrovate: dal banco del 05/11, le frasi giuste arrivano a 0,60–0,67 (formule, «lo ione»), i salti veri a 0
 SOGLIA_INVENTATO = 0.10       # delle parole sentite, in più rispetto al copione (MOSS sul banco: al più 4,5 %)
@@ -423,8 +424,13 @@ class Preparatore:
             motore = self.crea_motore(self._cede)
             f = getattr(motore, "pronto_su_disco", None)
             male = f() if callable(f) else []
+        except VoceNonUsabile as e:
+            self.misure["voce_non_usabile"] = e.nome
+            self.log(f"   [STUDIO] podcast: {e}")
+            return None, e.motivo
         except Exception as e:  # noqa: BLE001 — anche i riferimenti che non si generano
             return None, f"motore_{type(e).__name__}"
+        self.misure["voce_non_usabile"] = None
         return motore, ("motore_non_pronto" if male else None)
 
     def motivo(self) -> str | None:
@@ -504,7 +510,8 @@ class Preparatore:
         self._fine = self.orologio() + float(getattr(cfg, "studio_podcast_tetto_min", 60) or 60) * 60
         motore, male = self._motore_pronto(d)
         if male:
-            self.log(f"   [STUDIO] podcast: {male}, vLLM non si tocca (`calliope motore moss verifica`)")
+            consiglio = " (`calliope motore moss verifica`)" if male.startswith("motore") else ""
+            self.log(f"   [STUDIO] podcast: {male}, vLLM non si tocca{consiglio}")
             self._riprova_dopo = self.orologio() + PAUSA_DOPO_GUASTO_S
             self._d = None
             return male
@@ -765,10 +772,37 @@ def percorso_voce(cfg, chiave: str) -> str:
     return p
 
 
+class VoceNonUsabile(Exception):
+    """Una delle due voci non c'è o non vale: il podcast non parte e non ne cerca un'altra. `motivo` è l'esito del giro."""
+
+    def __init__(self, motivo: str, nome: str, messaggio: str):
+        super().__init__(messaggio)
+        self.motivo, self.nome = motivo, nome
+
+
+def _come_installarla(nome: str) -> str:
+    from ..installa.catalogo import VOCI
+    for v in VOCI:
+        if nome == f"it_IT-{v[1]}-{v[2]}":
+            return f" (`calliope stato --installa {v[0]}`)"
+    return ""
+
+
+def controlla_voce(cfg, chiave: str) -> str:
+    """Il percorso della voce, o `VoceNonUsabile`. Anche con il riferimento già su disco: una voce tolta si dice, sempre."""
+    percorso = percorso_voce(cfg, chiave)
+    nome = Path(percorso).stem
+    if nome in VOCI_NON_AMMESSE:
+        raise VoceNonUsabile("voce_non_ammessa", nome, f"la voce {nome} non si usa più (`{chiave}`)")
+    if not (os.path.isfile(percorso) and os.path.isfile(percorso + ".json")):
+        raise VoceNonUsabile("voce_mancante", nome, f"manca la voce {nome}{_come_installarla(nome)}: il podcast non parte")
+    return percorso
+
+
 def riferimento(cfg, voce_per, chiave: str, pronuncia=None) -> Path:
     """Il WAV di riferimento di una voce, generato con Piper una volta (nessun dato di nessuno: la frase è fissa)."""
     from . import dati as D
-    percorso = percorso_voce(cfg, chiave)
+    percorso = controlla_voce(cfg, chiave)
     c = D.cartella_di(cfg) / "podcast_riferimenti"
     c.mkdir(parents=True, exist_ok=True)
     f = c / (Path(percorso).stem + ".wav")
@@ -804,6 +838,11 @@ def prepara(studio, ripresa, lavori, speaker, log=print, avvia: bool = True) -> 
     if not cfg.stt_url:
         log("[STUDIO] podcast: senza Whisper a server (`stt_url`) non parte")
         return None
+    for chiave in ("studio_podcast_voce_a", "studio_podcast_voce_b"):   # si sa subito, non alla prima notte con un podcast da fare
+        try:
+            controlla_voce(cfg, chiave)
+        except VoceNonUsabile as e:
+            log(f"[STUDIO] podcast: {e}")
     pron = getattr(speaker, "pronuncia", None)
     studio.podcast_pronuncia = pron
     voce = S.VocePiper(speaker.voce_per(cfg.piper_voice), pron)

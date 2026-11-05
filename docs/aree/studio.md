@@ -249,8 +249,37 @@ provato sulla DGX).
 **Da guardare.** `copertura_pagina` resta a 0,51: il tetto di durata (`durata 21`) ferma le mirate prima di coprire tutte le pagine;
 per un dialogo che già sfora l'obiettivo si può accettare, da rileggere con materiale vero. Il modello esce spesso dal budget nelle
 richieste mirate con pochi argomenti («tagliate a max_tokens»): si tengono le voci intere. Il livello fra Piper e MOSS in un
-file non è normalizzato. La licenza di giorgio è ambigua (`voices/LEGGIMI.md`, nota 3), le voci vengono da audiolibri: una riga di
-configurazione cambia `studio_podcast_voce_b`; serena (dati sintetici, CC-BY-4.0) è l'alternativa, non provata qui.
+file non è normalizzato. *[storico, fino al 05/11: «La licenza di giorgio è ambigua (`voices/LEGGIMI.md`, nota 3), le voci vengono da
+audiolibri: una riga di configurazione cambia `studio_podcast_voce_b`; serena (dati sintetici, CC-BY-4.0) è l'alternativa, non provata
+qui.» Le misure qui sopra sono con giorgio.]*
+
+### La voce B è Serena (05/11)
+
+Dario ha ascoltato e scelto: voce A paola, voce B `it_IT-serena-high` di serie (dati sintetici, CC-BY-4.0, attribuzione in `TERZE-PARTI.md`).
+Giorgio viene da una persona vera (MLS speaker 8181), con una licenza ambigua: `VOCI_NON_AMMESSE` lo rifiuta anche se resta nel file locale.
+Non c'è più nessun ripiego fra voci: se una delle due manca (o manca il suo `.json`) il giro finisce con `voce_mancante` prima di
+toccare vLLM, si riprova fra un'ora e il registro dice quale voce e come installarla, anche all'avvio. I pezzi a una voce non cambiano: usano la
+voce di Calliope (`piper_voice`), un percorso a due voci con Piper nel codice non c'è. I riferimenti restano WAV della frase fissa, generati sulla
+macchina in `podcast_riferimenti/`, fuori da git e dal `moss.sha256` (che copre solo ciò che si esegue): niente da aggiungere all'elenco.
+Su una macchina nuova: `calliope stato --installa voce_serena_alta` e `voce_paola`; sulla DGX ci sono già.
+
+Banco con lo stesso copione di fantasia degli audio con giorgio (`privato/prove-voci/podcast-05-11-serena/`, 6 pezzi, 7 tentativi):
+
+| | paola + serena | paola + giorgio |
+|---|---|---|
+| Pezzi tenuti | 6 su 6, 1 tentativo scartato (un numero) | 5 su 6, storia-03 a una voce |
+| Fattore, memoria | 1,27–1,34; torch 23,7 GB, RSS 5,9 GB | uguali |
+| Altezza mediana A / B (riferimenti) | 200 / 205 Hz (205 / 210) | 210 / 155 Hz (205 / 147) |
+| Coseno CAM++ dentro A, dentro B, fra le due | 0,65; 0,79; 0,25 | 0,70; 0,72; 0,18 |
+| Tratti riconosciuti col gruppo e col riferimento | 65/66 | 59/59 |
+| Fra le voci, prima e seconda metà del pezzo | 0,29 → 0,20 | 0,18 → 0,18 |
+
+L'altezza non le separa, il timbro sì, e MOSS non le avvicina nel corso del pezzo. Sono misure sui tratti di Whisper di una voce sola (66 su 86).
+
+**Lo scambio di voce di chimica-01 è vero, e il controllo non lo vede.** A 27,2–29,5 s la battuta è `[S1]` nel testo dato a MOSS («Il cloruro
+di sodio…», voce A), ma il tratto vale 0,77 con Serena e 0,15 con paola, e le finestre di 1,5 s dicono Serena senza stacchi da 22 a 32 s, attraverso
+le battute B, A, B: le parole sono tutte giuste, detta dalla voce sbagliata. `confronta` guarda solo il testo. È 1 tratto su 66 (i 20 misti non si
+giudicano; con giorgio 0 su 59, sugli stessi copioni): non è un blocco, resta un difetto noto. Un controllo con l'impronta si potrebbe aggiungere, non è fatto.
 
 ### La revisione indipendente della PR #393 (05/11)
 
