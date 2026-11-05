@@ -1256,8 +1256,27 @@ try:
     m3.st.lettore = types.SimpleNamespace(guardia=None, occupato=lambda: False)
     _sentite = []
     pp3 = PA.prepara(m3.st, m3.r, None, types.SimpleNamespace(voce_per=lambda p: _sentite.append(p) or object()), log=registro.append, avvia=False)
-    verifica("…chi amministra lo legge, e l'avviso è della voce A", pp3 is not None and _sentite == [cf3.studio_podcast_voce_a]
+    verifica("…chi amministra lo legge, e l'avviso è della voce A", pp3 is not None and pp3.voce_calliope.percorso() == cf3.studio_podcast_voce_a
              and any("non è del catalogo" in r and "it_IT-paola-medium" in r for r in registro), str(registro))
+    # Calliope fuori catalogo e voce A mancante: `prepara` non solleva, e al ritorno della voce non serve riavviare
+    registro.clear()
+    m5, c5 = _mondo_voci("servizio-senza-a")
+    (c5 / "fuori.onnx").write_bytes(_voce_finta("it_IT-aurora-medium"))
+    m5.st.cfg.piper_voice = str(c5 / "fuori.onnx")
+    m5.st.cfg.stt_url = "http://127.0.0.1:1/v1"
+    m5.st.lettore = types.SimpleNamespace(guardia=None, occupato=lambda: False)
+    _a5 = c5 / "it_IT-paola-medium.onnx"
+    _a5.unlink()
+    def _voce_per5(p):
+        if not Path(p).is_file():
+            raise FileNotFoundError(p)
+        return object()
+    pp5 = PA.prepara(m5.st, m5.r, None, types.SimpleNamespace(voce_per=_voce_per5), log=registro.append, avvia=False)
+    verifica("Calliope fuori catalogo e voce A mancante: `prepara` non solleva", pp5 is not None)
+    verifica("…il giro dice `voce_mancante`, come per le altre", pp5._motore_pronto({})[1] == "voce_mancante" and not m5.d.azioni()
+             and any("manca la voce it_IT-paola-medium" in r for r in registro), str(registro[-3:]))
+    _a5.write_bytes(_voce_finta("it_IT-paola-medium"))
+    verifica("…e tornata la voce non serve riavviare", _voce_per5(pp5.voce_calliope.percorso()) is not None and pp5.voce_calliope.percorso() == m5.st.cfg.studio_podcast_voce_a)
     m2, c2 = _mondo_voci("hash-una-volta")
     _aperti = []
     _open_vero = open
@@ -1353,6 +1372,24 @@ verifica("…il podcast pronto non c'è più", not m.st.podcast_pronto(vv_f) and
 verifica("…e nemmeno i suoi file: niente pezzi vecchi coi nuovi", not list(P.cartella_podcast(m.st.cfg, m.vid).glob("*"))
          if P.cartella_podcast(m.st.cfg, m.vid).exists() else True)
 verifica("…il copione si rifà, una volta sola", [d["id"] for d in m.st.verifiche_per_podcast()] == [m.vid])
+
+print("— a voce l'avviso è di Calliope solo se la sua voce è ammessa")
+m = Mondo("avviso-a-voce")
+c = Path(m.st.cfg.studio_podcast_voce_a).parent
+m.prep.passo()
+vv_a = m.st.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (m.vid,))
+_cp = m.st._copione_podcast(vv_a, per_voce=True)
+_aud = [x for x in _cp.voci if x.tipo == A.AUDIO]
+verifica("con la voce ammessa l'avviso lo dice Calliope, e nei file si salta", _cp.voci[0].tipo == A.CALLIOPE and _cp.voci[0].testo == A.PODCAST_INTRO
+         and len(_aud) > 1 and all(x.salta > 0 for x in _aud), str(_cp.voci[:2]))
+(c / "g.onnx").write_bytes(_voce_finta("it_IT-giorgio-medium"))
+m.st.cfg.piper_voice = str(c / "g.onnx")
+_cp = m.st._copione_podcast(vv_a, per_voce=True)
+_aud = [x for x in _cp.voci if x.tipo == A.AUDIO]
+verifica("con giorgio Calliope non lo dice: resta quello della voce A, nel file", not any(x.tipo == A.CALLIOPE for x in _cp.voci)
+         and _aud[0].salta == 0.0 and all(x.salta > 0 for x in _aud[1:]), str([x.salta for x in _aud]))
+_cp = m.st._copione_podcast(vv_a, per_voce=False)
+verifica("sullo schermo non cambia niente", all(x.salta == 0.0 for x in _cp.voci if x.tipo == A.AUDIO))
 
 print("— lo schermo dice la verità sulle voci (punto 2)")
 m = Mondo("nota-voci")
@@ -1527,8 +1564,13 @@ verifica("…una passata sola, coi tempi", _ClientW.chiesti == ["verbose_json"] 
 _btt = [{"voce": "A", "testo": "Il collegatore misura la massa dell'uranio.", "detto": "Il collegatore misura la massa dell'uranio.", "tipo": "frase"},
         {"voce": "B", "testo": "Capito.", "detto": "Capito.", "tipo": "cenno"}]
 verifica("…e il pezzo è buono, che col testo spezzato non era", PA.confronta(_btt, _tr)["ok"] and not PA.confronta(_btt, _SPEZZATO["text"])["ok"], str(PA.confronta(_btt, _SPEZZATO["text"])["frasi"]))
-_tr = _chiedi_w(_RispostaW(200, {"text": " solo testo"}), _JS)[0]
-verifica("senza tratti: il suo testo", _tr == " solo testo" and not _tr.segmenti)
+_tr = _chiedi_w(_RispostaW(200, {"text": " solo testo spezza to"}), _JS)[0]
+verifica("senza tratti il suo testo può essere spezzato: json", _tr == _INTERO and not _tr.segmenti and _ClientW.chiesti == ["verbose_json", "json"])
+for _seg in (["una", "due"], [{"text": " a"}, "due"], "testo", 3):
+    _tr = _chiedi_w(_RispostaW(200, {"text": " spezza to", "segments": _seg}), _JS)[0]
+    verifica(f"tratti che non si usano ({str(_seg)[:12]}): ricade su json, non è Whisper giù", _tr == _INTERO and not _tr.segmenti)
+_tt = _chiedi_w(_RispostaW(200, {"text": "", "segments": []}), _JS, volte=2)
+verifica("un audio muto è vuoto: niente ricaduta, i tempi restano", _tt[0] == "" and _ClientW.chiesti == ["verbose_json", "verbose_json"], str(_ClientW.chiesti))
 for _st in (400, 415, 422):
     _tt = _chiedi_w(_RispostaW(_st, None), _JS, volte=2)
     verifica(f"un server che rifiuta il formato ({_st}) non è giù: ricade su json, senza tratti", _tt[0] == _INTERO and not _tt[0].segmenti)

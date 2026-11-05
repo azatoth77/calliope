@@ -387,14 +387,18 @@ class Trascritto(str):
     segmenti: tuple = ()
 
 
-def _trascritto(j: dict) -> Trascritto:
+def _trascritto(j: dict) -> Trascritto | None:
     """Il testo sono i tratti uniti, così come sono: su whisper.cpp il `text` di `verbose_json` è spezzato a token («dell'uran io»,
-    «Capito .») e diverso da `json`, e `confronta` scartava un pezzo buono. Le parole a cavallo di due tratti si riuniscono da sole."""
-    segmenti = tuple(j.get("segments") or ())
-    testo = "".join(str(s.get("text") or "") for s in segmenti) if segmenti else ""
-    t = Trascritto(testo if testo.strip() else str(j.get("text") or ""))
-    t.segmenti = segmenti
-    return t
+    «Capito .») e diverso da `json`, e `confronta` scartava un pezzo buono. Le parole a cavallo di due tratti si riuniscono da sole.
+    None: tratti che non si possono usare con un testo che non si può fidare, meglio `json`. Un audio muto è vuoto, e basta."""
+    segmenti = j.get("segments")
+    if isinstance(segmenti, (list, tuple)) and segmenti and all(isinstance(s, dict) for s in segmenti):
+        testo = "".join(str(s.get("text") or "") for s in segmenti)
+        if testo.strip():
+            t = Trascritto(testo)
+            t.segmenti = tuple(segmenti)
+            return t
+    return Trascritto("") if not str(j.get("text") or "").strip() else None
 
 
 def ritrascrivi_http(stt_url: str, modello: str, lingua: str = "it", timeout_s: float = 300.0, log=print):
@@ -417,8 +421,9 @@ def ritrascrivi_http(stt_url: str, modello: str, lingua: str = "it", timeout_s: 
                 try:
                     r.raise_for_status()
                     j = r.json()
-                    if isinstance(j, dict) and ("text" in j or "segments" in j):
-                        return _trascritto(j)
+                    t = _trascritto(j) if isinstance(j, dict) and ("text" in j or "segments" in j) else None
+                    if t is not None:
+                        return t
                 except (httpx.HTTPStatusError, ValueError):
                     pass
             r = manda("json")     # se non risponde nemmeno così, è giù davvero: solleva
@@ -938,6 +943,27 @@ def crea_motore_moss(cfg, carica_voce, pronuncia=None):
     return crea
 
 
+class VoceDiServizio:
+    """L'avviso e i pezzi a una voce: quella di Calliope se ammessa, se no la voce A. Si sceglie e si carica all'uso: una voce mancante
+    all'avvio non ferma il podcast fino al riavvio, la dice il giro come le altre (`voce_mancante`) e al ritorno basta il giro dopo."""
+
+    def __init__(self, cfg, voce_per, pronuncia=None):
+        self.cfg, self.voce_per, self.pronuncia = cfg, voce_per, pronuncia
+
+    def percorso(self) -> str:
+        return P.voce_di_servizio(self.cfg)[0]
+
+    def _voce(self):
+        return S.VocePiper(self.voce_per(self.percorso()), self.pronuncia)
+
+    @property
+    def rate(self) -> int:
+        return self._voce().rate
+
+    def in_wav(self, testo: str) -> bytes:
+        return self._voce().in_wav(testo)
+
+
 def prepara(studio, ripresa, lavori, speaker, log=print, avvia: bool = True, impronta=None) -> Preparatore | None:
     """Il preparatore di questa installazione, o None: podcast spento, niente Whisper a server, niente voci. `impronta`:
     `SpeakerRegistry.embed`, il CAM++ già caricato per sapere chi parla; senza, niente misura degli scambi."""
@@ -963,7 +989,7 @@ def prepara(studio, ripresa, lavori, speaker, log=print, avvia: bool = True, imp
     if not di_calliope:
         log(f"[STUDIO] podcast: la voce di Calliope {Path(str(cfg.piper_voice)).stem} non è del catalogo: "
             f"l'avviso e i pezzi a una voce li dice {Path(servizio).stem}")
-    voce = S.VocePiper(speaker.voce_per(servizio), pron)
+    voce = VoceDiServizio(cfg, speaker.voce_per, pron)
     lettore = getattr(studio, "lettore", None)
     guardia = getattr(lettore, "guardia", None)
 
