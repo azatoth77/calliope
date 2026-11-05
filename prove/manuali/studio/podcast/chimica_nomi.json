@@ -1,0 +1,18 @@
+{
+  "id": "chimica_nomi",
+  "materia": "Chimica",
+  "classe": "1ª superiore",
+  "data_verifica": "2026-12-20",
+  "argomento": "I laboratori immaginari di Porto Astrea",
+  "nota": "Materiale di fantasia per il banco del podcast (#387): chimica vera mista a studiosi e composti inventati, ioni e isotopi, per misurare quanti pezzi giusti si perderebbero su nomi e formule.",
+  "pagine": [
+    {"id": "p1", "numero": "50", "testo": "Gli elementi\nLa chimica Ortensia Valmarana studiò a Porto Astrea il comportamento degli alogeni. Il cloro forma lo ione Cl- quando acquista un elettrone. Il sodio forma lo ione Na+ quando ne perde uno. Il collega Ettore Brandolini misurò la massa del carbonio-14 e dell'uranio-235. Il suo assistente Tullio Serravalle dimostrò che il carbonio-14 decade in circa 5.730 anni. Il cloruro di sodio ha formula NaCl. L'acqua ha formula H2O e bolle a 100 gradi."},
+    {"id": "p2", "numero": "51", "testo": "Gli acidi e le basi\nValmarana definì un acido come una sostanza che libera ioni H+. Una base come l'idrossido di sodio libera invece ioni OH-. Il laboratorio di Santa Celestina misurò il pH di molte soluzioni. Una soluzione neutra ha pH 7. Il succo di limone ha pH 2 e la candeggina ha pH 12. La professoressa Adalgisa Montefusco preparò l'acido solforico a partire da SO3 e acqua. Lo ione solfato si scrive SO4 2- e lo ione nitrato NO3-."},
+    {"id": "p3", "numero": "52", "testo": "Le reazioni\nNella reazione di Brandolini il magnesio brucia in ossigeno e forma l'ossido MgO. Questa reazione libera molto calore ed è esotermica. La sintesi di Serravalle, che scompone il carbonato di calcio CaCO3, assorbe calore. Il teorema di Quarenghi dice che la differenza d è data da d=a-b, dove a è l'energia dei prodotti e b quella dei reagenti. Il catalizzatore di Pellizzari fa andare la reazione più veloce e non si consuma. Il giovane Nicolò Falaschi scoprì la vitamina B-12 nelle alghe di Porto Astrea."}
+  ],
+  "argomenti": [
+    {"titolo": "Gli elementi", "pagine": ["p1"]},
+    {"titolo": "Acidi e basi", "pagine": ["p2"]},
+    {"titolo": "Le reazioni chimiche", "pagine": ["p3"]}
+  ]
+}

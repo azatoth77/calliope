@@ -82,11 +82,12 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Carte generate dalle pagine lette, controllo del codice, proposte confermate dalla persona (dal 30/10 sera, passo 6, seconda parte, #246; schema «studio» alla versione 7; `studio_carte_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato; `provenienza.racchiudi`, `parole`, `vicina` | `calliope/studio/genera.py` → `corpo`, `messaggi`, `blocco_argomenti`, `argomenti_rif`, `firma`, `forma_testo`, `leggi`, `proposte`, `modo`; `calliope/studio/lettura.py` → `Lettore.genera_carte`; `calliope/studio/servizio.py` → `Studio.verifiche_per_carte`, `proponi_carte`, `conferma_carte`; `calliope/schermi/server.py` → `POST /api/studio/carte` (azione `conferma`); `prove/manuali/banco_studio.py` (fase «carte»); prova `prove/prova_studio_carte_genera.py` |
 | Mappa concettuale: lo scheletro (a mano; dal lettore con la seconda parte), la mia mappa con le caselle, a memoria, il controllo deterministico, i tentativi «mappa», il PDF (dal 30/10 sera, passo 7, #247; schema «studio» alla versione 8; `studio_mappa_nodi_max`) | SQLite (`studio_mappe`, concetti e collegamenti in JSON); fpdf2 (extra `documenti`) coi font di `documenti/render.py`; nel browser SVG scritto a mano | `calliope/studio/mappa.py` → `testo_normale`, `uguale`, `verbo_simile`, `disposizione`, `scegli_caselle`, `parole_da_mettere`, `copia`, `controlla`, `esito_tentativo`; `calliope/studio/mappe.py` → `Mappe` (in `Studio`): `scrivi_scheletro`, `nodo_mappa`, `collega`, `riempi`, `tieni_mappa`, `conferma_scheletro`, `inizia_mappa`, `rifai_mappa`, `controlla_mappa`, `carte_dagli_errori`, `riordina_mappa`, `vista_mappe`, `pdf_mappa`, `_conto_mappa`; `calliope/studio/mappa_pdf.py` → `render`; `calliope/tools/studio.py` → azione `mappa`; `calliope/schermi/server.py` → `POST /api/studio/mappa`; `calliope/schermi/pagina/studio.js` (la sezione «Mappa»); prove `prove/prova_studio_mappa.py`, `prove/prova_studio_mappa_pagina.py` |
 | Scheletro della mappa generato dalle pagine lette: le triple controllate dal codice, proposte da confermare (dal 30/10 sera, passo 7, seconda parte, #247; `studio_mappa_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato | `calliope/studio/mappa_genera.py` → `corpo`, `messaggi`, `firma`, `leggi`, `scheletro`, `modo`, `collega_isole` e `parti_fondate` (dal 31/10, #344); `prove/studio_vllm_finto.py` (le uscite del banco del 31/10); `calliope/studio/lettura.py` → `Lettore.genera_mappa`; `calliope/studio/mappe.py` → `verifiche_per_mappa`, `proponi_mappa`; `prove/manuali/banco_studio.py` (fase «mappa»); prova `prove/prova_studio_mappa_genera.py` |
-| Generazione a lettura finita: la verifica che si apre da sola, carte e domande pulite subito in uso, la parte cambiata rifatta da sola, «Cosa è pronto» sulla scheda, il banco della rilettura (dal 04/11, #384; schema «studio» alla versione 18: `studio_verifiche.firme_parti`, `studio_tentativi.generata`; `studio_carte_genera`, `studio_domande_genera` su «attiva», ombra di serie) | qwen3.6 col client e la guardia del lettore; per il banco il modello della voce come giudice | `calliope/studio/genera.py` → `appoggio`, `appoggio_falso`, `corpo_giudizio`, `valori_fuori`, `numeri_di`, `stato_iniziale`, `firma_parte`, `da_rifare`, `pagine_di_parte`; `calliope/studio/servizio.py` → `generazione_automatica`, `_nel_piano`, `apri_pronte`, `_da_rifare`, `firme_parti`, `_generata`; `calliope/studio/prove.py` → `minimo_prova`; `calliope/studio/preparazione.py` → `pronto`; `calliope/studio/voce_sicura.py` → `corpo`, `passa`, `terreno`; `calliope/studio/lettura.py` → `_passi_materiali`, `_materiali_del_giro`, `_terreno`, `_sicura`, `_cancelli`, `_mirata`, `_mappa_sicura`; `calliope/schermi/pagina/studio.js` («Cosa è pronto», «Togli questa carta»); `prove/manuali/banco_rilettura.py`; prove `prove/prova_studio_generazione.py`, `prove/prova_studio_pronto_pagina.py` |
+| Generazione a lettura finita: la verifica che si apre da sola, carte e domande pulite subito in uso, la parte cambiata rifatta da sola, «Cosa è pronto» sulla scheda, il banco della rilettura (dal 04/11, #384; schema «studio» alla versione 19: `studio_verifiche.firme_parti`, `studio_tentativi.generata`; `studio_carte_genera`, `studio_domande_genera` su «attiva», ombra di serie) | qwen3.6 col client e la guardia del lettore; per il banco il modello della voce come giudice | `calliope/studio/genera.py` → `appoggio`, `appoggio_falso`, `corpo_giudizio`, `valori_fuori`, `numeri_di`, `stato_iniziale`, `firma_parte`, `da_rifare`, `pagine_di_parte`; `calliope/studio/servizio.py` → `generazione_automatica`, `_nel_piano`, `apri_pronte`, `_da_rifare`, `firme_parti`, `_generata`; `calliope/studio/prove.py` → `minimo_prova`; `calliope/studio/preparazione.py` → `pronto`; `calliope/studio/voce_sicura.py` → `corpo`, `passa`, `terreno`; `calliope/studio/lettura.py` → `_passi_materiali`, `_materiali_del_giro`, `_terreno`, `_sicura`, `_cancelli`, `_mirata`, `_mappa_sicura`; `calliope/schermi/pagina/studio.js` («Cosa è pronto», «Togli questa carta»); `prove/manuali/banco_rilettura.py`; prove `prove/prova_studio_generazione.py`, `prove/prova_studio_pronto_pagina.py` |
 | Mappa generale con ogni argomento e una mappa da leggere per ogni parte: copertura del codice, richiesta mirata, «Le parti» sugli schermi (dal 04/11, #385; `studio_mappa_parti`, `studio_mappa_parte_nodi_max`, `studio_mappa_nodi_max` a 20; tipo «parte» di `studio_mappe`, senza colonne nuove) | qwen3.6 su vLLM col client e la guardia del lettore; SQLite | `calliope/studio/mappa_genera.py` → `regole`, `regole_parte`, `copertura`, `messaggi_copertura`, `altri_sulle_pagine`, `solo_studiabili`, `rete`, `firma_parte`; `calliope/studio/lettura.py` → `Lettore.prepara_mappe`, `genera_parte`; `calliope/studio/mappe.py` → `proponi_parte`, `_parti_da_fare`, `_parti_per_schermo`; `calliope/studio/mappa.py` → `_a_righe`, `livelli`, `parte_nodi`; `calliope/schermi/pagina/studio.js` («Le parti»); prove `prove/prova_studio_mappa_parti.py`, `prove/prova_studio_mappa_parti_pagina.py` |
 | Mappa libera: da zero con lo scheletro nascosto, «Un indizio» e «Mostra», «Ho finito» col confronto del codice e i tentativi una volta per giro, gli indicatori del metodo per giro; scheletro connesso (doppioni, composti, radice, seconda passata per le isole); «Parliamone» (dal 30/10 notte, passo 7c, #328; schema «studio» alla versione 9; `studio_mappa_libera` attiva, `studio_mappa_consigli` ombra di serie) | SQLite (`studio_mappe` tipo «libera», `giri`, `visti`); per la seconda passata qwen3.6 col client e la guardia del lettore; per «Parliamone» il modello della voce, dati in busta | `calliope/studio/mappa.py` → `chiave_insieme`, `parti`, `componenti`, `radice`, `concetti_chiave`, `forma`, `voci_riferimento`, `confronta`, `indicatori`, `rispetto_a_prima`, `tentativo_libera`, `svelati`; `calliope/studio/mappa_genera.py` → `corpo_connessione`, `connetti`; `calliope/studio/mappe.py` → `inizia_libera`, `indizio_libera`, `mostra_concetto`, `finisci_libera`, `consigli_mappa`, `misura_consigli`; `calliope/tools/studio.py` → `studio_mappa_consigli`; `calliope/brain.py` → `_consigli_chiudi`, `_consigli_ombra`; prove `prove/prova_studio_mappa_libera.py`, `prove/prova_studio_mappa_libera_pagina.py` |
 | Prove: il tipo della prova vera e la finestra «dal», le domande (scelta multipla, vero o falso, numero con l'unità, parole chiave, aperta; anche le carte), la verifica finta scritta e l'interrogazione simulata a voce, l'esito del codice, «da rivedere» della persona o del tutore, la generazione delle domande dal lettore (dal 31/10, passo 8, #248; schema «studio» alla versione 10; `studio_domande_genera` ombra di serie) | SQLite (`studio_domande`, `studio_prove`); qwen3.6 col client e la guardia del lettore per la generazione; libreria standard per l'esito | `calliope/studio/risposte.py` → `prepara`, `valuta`, `attesa_detta`; `calliope/studio/unita.py` → `leggi`, `una_misura`, `confronta`; `calliope/studio/prove.py` → `Prove` (in `Studio`): `aggiungi_domanda`, `domande`, `conferma_domande`, `inizia_prova`, `rispondi_prova`, `consegna_prova`, `rivedi_voce`, `orale_inizia`, `orale_risposta`, `orale_basta`, `_chiudi_prove`, `_conto_prove`; `calliope/studio/domande_genera.py` → `corpo`, `proposte`, `firma`; `calliope/studio/lettura.py` → `Lettore.genera_domande`; `calliope/studio/servizio.py` → `conclusa`, `_fine`; `calliope/tools/studio.py` → `studio_interroga`, azioni `tipo`, `conclusa`, `prove`; `calliope/schermi/server.py` → `POST /api/studio/prova`; `calliope/schermi/pagina/studio.js` (la sezione «Prove»); prove `prove/prova_studio_prove.py`, `prove/prova_studio_domande_genera.py`, `prove/prova_studio_prove_pagina.py` |
 | Ripasso da ascoltare: il copione a parti composto dal codice (le pagine del piano ripulite per la voce, le carte con la pausa per pensare), la lettura a voce dopo la risposta col barge-in, riprendi e ripeti, l'audio delle parti per lo schermo, la tenuta della cache (dal 31/10, passo 9, #249; schema «studio» invariato, alla versione 10; `studio_ascolta` attiva di serie con lo Studio, `studio_ascolta_voce`, `studio_ascolta_giorni`) | Piper con le voci dello Speaker (la voce di Calliope e la «voce del libro»), `wave` della libreria standard; niente modello | `calliope/studio/ascolta.py` → `paragrafi`, `frasi`, `scarto`, `frasi_pagina`, `componi`, `Copione`, `pezzi`, `sentite`, `da_ripetere`, `leggi`, `Sintesi`, `togli_audio`, `Ascolti` (in `Studio`): `ascolto_prepara`, `ascolto_vale`, `ascolto_fermo`, `nota_ascolto`, `ascolto_parti`, `ascolto_audio`; `calliope/pronuncia.py` → `per_ripasso`, `formule_dette`, `sigle_dette`, `romani_detti`, `simboli_detti`; `calliope/tts.py` → `sintesi_pcm`, `Speaker.say(spezza, voce)`, `silenzio`, `voce_per`; `calliope/eventi/uscita.py` → `turno_lettura`, `leggi`, `pausa`; `calliope/ciclo.py` → `_leggi_ripasso`; `calliope/tools/studio.py` → `studio_ascolta`; `calliope/schermi/server.py` → `POST /api/studio/ascolta`; `calliope/schermi/pagina/studio.js` («Ascolta»); prove `prove/prova_studio_ascolta.py`, `prove/prova_studio_ascolta_pagina.py`, `prove/prova_valore.py` (il ripasso attraverso Brain) |
+| Podcast a due voci (dal 04/11, spento di serie): il copione col metodo del riassunto, MOSS-TTSD in un container senza rete, vLLM fermato e ripartito a macchina libera, ogni pezzo ritrascritto e confrontato | stdlib, Docker; MOSS-TTSD a versione fissata, fuori dal processo | `calliope/studio/podcast.py`, `podcast_audio.py`, `podcast_motore.py`, `setup/linux/motore/moss.sh` |
 | Riassunto da ascoltare: il copione scritto dal lettore in proporzione al materiale, ogni frase con la sua fonte, controllato dal codice, da un giudizio del modello e dal guardiano, detto con la voce di Calliope, le pagine al suo posto dicendolo (dal 04/11, #386; schema «studio» alla versione 17; `studio_riassunto`, ombra di serie) | qwen3.6 col client e la guardia del lettore; Piper dietro `in_wav(testo) → wav`; SQLite (`studio_riassunti`) | `calliope/studio/riassunto.py` → `piano`, `corpo`, `valida`, `corpo_giudizio`, `dopo_giudizi`, `giudica`, `firma`, `Riassunti` (in `Studio`); `calliope/studio/riassunto_controllo.py` → `Materiale`, `forma`, `mancanti`, `controlla`; `calliope/studio/lettura.py` → `Lettore.riassumi`; `calliope/studio/ascolta.py` → `componi(sezioni)`, `VocePiper`; `calliope/studio/unita.py` → `parola_numero`; `prove/manuali/banco_studio.py` (fase «riassunto»); prova `prove/prova_studio_riassunto.py` |
 | Vista del tutore (padronanza alla cieca in ombra, giudizio del tutore, «Da guardare tu», prove, ripasso, mappa) e indicazioni dei tutori nei dati del turno del minore (dal 31/10, passo 10, #250 e #285; schema «studio» alla versione 11; `studio_indicazioni`, acceso di serie con lo Studio, `studio_indicazioni_giorni`) | SQLite (`studio_indicazioni`, `studio_tentativi` tipo «giudizio»); libreria standard, niente modello | `calliope/studio/tutore.py` → `forma_indicazione`, `CORNICE`, `Tutore` (in `Studio`): `vista_tutore`, `giudica`, `rivedi_da_tutore`, `scrivi_indicazione`, `cambia_indicazione`, `togli_indicazione`, `togli_indicazioni`, `indicazioni`, `nota_indicazioni`; `calliope/studio/padronanza.py` → `GIUDIZI`, `accordo`; `calliope/brain.py` → `_nota_studio`; `calliope/tools/studio.py` → azioni `indica`, `indicazioni`, `indicazioni_togli`; `calliope/schermi/server.py` → `POST /api/studio/tutore`; `calliope/schermi/pagina/studio.js` («Per te che lo segui», «Indicazioni di chi ti segue»); prove `prove/prova_studio_tutore.py`, `prove/prova_studio_tutore_pagina.py` |
 | Libreria: schede degli argomenti e mazzi di carte nel repository (dati fidati, JSON), il formato e la verità, l'indice per argomento, la scelta del codice con la padronanza solo mostrata, «Dalla libreria» nella home, «Aggiungi le carte», la lettura `libreria` a voce (dal 31/10, #297, prima parte; schema «studio» invariato; `studio_libreria`, attiva di serie con lo Studio) | libreria standard, niente modello; i contenuti in `calliope/studio/libreria/contenuti/<materia>/*.json` | `calliope/studio/libreria/formato.py` → `valida`, `leggi_file`, `FORMULE`; `calliope/studio/libreria/indice.py` → `Libreria` (`carica`, `controlla`, `trova`, `di_scheda`), `parole`, `radice`, `materia_vale`, `scegli`; `calliope/studio/libreria/studio.py` → `DallaLibreria` (in `Studio`): `proposte_libreria`, `scheda_libreria`, `soluzione_libreria`, `aggiungi_mazzo`, `_libreria_home`; `calliope/tools/studio.py` → azione `libreria`; `calliope/schermi/server.py` → `POST /api/studio/libreria`; `calliope/schermi/pagina/libreria.js`; prove `prove/prova_studio_libreria.py`, `prove/prova_studio_libreria_pagina.py`, `prove/verita_libreria.py`; passo manuale `prove/manuali/libreria-studio.md` |
@@ -157,7 +158,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 ## La generazione a lettura finita (04/11, issue #384, ramo `issue-384-generazione-automatica`)
 
 Decisione di chi amministra: dopo la scansione carte, domande e mappe si fanno da sole e chi studia le trova pronte.
-Il perché di ogni scelta è nel punto 58 della [0035](../decisioni/0035-studio.md); qui cosa fa, come si accende e le misure.
+Il perché di ogni scelta è nel punto 59 della [0035](../decisioni/0035-studio.md); qui cosa fa, come si accende e le misure.
 
 **Come si accende** (la DGX la tocca chi amministra): `studio_carte_genera: attiva` e `studio_domande_genera: attiva`
 nel locale, una riga per chiave, e un riavvio. **Niente migrazioni a mano**: il modo sta nella firma, quindi al primo giro
@@ -181,7 +182,7 @@ ha «Fatta da me» e la pagina, «Togli», e nel ripasso «Togli questa carta».
 
 **Il criterio** (decisione di chi amministra del 04/11: nessuna persona valida, né le voci né l'accensione), `banco_rilettura.CRITERIO`: ostili tenute 0, sbagliate tenute al più il 5 %, vere tenute almeno il 70 %, per carte e domande separate.
 
-**Misure del 05/11 sulla DGX**, qwen3.6-35b, temperatura 0, `llama-guard3:8b`, codice di questo ramo prima dell'ultima unione con l'epic (che porta il podcast, spento). **Alla cieca** vuol dire: scene scritte da un agente a parte che non ha letto né il repository né i giudizi.
+**Misure del 05/11 sulla DGX**, qwen3.6-35b, temperatura 0, `llama-guard3:8b`, codice di questo ramo prima dell'ultima unione con l'epic (che porta il podcast, col suo interruttore spento). **Alla cieca** vuol dire: scene scritte da un agente a parte che non ha letto né il repository né i giudizi.
 
 | Misura | Cieca? | Giri | Ostili tenute | Ostili visibili | Vere tenute |
 |---|---|---|---|---|---|
@@ -199,7 +200,7 @@ Il terreno è nato guardando i 3 ostili passati nella prima misura cieca; per qu
 
 Il generatore vero sulle pagine ostili, senza segnarle: `corpus6` (cieca) carte 0 tenute su 51, domande 0 su 80; `corpus5` (non cieca) carte 0 su 64, domande 0 su 102. Prima del terreno, su `corpus5`: carte 3 su 69, domande 8 su 109.
 
-**Mappe**: sul generatore e le pagine ostili MAPPE_GEN. Su materiale vero i collegamenti delle 12 mappe già scritte sulla DGX: 0 fermati su 157. **Il criterio numerico non è misurato per le mappe** (nessuna verità nota), e sulle mappe c'è la sola sicurezza, non il giudizio di fedeltà per collegamento.
+**Mappe**: col generatore sulle pagine ostili di `corpus6` (cieca) cadono 169 collegamenti su 169, perché ogni pagina esce dal terreno: non misura il caso di una pagina mista. Su materiale vero i collegamenti delle 12 mappe già scritte sulla DGX: 0 fermati su 157. **Il criterio numerico non è misurato per le mappe** (nessuna verità nota), e sulle mappe c'è la sola sicurezza, non il giudizio di fedeltà per collegamento.
 
 **Il criterio su `voci_verita.json`** (non cieco: l'ho scritto io, e ho cambiato il meccanismo guardandolo):
 
@@ -208,7 +209,7 @@ Il generatore vero sulle pagine ostili, senza segnarle: `corpus6` (cieca) carte 
 | Carte | 0 su 30 | 1 su 95 (1,1 %) | 45 su 55 (81,8 %) | 0 su 8 |
 | Domande | 0 su 30 | 1 su 59 (1,7 %) | 56 su 75 (74,7 %) | 3 su 16 |
 
-Per errore: scambi 0 su 74, numeri 0 su 13, negazioni 0 su 4, vero o falso girati 0 su 12, soggetto 1 su 48, della verità 1 su 3 (la premessa inventata, «le due aperture»: **passa tutti i cancelli**). Una misura precedente con lo stesso codice salvo il terreno aveva dato domande al 69,3 %: **il margine sul 70 è di pochi punti**, ma con il criterio il 74,7 % è l'ultima. Vere e fuori pagina insieme: 67,5 %.
+Per errore: scambi 0 su 74, numeri 0 su 13, negazioni 0 su 4, vero o falso girati 0 su 12, soggetto 1 su 48, della verità 1 su 3 (la premessa inventata, «le due aperture»: **passa tutti i cancelli**). Due misure col codice finale: domande 74,7 % e 73,3 % (55 su 75), carte 81,8 % tutte e due; prima del terreno e dell'ultimo allentamento le domande erano al 69,3 %: **il margine sul 70 è di pochi punti**. Vere e fuori pagina insieme: 67,5 %.
 
 **OCR** (`corpus4`, il corpus del revisore a capo ogni ~42 caratteri e sillabato; regressione, non cieca): carte 63 su 67 (94 %), domande 53 su 72 (73,6 %, era 62,5 %), sbagliate 0 su 77 e 1 su 92.
 
@@ -218,7 +219,204 @@ Per errore: scambi 0 su 74, numeri 0 su 13, negazioni 0 su 4, vero o falso girat
 
 **Note che restano.** La scelta multipla con due opzioni giuste: la ferma solo il giudizio, che ora lo dice. Un «falso» vero può essere fermato dal giudizio. La DGX ha `studio_mappa_genera: attiva` dal 30/10: **senza questa PR le mappe sono già visibili a chi studia senza questi cancelli**; con l'aggiornamento la firma cambia e si rifanno da sole, anche senza accendere altro (quelle toccate no). Non provato: il giro intero con foto vere.
 
-Prove: `prova_studio_generazione.py` (nuova, a secco, ogni punto coi contrari), `prova_studio_pronto_pagina.py` (nuova, browser a 390×844 e 320×693 e il tutore), tre casi in `prova_studio_ollama.py`. Versione della pagina a v44, schema a 18.
+Prove: `prova_studio_generazione.py` (nuova, a secco, ogni punto coi contrari), `prova_studio_pronto_pagina.py` (nuova, browser a 390×844 e 320×693 e il tutore), tre casi in `prova_studio_ollama.py`. Versione della pagina a v45, schema a 19.
+## Il podcast a due voci (04/11, issue #387, ramo `issue-387-podcast`)
+
+Chi amministra, dopo il banco di ascolto del 04/11 (`privato/prove-voci/LEGGIMI.md`), ha scelto MOSS-TTSD. Decisione
+[0035](../decisioni/0035-studio.md) punto 58. Si prepara da solo e sta accanto al riassunto; finché non c'è resta il
+riassunto. `studio_podcast`, «spenta» di serie.
+
+**Il copione** (`studio/podcast.py`) è il metodo del riassunto: stesse frasi numerate, stesso `R.valida`, stesso giudice,
+stesso guardiano (`Lettore._copione_controllato`, ora una funzione sola per tutti e due). **Le battute senza fonte:** il
+modello non ne scrive. Ogni battuta con la fonte può portarsi due campi, `prima` e `dopo`, detti dall'altra voce, con
+valori da due elenchi chiusi (`RACCORDI_PRIMA`, `RACCORDI_DOPO`: «E poi?», «Perché?», «Capito.», «Interessante.»…), enum nello
+schema e confronto esatto nel codice (`normalizza`, di nuovo in `con_battute`). Niente valori, niente nomi, nessun campo
+libero: un cenno scritto come testo cade per lunghezza, «Quanta acqua porta?» per la forma, e un cenno cade con la sua
+battuta. Le domande sulla materia non ci sono, perché conterrebbero un nome. *[storico fino al 05/11 notte: anche «Perché?», «E quindi?»,
+«Cioè?», «Come mai?», «In che senso?», «E dopo?», che fra due frasi affermano un nesso che la fonte non ha detto. Restano «E poi?» e «E ancora?»]* Il modello non ne metteva (0 su 28 al primo
+giro): sotto una battuta su tre il codice ne aggiunge. **Niente cenni che confermano** (*[storico fino al 05/11: c'erano «Esatto.»,
+«Giusto.», «Certo.»]*): dopo una frase che può essere sbagliata danno un'autorità che lei non ha, il giro della revisione ha
+sentito «gela intorno a 2 gradi» seguita da «Esatto!», e toglierli costa poco. Le voci le
+rimette a posto il codice: non più di due battute di fila, e chi chiede non è chi ha appena parlato (il primo copione
+faceva dire a una voce «In che senso?» dopo la sua stessa frase).
+
+**A MOSS** (`detto`, `numeri_in_lettere`, `pezzi`): numeri in lettere, unità, formule e sigle dette, niente trattini (la sua
+`normalize_text` li toglie e attacca le parole), inglesismi in grafia italiana. Pezzi da al più 900 caratteri (un minuto),
+tagliati sulle battute: si generano, controllano e rifanno da soli. Il pezzo solo col titolo non c'è.
+
+**Il motore** (`studio/podcast_motore.py`, `setup/linux/motore/moss.sh`, `moss_lavoro.py`, `moss.sha256`): `MotoreMoss` ha
+`in_wav(testo) → wav`, come `VocePiper`; in `calliope/` nessuna dipendenza nuova. Container con `--network none`, `--cap-drop
+ALL`, `no-new-privileges`, `--read-only`, non root, tetto di memoria, una sola cartella scrivibile, svuotata alla fine.
+Provato sulla DGX, dal container: `/pv` e la radice non si scrivono, la rete dà `errno 101`, `CapEff` 0, utente 1000. Il
+`/tmp` deve poter eseguire (`exec`): `transformers` e Triton caricano lì il loro codice compilato, e senza
+`generate` cade con «failed to map segment» (due giri persi). Pesi e codice per hash: 28 file in `moss.sha256`, `.py` e
+configurazione ricontrollati a ogni sessione, i pesi per dimensione (l'hash intero: `calliope motore moss verifica`, sulla
+DGX «Tutto come in moss.sha256»). Niente scaricamenti: `installa` una volta, a mano; `adotta ~/prove-voci` prende i
+28 GB del banco con collegamenti fisici.
+
+**Il fermo di vLLM** (`ControlloVllm`, `Ripresa`): **`docker stop` e `docker start`, lo stesso container**, non `calliope motore
+vllm agente ferma`, che lo toglie. Così argomenti, ambiente, porte, rete, riavvio e `VLLM_SERVER_DEV_MODE` non possono
+cambiare; il confronto prima e dopo c'è lo stesso (i nomi di ciò che è cambiato, mai i valori). Sempre: `try`/`finally`, un
+segno su disco scritto prima di fermare e tolto solo con vLLM in piedi e non in pausa, un controllo a ogni giro e all'avvio
+di Calliope, anche col podcast spento, e `docker start` alla chiusura. Sulla DGX, cinque sessioni vere su cinque (due cadute per
+un guasto di MOSS, una per un turno finto): nessuna differenza nel confronto, `is_paused` falso; fra il primo e l'ultimo stesso
+`Id`, `Image`, `Cmd`, `Env`, `User`, `PortBindings`, `NetworkMode`, `RestartPolicy`, `Binds`, `IpcMode`.
+Un agente chiesto intanto aspetta e lo dice (`Lavori.attesa_motore`: la proposta e l'avvio dicono «circa quattro minuti», e
+`verifica` non dà un guasto).
+
+**Quando parte** (`Preparatore.motivo`): fascia, voce ferma da 15 minuti (`quiete`, che senza i suoi segnali qui vale no),
+nessun lavoro, lettore senza niente da fare, vLLM acceso, libero, non in pausa, memoria. Con vLLM fermo devono esserci
+32 GB (`studio_podcast_memoria_gb`), altrimenti riparte subito. **La fascia** (`00:30-07:00`, di serie) non serve alla
+sicurezza: un'interruzione di giorno costa 4 minuti di vLLM che riparte a chi poi chiede un agente, e il primo turno dopo
+paga lo swap (sotto). Un podcast per volta, 60 minuti per finestra.
+
+**Si ferma** (`_cede`, a ogni attesa): un segno della voce, un lavoro, una prova aperta, la firma cambiata, sotto 4 GB, il
+tetto. MOSS via con `rm -f`, vLLM riparte, e i pezzi fatti restano (`<firma>-stato.json`, solo numeri; un pezzo generato e non
+ancora controllato si controlla senza rifarlo).
+
+**Il controllo** (`confronta`, *[storico per le soglie: vedi la seconda revisione, sotto]*): ogni pezzo ritrascritto dal Whisper dei turni, senza prompt, e confrontato col copione. Una
+battuta è a posto con il 60 % delle parole piene, tutti i numeri e le parole che cambiano il senso (`non`, `mai`, `senza`,
+`meno`, `più`); cenni e titoli non contano. Ciò che non torna si rigenera con un altro seme (`studio_podcast_rigenera`, 2);
+poi quel pezzo lo dice Calliope con Piper, dicendolo («Questo pezzo a due voci non è venuto bene: te lo dico io.»). Oltre
+metà dei pezzi non c'è podcast: resta il riassunto, e lo schermo lo dice. Il testo di Whisper non esce da `confronta`.
+
+**Sullo schermo e a voce**: «Ascolta il podcast» accanto a «Leggi le pagine» (pagina v44), `studio_ascolta` con `fonte:
+"podcast"`. Stessi permessi, stessa prova aperta, stessa firma: scaduti non si dicono e si cancellano. I file stanno in
+`podcast/<verifica>/`, vanno via con la verifica e con «svuota», e non ruotano per ultimo ascolto: non si rifanno a richiesta.
+Ogni file comincia con l'avviso, in voce di Calliope portata alla frequenza di MOSS: «È un riassunto scritto da me, detto da due
+voci: per i dettagli il libro resta la fonte.» A voce si dice una volta e dagli altri file si salta. A voce i file passano
+dalla coda delle frasi (`Speaker.suona_file`): si interrompono col nome e danno la posizione a «riprendi», anche dal
+satellite (quest'ultimo non provato).
+
+### Le misure sulla DGX (04/11 sera, materiale di fantasia: `prove/manuali/banco_podcast.py`)
+
+| | |
+|---|---|
+| Copione, qwen3.6 | 115–133 s con i giudizi; 24–26 frasi tenute, 8–9 cenni, 161 s su 508 s di pagine (voluti 127) |
+| Caricamento di MOSS | 140–147 s |
+| Generazione | fattore 1,26–1,35 sul tempo reale, un pezzo da 33–59 s; torch 23,6 GB di GPU, RSS 5,87 GB |
+| Ripartenza di vLLM | 240 s da `docker start` a `/v1/models` |
+| vLLM fermo, un giro intero | 690 s per 255 s di audio (5 pezzi, 0 rigenerati) |
+| vLLM fermo, con un turno finto dopo un pezzo | 530 s + 603 s per 231 s (5 pezzi, 1 rigenerato); la seconda sessione riparte dal secondo pezzo |
+| Quanto copione arriva nell'audio | 24 frasi su 24 e 26 su 26; parole piene ritrovate 99,0–99,8 %, 0 a una voce |
+| Parti | 5 da 39–53 s, 24 kHz, circa 2,2 MB l'una |
+
+**Whisper non è la verità, e le soglie vengono da qui.** Gli stessi pezzi detti da Piper, che i numeri li legge giusti: su 78
+frasi, 1 segnata a torto (un numero su 38): circa un pezzo su 16, che costa una rigenerazione. Sugli audio del banco col
+difetto noto, il dialogo intero, con i riferimenti e senza: in lettere 19 numeri su 19 e 0 frasi segnate; in cifre 3–4 frasi
+segnate («5,10 milioni» per quindici). *[storico, `privato/prove-voci/LEGGIMI.md`: «frasi che mancano» nel dialogo in
+lettere: sull'audio intero non mancano, erano i tagli a 25 s di quella misura.]* Il dialogo di Piper con giorgio Whisper lo capisce peggio: 2 frasi segnate, «l'ichilideogeno».
+
+**Il criterio del riassunto sulle battute** (`banco_studio.py --fasi podcast`, 04/11, scene del banco e della terza revisione,
+pagine ostili senza il segno): 3 giri su 3 passano. Ostili dette 0 su 101, scambi e negazioni che restano 1,0–1,7 %, vere
+tenute 78–83 %. Sui copioni veri delle verifiche ostili rimaste 0 in tutte, con e senza il segno; «chimica senza segno» esce
+«scarso», come deve. I giudizi sono quelli del punto 57: decide chi amministra, come per il riassunto.
+
+**Lo swap.** Tre fermi di vLLM in un'ora e mezza hanno portato lo swap da 4,3 a 16,3 GB su 16,4: dentro c'erano il llama-server della voce (9,4 GB), quello di e4b (2,3) e Calliope (2,0). La prima richiesta alla voce
+dopo: **8,6 s**, la seconda 0,06 s, e lo swap è sceso a 6,2 GB. Per questo la fascia di notte e il riscaldamento a voce
+ferma dopo la sessione (`dopo_sessione`: `scalda_ripresa` o `warmup`; il tempo è di una richiesta a mano, il codice non è
+provato sulla DGX).
+
+**Da guardare.** `copertura_pagina` resta a 0,51: il tetto di durata (`durata 21`) ferma le mirate prima di coprire tutte le pagine;
+per un dialogo che già sfora l'obiettivo si può accettare, da rileggere con materiale vero. Il modello esce spesso dal budget nelle
+richieste mirate con pochi argomenti («tagliate a max_tokens»): si tengono le voci intere. Il livello fra Piper e MOSS in un
+file non è normalizzato. La licenza di giorgio è ambigua (`voices/LEGGIMI.md`, nota 3), le voci vengono da audiolibri: una riga di
+configurazione cambia `studio_podcast_voce_b`; serena (dati sintetici, CC-BY-4.0) è l'alternativa, non provata qui.
+
+### La revisione indipendente della PR #393 (05/11)
+
+Ha detto «da correggere» su quattordici punti, che qui sopra restano come erano solo dove non cambiano.
+
+- **Il segno.** `detto` mangiava il «-»: «-196 gradi» diventava «bolle a 196 gradi», 8 frasi su 13 nel suo giro, e `confronta` passava perché
+  confrontava col testo già pulito. Il segno ora si dice («meno centonovantasei», «meno uno in unità elementari»). `fedele` scarta la battuta se la
+  pulizia cambia un valore (motivo `pulizia`), e `confronta` prende i valori dal `testo`, non dal `detto`, e li cerca col segno fra quelli sentiti.
+- **I titoli** arrivavano alla voce senza giudice né guardiano, **anche nel riassunto** (`ascolta.componi`): stesso varco, stessa correzione. Ora in
+  `_copione_controllato`: il codice, un giudizio suo (`corpo_giudizio_titolo`: col giudizio delle frasi il modello li bocciava tutti, 4 su 4) e il
+  guardiano. Un titolo fermato lascia solo «Argomento 1.». `riassunto.VERSIONE` passa a 3: i copioni si rifanno.
+- *[storico: tolto dalla seconda revisione, sotto]* **Il confronto**: la radice in comune non basta più (faceva passare solfato per solfito). `_simile`: stessa iniziale e stessa fine, una lettera, due da 9
+  in su. `_scambio` segnala le coppie che si somigliano e vogliono dire altro (insolubile, ipertonica, nitrito), anche se il resto della frase torna.
+  Nomi (fra le parole sentite, con `_nome_simile` per le storpiature), ordinali, formule devono esserci tutti. Inventate al più il 10 % (*[storico: 30 %]*).
+- **Gli hash**: l'elenco copre l'ambiente intero, l'immagine e rifiuta i file in più; `pota` lascia di MOSS-TTSD solo `generation_utils.py` e la licenza,
+  così i campioni di voce non stanno nemmeno sul disco. I `.pyc` non si leggono dalla cartella (`PYTHONPYCACHEPREFIX`). **`installa` senza git**, che
+  nell'immagine non c'è: `moss_installa.py`, tutte le versioni fissate. Sulla DGX l'installazione vera senza i pesi dà la stessa impronta di `adotta`
+  (21 s, 6021 file); `narwhals` era nell'ambiente del banco ma non nel suo freeze, ora è fissato. Un `numpy.py` e un `x.py` nell'ambiente: «Non torna».
+- **Prima i controlli, poi il fermo**: MOSS e riferimenti si guardano prima di toccare vLLM; `prenota` dice a tutti che si ferma e poi si riguardano
+  voce e lavori, così un lavoro entrato nel frattempo non trova vLLM fermo; `memoria_bassa` aspetta; il container sparito non si aspetta 15 minuti; con
+  MOSS ancora vivo vLLM non parte, ci riprova al giro dopo; la verifica tolta non salta registro e riscaldamento; Whisper vuoto su un audio con la voce è un guasto
+  suo, si riprova alla sessione dopo, e solo dopo 3 volte vale un no; «c'è il riassunto» solo se c'è. La pagina non resta ferma se il podcast sparisce.
+
+**Le misure nuove, separate da quelle del 04/11** (05/11 notte, DGX, `prove/manuali/studio/podcast/orsea.json`, materiale nuovo, 15 frasi di cui 7 col segno):
+
+| | |
+|---|---|
+| Copione | 51 s, 15 frasi, 6 cenni, 74 s su 264 s di pagine (voluti 66) |
+| Sessione | vLLM fermo 573 s per 107 s di audio, 3 pezzi; ripartenza 254 s; stesso `Id`, `Env`, `Cmd`, `RestartPolicy`, `is_paused` falso |
+| Generazione | fattore 1,29–1,56 (1,56 un pezzo da 7 s); torch 23,6 GB, RSS 5,87 GB |
+| Segno | 7 frasi su 7 dette col «meno», 13 valori su 13 sentiti, 0 a una voce; a mano nelle trascrizioni: «meno 196», «meno 2», «meno 21», «meno 40», «meno 120», «meno 1» |
+| Rigenerati | 1 su 3: «si apre a meno 120 metri» sentito «almeno 120»; col secondo seme giusto. È proprio il difetto che il controllo deve vedere |
+| Copertura | parole piene 93,3 % sui 3 pezzi; il materiale ha `copertura_pagina` 0,44: la chimica è arrivata con una frase sola, quindi solfato e solubile non sono stati sentiti davvero |
+| Titoli, col modello vero | buoni 5 su 8 (uno fermato lascia il numero), ostili 0 su 8; sul copione vero 5 su 6 |
+
+**Quante frasi buone perde il confronto stretto**, sugli stessi audio del 04/11 riletti col codice finale: MOSS 1 frase su 50 (2 %, 1 pezzo su 10), per un nome, 0 numeri persi su 24;
+Piper 18 su 78 (23 %), 0 numeri persi su 38 (*[la prima versione, coi nomi cercati per posizione e «il Quattrocento» preso per un nome, MOSS 4 su 50]*). Un pezzo segnato a torto costa
+un minuto di generazione; dopo tre è a una voce. Un nome che Whisper non conosce («Calicut» sentito «Caligatto») resta segnato: è il costo scelto, da riguardare col materiale vero. Piper non passa da
+questo controllo in esercizio: la cifra dice quanto Whisper capisce peggio quella voce, non che il pezzo sia sbagliato.
+
+Il pezzo a una voce non è ritrascritto: dice `detto`, che `fedele` ha controllato.
+
+### La seconda revisione della PR #393 (05/11 notte)
+
+**Che cosa copre il controllo dell'audio.** Una domanda sola: **MOSS ha detto il copione, o ha saltato, ripetuto, storpiato?** Il significato è già deciso sul testo, prima dell'audio (citazione, codice, giudice, guardiano); una voce non scambia «mitosi» con «meiosi» per sbaglio. Le liste di scambi che c'erano (`_scambio`, prefissi opposti, composti chimici) e i controlli di nomi, ordinali e formule sono tolti: rispondevano a un'altra domanda.
+
+| Coperto | Come |
+|---|---|
+| Salti, anche la coda tronca | parole piene ritrovate per battuta (`SOGLIA_FRASE`, 60 %) |
+| Ripetizioni | parole in più nel pezzo, al più il 10 % |
+| Numeri sbagliati | i valori del `testo` scritto, col segno, **in ordine, nel tratto di audio della sua battuta** (*[storico: su tutto il pezzo, e «3 lune… 12 affluenti» scambiati passava]*) |
+| Una parola che ribalta la frase, saltata o storpiata | `non`, `mai`, `senza`, `meno`, `più`: «a meno 120» → «almeno 120», «molto meno calda» → «molto meravigliosa», visti su MOSS |
+
+**Non coperto, di proposito**, i casi del revisore: isotonica→ipotonica, Austria→Australia, aumenta→diminuisce, mitosi→meiosi, solfato→solfito, insolubile→solubile, Colombo→Magellano, terza→seconda. In tanti giri veri MOSS non ne ha fatto nessuno: sono prove a tavolino, se ne trovano all'infinito e una lista non converge. Passano anche le storpiature di una parola comune in una frase che torna («la pedese di Santarello» per «la pace»): il costo della soglia.
+
+**Gli errori veri di MOSS**, contati su 23 tentativi di storia e chimica (`coppie.json`, il testo di fantasia con ciò che Whisper ha sentito) e sugli audio di prima:
+
+| Errore | Quante volte |
+|---|---|
+| Coda tronca: si ferma dopo 35–50 parole su 100–150 | 3 tentativi su 21, tutti chimica; al tentativo dopo torna |
+| Numero lungo in lettere detto male | 1318 → «1818», «1300 di Ciotolapegie»; 1302 → «1902», tutti nello stesso pezzo; 120 con «a meno» → «almeno» |
+| Storpiatura di una parola | «lo ione» → «l'ottione» (ricorrente), «pace» → «pedese», «il collega Ettore» → «il colleghetto» |
+| Ripetizione | una: «CIO3. CIO3.» |
+| Scambi di significato come quelli del revisore | nessuno |
+
+**I nomi: confermato, e peggio.** Sugli stessi 21 tentativi veri, storia e chimica di fantasia (`prove/manuali/studio/podcast/storia_nomi.json`, `chimica_nomi.json`), pieni di nomi, ioni e formule: col criterio di prima **21 pezzi su 21 buttati**; col nuovo **6 su 21**, e sono i 6 con un difetto vero (coda tronca o numero sbagliato). Il revisore aveva misurato 5 su 5 con Piper; MOSS dice bene, è Whisper che non conosce i nomi e scrive le formule a modo suo («H2O», «OH-», «SO42-», «B12»).
+
+**Il criterio per i nomi e le formule** (`fragili`): la fonte è il copione, non l'orecchio di Whisper. Uno che nel suo posto è stato sentito in un altro modo non conta; uno **saltato** sì, perché lì non si è sentito niente. Il prompt di Whisper non si tocca. Il segno di uno ione e il meno di un'operazione non si possono verificare da Whisper: restano affidati a `detto` e `fedele`.
+
+**Il trattino a regola rovesciata** (`_segni`). Si dice o si toglie solo in forme chiuse: ione («Cl-» come «Na+»), operazione («d=a-b», «5-3=2»: «meno»), nome col numero («carbonio-14», «B-12»), numero negativo, intervallo crescente («1519-1521»), parola composta di due parole intere («anni-luce»). Ogni altro resta e `fedele` scarta la battuta («2-metilpropano», «5-3» senza uguale).
+
+**Gli altri punti**: Docker giù per un momento non è un container sparito, solo «no such» lo è; col messaggio vero in minuscolo. **Sul banco di stanotte un mio errore ha lasciato vLLM fermo circa 5 minuti, ripartenza compresa:** cercavo «No such» con la maiuscola, `inspect` scrive «no such object», e la sessione si credeva MOSS ancora vivo; l'ho ripartito a mano, e ora solo un `inspect` riuscito dice che MOSS c'è: un messaggio mai visto non può più lasciare vLLM fermo. Il disco pieno in `prenota` non lascia acceso niente. **Whisper si guarda prima del fermo** (`_whisper_vivo`, una frase di Piper): Whisper giù non ferma più vLLM, 8 giri 0 `docker stop`; e se sente la frase di prova ma non un pezzo, è quel pezzo a non valere.
+
+**La terza revisione (05/11).** «no such» era troppo largo («no such file or directory» col socket assente): solo «no such container» o «object». La sottrazione con una lettera è «meno» («3x-5», «n-1», «T-5»), il nome col numero vuole un nome intero o una sigla di un elenco chiuso; «C-H» è un legame, si scarta. L'intervallo vuole un segnale («pag.», «dal», «anni», «fra») o due anni. Il «meno» di uno ione non copre l'altro «meno» della frase. **Un nome vale «sentito in altro modo» solo se ciò che si è sentito gli somiglia nel suono** (`_suona`, 0,55) o è la scrittura di una formula: «Un ragazzo» per «Hernán Cortés» non vale; almeno una parola che non è un nome deve esserci, e **l'ultima parola piena di ogni battuta deve tornare**, o somigliare nel suono se è un nome (la coda tronca, motivo `coda`; *[storico: «una delle ultime tre», anche vuota]*). «T-34» si scarta: «T-5» è «meno» solo con l'uguale. Rimisura con questa regola: 7 pezzi fermati sui 21 tentativi, uno in più (l'ultima parola «acqua» davvero non sentita); 0 su 4 nei due giri di chimica col codice finale. Rimisurato sugli stessi 21 tentativi: ancora 6 pezzi fermati, tutti con un difetto vero, nessuna frase giusta persa in più. Giro di conferma col codice finale, chimica: 2 pezzi su 2 al primo tentativo, vLLM fermo 577 s per 130 s, ripartito con le stesse impostazioni.
+
+**Le misure di questa revisione, separate dalle altre** (DGX, MOSS vero, `--fasi diretto`: le frasi delle pagine tali e quali, salvo dove indicato):
+
+| | Storia | Chimica | Chimica, codice finale |
+|---|---|---|---|
+| Frasi, pezzi | 27, 4 | 20, 2 | 20, 2 |
+| Rigenerati, a una voce | 2, 1 | 4, 2 (niente podcast, col criterio di mezzo) | **0, 0** |
+| vLLM fermo | 709 s per 180 s | 834 s | 576 s per 127 s; ripartenza 245 s |
+| Fattore, memoria | 1,28–1,33; 23,6 GB, RSS 5,87 GB | | 1,28–1,29; 23,7 GB, RSS 5,86 GB |
+| Parole piene ritrovate | | | 96,6 % |
+
+Confronto di vLLM dopo l'ultima: stesso `Id`, `Env`, `Cmd`, `RestartPolicy`, `PortBindings`, `is_paused` falso. Lo swap è a 9,5 GB su 16,4.
+
+**Il copione col modello vero su questi materiali** è un'altra cosa, e **il podcast può mancare anche lì**: storia (133 s di pagine) esce **«scarso»** (4 frasi, copertura 0,285, 5 no del giudice), chimica «pronto» con 8 frasi. Sono materiali corti e densi; da guardare con le pagine vere, prima di accendere.
+
+**Da guardare.** La pronuncia degli anni lunghi: un punto dove staccare le parole («milletrecento diciotto») potrebbe evitare le rigenerazioni, non provato. «lo ione» esce quasi sempre «l'ottione»: un difetto vero che il controllo lascia passare.
+
+Prove: `prova_studio_podcast.py` (motore, Docker, Whisper e modello finti, compreso il riavvio di vLLM in ogni guasto),
+`prova_studio_ascolta_pagina.py` (il tasto nella pagina vera), `prove/manuali/banco_podcast.py`, `banco_studio.py --fasi podcast`.
+**Non provato:** la Calliope installata (la versione sulla DGX è ancora senza questo codice), un agente vero chiesto durante il
+riavvio, la lettura a voce vera e dal satellite, lo scaricamento dei pesi di `installa` (provati codice, ambiente, un file con `hf`), le pagine vere, l'ascolto a orecchio, il segno degli ioni su MOSS verificato da altro che Whisper.
 
 ## Il riassunto da ascoltare (04/11, issue #386, ramo `issue-386-riassunto`)
 

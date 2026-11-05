@@ -373,7 +373,7 @@ dell'eco della stanza.
     scartate: SM-2 e FSRS (analisi nella #246), il giudizio del modello sulla risposta, i tocchi per
     le risposte, le carte del tutore come dato fidato (due regole invece di una).
 
-34. *[rivisto il 04/11 dal punto 58: le pulite vanno subito nel ripasso, senza conferma; il resto resta]*
+34. *[rivisto il 04/11 dal punto 59: le pulite vanno subito nel ripasso, senza conferma; il resto resta]*
     **Le carte generate dal lettore sono proposte e restano un dato** (seconda parte del passo 6,
     #246). Le chiede a qwen3.6 lo stesso thread della lettura, con la sua guardia e il suo client,
     per una verifica aperta e i suoi argomenti confermati, dal solo testo letto (pagine e argomenti
@@ -434,7 +434,7 @@ dell'eco della stanza.
     5.4), un tool che legge la mappa in busta (non serve alle quattro fasi), tre tabelle per concetti e
     collegamenti, la padronanza in ombra per scegliere le caselle.
 
-36. *[rivisto il 04/11 dal punto 58: parte a lettura finita; lo scheletro resta proposto finché non lo si
+36. *[rivisto il 04/11 dal punto 59: parte a lettura finita; lo scheletro resta proposto finché non lo si
     conferma per «Fai la tua»]* **Lo scheletro generato dal lettore è proposto e resta un dato** (seconda parte del passo 7).
     Lo chiede a qwen3.6 lo stesso thread della lettura, con la sua guardia e il suo client, dopo le
     carte: le triple *(concetto, relazione, concetto)* dal solo testo letto, pagine e argomenti in
@@ -541,7 +541,7 @@ dell'eco della stanza.
     - il tutore che fa la prova al posto del minore;
     - le domande generate subito nelle prove.
 
-41. *[rivisto il 04/11 dal punto 58: le pulite sono subito nelle prove, senza conferma; il resto resta]*
+41. *[rivisto il 04/11 dal punto 59: le pulite sono subito nelle prove, senza conferma; il resto resta]*
     **Le domande generate dal lettore sono proposte e restano un dato.** Come le carte (punto
     34): lo stesso thread, la stessa guardia, pagine e argomenti in busta, schema guidato coi
     tipi, nessun tool. Il codice controlla la forma: una sola opzione giusta, un numero
@@ -1069,10 +1069,40 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     solo idee e far inserire i valori al codice (non si compone bene a orecchio); una rilettura di una persona (vedi
     sopra); tenere gli scarti col testo per rileggerli (è materiale di un minore: solo conti).
 
+## Il podcast a due voci (#387, 04/11)
+
+58. **Il podcast a due voci si prepara da solo a macchina libera, col metodo del riassunto, e sta accanto al riassunto.** Chi
+    amministra ha scelto MOSS-TTSD dopo il banco di ascolto del 04/11. Finché non c'è, resta il riassunto; se non passa i controlli,
+    anche. `studio_podcast`, «spenta» di serie (il numero si sistema all'unione).
+    - **Il copione è quello del punto 57**, stessi cancelli, nessuna validazione umana. **Le battute senza fonte non sono testo del
+      modello:** cenni da due elenchi chiusi, attaccati a una battuta con la fonte, che cadono con lei; nessun campo libero, e nessun cenno
+      che conferma o afferma un nesso (*[storico fino al 05/11: «Esatto.», «Giusto.», «Certo.», «Perché?», «E quindi?»]*). Le domande
+      sulla materia non ci sono: conterrebbero un nome. Il criterio del punto 57 sulle battute passa 3 giri su 3 (ostili 0 su 101,
+      scambi e negazioni 1,0–1,7 %, vere 78–83 %).
+    - **I titoli passano dagli stessi cancelli**, nel podcast e nel riassunto: il codice, un giudizio loro, il guardiano; altrimenti resta il
+      numero (revisione della PR #393).
+    - **MOSS chiede `trust_remote_code`:** container senza rete né capacità, radice in sola lettura, per hash tutto ciò che viene eseguito
+      (ambiente e immagine compresi), un file in più non torna, mai scaricato a ogni avvio, una sola cartella scrivibile. In `calliope/` nessuna dipendenza: `in_wav(testo) → wav`.
+    - **vLLM si ferma con `docker stop` e riparte con `docker start`:** lo stesso container, così la pausa dell'arbitro non si può
+      perdere; il confronto c'è lo stesso. Sempre, con un segno su disco e un controllo all'avvio di Calliope. Un agente chiesto
+      intanto aspetta e lo dice.
+    - **Solo a macchina libera**: nessun turno, nessun lavoro, la voce ferma, memoria; un segno della voce toglie MOSS subito e il
+      lavoro fatto resta. **Di notte** di serie, non per la sicurezza: un'interruzione costa 4 minuti a chi chiede un agente, e il primo
+      turno dopo paga lo swap (8,6 s misurati).
+    - **Il controllo dell'audio risponde a una domanda sola: MOSS ha detto il copione, o ha saltato, ripetuto, storpiato?** Il significato è già deciso sul testo. Ogni pezzo si ritrascrive e si confronta: i numeri col segno frase per frase dal testo di prima della pulizia; i nomi e le formule che Whisper sente a modo suo non buttano il pezzo, quelli saltati sì (col criterio di prima 21 pezzi su 21 buttati, col nuovo 6, tutti con un difetto vero): rigenerato un numero limitato di volte, poi a una
+      voce dicendolo; oltre metà, niente podcast. Scambi come mitosi e meiosi non sono coperti: una voce non li fa, e nei giri veri non ce n'è.
+    - **Due voci che non sono persone**: riferimenti generati con Piper, mai i campioni di MOSS, che sembrano personaggi pubblici.
+    - **L'audio resta finché c'è la verifica**: non si rifà a richiesta, perché fermerebbe vLLM. Stessi permessi, prova aperta, firma
+      e cancellazione del riassunto.
+
+    Alternative scartate: Chatterbox (scelta di chi amministra, dopo l'ascolto); `motore vllm agente ferma` e `avvia` con `PAUSA=1` (il
+    banco: una dimenticanza e la pausa è persa); domande del modello con un nome dentro (un canale non controllato); il blocco intero
+    invece dei pezzi (una frase sbagliata rifarebbe tutto); tenere il testo di Whisper per rileggerlo (è materiale di un minore).
+
 
 ## La generazione a lettura finita (#384, 04/11)
 
-58. **Dopo la scansione lo Studio prepara da solo, e chi studia trova pronto** (decisione di chi amministra del
+59. **Dopo la scansione lo Studio prepara da solo, e chi studia trova pronto** (decisione di chi amministra del
     04/11; rivede i punti 34, 36 e 41). Le regole di fondo non cambiano: il testo generato è un dato in busta,
     l'esito lo decide il codice, ogni voce ha la sua pagina.
     - **Nessuna chiave nuova.** `studio_carte_genera` e `studio_domande_genera`

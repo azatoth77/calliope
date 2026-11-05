@@ -9,7 +9,7 @@ degli argomenti del piano e delle loro pagine (`firma`) diversa da quella dell'u
 (`studio_verifiche.carte_firma`). `studio_carte_genera` decide: «spenta» niente, «ombra» (di serie)
 genera e misura con le carte in stato «ombra», che non vanno mai alla persona, «attiva» genera **a
 lettura finita senza aspettare la conferma degli argomenti** (decisione di chi amministra del 04/11,
-#384, 0035 punto 58; `servizio.Studio.generazione_automatica`) e le carte pulite vanno subito nel
+#384, 0035 punto 59; `servizio.Studio.generazione_automatica`) e le carte pulite vanno subito nel
 ripasso. Il modo entra nella firma: passando da ombra ad attiva si rigenerano tutte, le righe in ombra
 non diventano mai vere da sole.
 

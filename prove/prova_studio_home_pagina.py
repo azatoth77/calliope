@@ -333,9 +333,9 @@ def main() -> int:
         import types
         cfg.studio_modo, cfg.studio_cartella, cfg.studio_lettura = "attivo", "studio", False
         minori.prepara(cfg, registry=REG)
-        # Sempre alle 16: il piano guarda l'ora (i minuti liberi di un minore), e a tarda sera «oggi» non c'è
+        # A una ora fissa: di sera i minuti liberi di oggi finiscono, e il piano non dà più «oggi»
         st = S.Studio(cfg, registry=REG, log=lambda m: None, adesso=lambda: datetime.datetime.combine(
-            datetime.date.today(), datetime.time(16, 0)))
+            datetime.date.today(), datetime.time(10, 0)))
         st.avvia_lettura(None, avvia=False)
         serv = B.Servizi()
         serv.studio = st

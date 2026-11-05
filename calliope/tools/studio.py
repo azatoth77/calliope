@@ -1909,9 +1909,11 @@ def _ascolta(ctx: ToolContext, azione: str = "", cosa: str = "", numero=None, ve
                     return {"ok": False, "errore": "manca il numero dell'argomento",
                             "cosa_fare": "Chiedi il numero dell'argomento, oppure usa cosa "
                                          "«oggi» o «tutto»."}
+            f = str(fonte).strip().lower()
+            if f == "podcast" and svc.podcast_modo() != "attiva":
+                return _f("Il podcast qui non è acceso.", ok=False)
             lett = svc.ascolto_prepara(chi, v["id"], cosa, n, "inizia",
-                                       fonte="pagine" if str(fonte).strip().lower() == "pagine"
-                                       else None)
+                                       fonte=f if f in ("pagine", "podcast") else None)
     except ProvaAperta:
         note_rule(ctx, "studio_ascolta_prova")
         # In terza persona: lo può chiedere anche il tutore del ragazzo che fa la prova
@@ -1942,13 +1944,14 @@ DESCRIZIONE_ASCOLTA = (
     "pagine, se è pronto, altrimenti le pagine lette dei suoi argomenti, e le carte, da sola, dopo la "
     "tua risposta. azione «inizia» con cosa «oggi» (ciò che tocca oggi nel piano, di serie), «tutto», "
     "«argomento» (con numero = la posizione nell'elenco) o «carte»; fonte «pagine» solo se la persona "
-    "vuole proprio sentire le pagine parola per parola; dopo «Calliope, basta»: «riprendi», «ripeti» "
+    "vuole proprio sentire le pagine parola per parola, «podcast» se chiede il podcast a due voci; dopo "
+    "«Calliope, basta»: «riprendi», «ripeti» "
     "(dall'inizio del paragrafo) o «ferma» (chiude). verifica = l'id o materia; per = il nome del "
     "ragazzo se lo chiede il tutore. Non leggere tu il testo: lo legge il codice.")
 PARAMETRI_ASCOLTA = {"type": "object", "properties": {
     "azione": {"type": "string", "enum": list(AZIONI_ASCOLTA)},
     "cosa": {"type": "string", "enum": ["oggi", "tutto", "argomento", "carte"]},
-    "fonte": {"type": "string", "enum": ["riassunto", "pagine"]},
+    "fonte": {"type": "string", "enum": ["riassunto", "pagine", "podcast"]},
     "numero": {"type": "integer"}, "verifica": {"type": "integer"},
     "materia": {"type": "string"}, "per": {"type": "string"}},
     "required": ["azione"]}

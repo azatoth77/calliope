@@ -62,7 +62,7 @@ quinte (studio/preparazione.py) sulle verifiche dei materiali e sulla pagina di 
 `studio/preparazione/` (reazioni e misure attese, una pagina ostile): paragrafi fondati, valori
 giusti, niente dalla pagina ostile. Dal 04/11 (#386) la fase **riassunto** (`--fasi riassunto`, con
 `--voce` anche la sintesi, con `--guardiano-modello` il guardiano): il copione del riassunto da ascoltare, con
-la citazione, il giudizio e il guardiano, e le scene col criterio che decide l'accensione (`CRITERIO_RIASSUNTO`).
+la citazione, il giudizio e il guardiano, e le scene col criterio che decide l'accensione (`CRITERIO_RIASSUNTO`). Dal 04/11 (#387) la fase **podcast**: lo stesso, con le battute a due voci.
 
 **Non disturbare** (`Guardia`): prima di ogni richiesta, vLLM senza richieste di altri in corso né
 in coda (`/metrics`), non in pausa (`/is_paused`: l'arbitro ferma vLLM quando parla la voce),
@@ -1220,20 +1220,24 @@ def _scene_negazioni(M, massimo: int = 30) -> list[dict]:
     return out[:massimo]
 
 
-def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None, guardiano=None) -> dict:
+def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None, guardiano=None, scrive=None) -> dict:
     """Il riassunto da ascoltare (#386), coi tre cancelli di Calliope (studio/riassunto.py): la frase citata,
     il giudizio, il guardiano. Per ogni verifica il copione vero (durata sulle pagine, frasi uscite per
     motivo, voci ostili rimaste, tempi; con le pagine ostili con e senza il segno «ISTRUZIONI: sì»). Poi le
     **scene** che decidono l'accensione (`CRITERIO_RIASSUNTO`, punto 57 della 0035), con le pagine ostili non
     segnate: scambi e negazioni generati dalle frasi delle pagine, frasi ostili messe in una pagina e citate
     da sé stesse, frasi vere riformulate a mano (`studio/riassunto/scene.json`). Con `--voce` il tempo di
-    sintesi, con `--guardiano-modello` il guardiano. Non è nella lista di serie: `--fasi riassunto`."""
+    sintesi, con `--guardiano-modello` il guardiano. Non è nella lista di serie: `--fasi riassunto`. Dal 04/11 (#387)
+    `--fasi podcast`: `scrive` è `studio/podcast.py`, che scrive le battute a due voci; il resto è uguale, e il criterio
+    è lo stesso (punto 58)."""
     from calliope.studio import argomenti as A
     from calliope.studio import ascolta as AS
     from calliope.studio import genera as G
     from calliope.studio import lettura as L
     from calliope.studio import riassunto as R
     from calliope.studio import riassunto_controllo as C
+    W = scrive or R
+    fase_nome = "podcast" if scrive else "riassunto"
     extra = {}
     for cart in ("preparazione", "riassunto"):
         for f in sorted((MATERIALI / cart).glob("*.json")):
@@ -1295,13 +1299,13 @@ def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None, guardian
 
             def chiedi(ar):
                 nonlocal secondi, token, richieste
-                r = cli.chat(R.messaggi(v, rif, ar, piano, M), max_token=R.budget(ar, piano),
+                r = cli.chat(W.messaggi(v, rif, ar, piano, M), max_token=W.budget(ar, piano),
                              schema=R.schema(ar), temperatura=R.TEMPERATURA, presence=R.PRESENCE)
                 secondi += float(r.get("secondi") or 0)
                 token += int(r.get("token_out") or 0)
                 richieste += 1
                 testo = r.get("testo", "")
-                return R.leggi(testo) or R.parziale(testo) or None
+                return W.leggi(testo) or W.parziale(testo) or None
             grezzi = chiedi(utili) if utili else []
             prima = None
             for _g in range(L.SECONDE_MAX):
@@ -1330,14 +1334,14 @@ def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None, guardian
 
             def mirata_chiedi(mirata):
                 nonlocal secondi, token, richieste
-                r = cli.chat(R.messaggi_scoperte(v, rif, mirata, M),
-                             max_token=R.max_token(mirata["quante"], len(mirata["argomenti"])),
-                             schema=R.schema(mirata["argomenti"]), temperatura=R.TEMPERATURA, presence=R.PRESENCE)
+                r = cli.chat(W.messaggi_scoperte(v, rif, mirata, M),
+                             max_token=W.max_token(mirata["quante"], len(mirata["argomenti"])),
+                             schema=W.schema(mirata["argomenti"]), temperatura=R.TEMPERATURA, presence=R.PRESENCE)
                 secondi += float(r.get("secondi") or 0)
                 token += int(r.get("token_out") or 0)
                 richieste += 1
                 testo = r.get("testo", "")
-                return R.leggi(testo) or R.parziale(testo) or None
+                return W.leggi(testo) or W.parziale(testo) or None
             ris = R.con_copertura(grezzi or [], M, rif, arif, piano, mirata_chiedi, tiene)
             s_giudizi = time.monotonic() - t0
             esito = R.giudica(ris) if grezzi is not None else G.ROTTO
@@ -1352,7 +1356,7 @@ def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None, guardian
                 return bool(_OSTILE_SEMPRE.search(t)) or any(re.search(x, piano_t) for x in proibiti)
             proposte = [str(f.get("testo") or "") for s in grezzi or [] if isinstance(s, dict)
                         for f in s.get("frasi") or [] if isinstance(f, dict)]
-            riga = {"fase": "riassunto", "verifica": vid, "segno": segno, "esito": esito,
+            riga = {"fase": fase_nome, "verifica": vid, "segno": segno, "esito": esito,
                     "richieste": richieste, "secondi": round(secondi, 1), "token_out": token,
                     "secondi_giudizi": round(s_giudizi, 1), "lettura_s": c["lettura_s"],
                     "obiettivo_s": c["obiettivo_s"], "durata_s": c["durata_s"], "rapporto": c["rapporto"],
@@ -1376,7 +1380,7 @@ def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None, guardian
             out[f"{vid}{'' if segno else '-senza-segno'}"] = riga
             with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
                 f.write(json.dumps(riga, ensure_ascii=False) + "\n")
-            log(f"[riassunto] {vid}{'' if segno else ' senza segno'}: {esito}, durata {riga['durata_prima_s']:.0f} → "
+            log(f"[{fase_nome}] {vid}{'' if segno else ' senza segno'}: {esito}, durata {riga['durata_prima_s']:.0f} → "
                 f"{riga['durata_s']:.0f} s (obiettivo {riga['obiettivo_s']:.0f}) su {riga['lettura_s']:.0f} s di pagine, "
                 f"parte di pagina {riga['copertura_pagina_prima']} → {riga['copertura_pagina']}, frasi "
                 f"{riga['tenute_prima']} → {riga['tenute']}, mirate {riga['mirate']}, argomenti {riga['argomenti']}, "
@@ -1475,13 +1479,13 @@ def fase_riassunto(cli, materiali, testi_letti, uscita, log, voce=None, guardian
                  and tenute_vere >= CRITERIO_RIASSUNTO["vere_min"]}
         with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps({"fase": "riassunto_scene", **riass, "resti": resti}, ensure_ascii=False) + "\n")
-        log(f"[riassunto] SCENE {json.dumps(riass, ensure_ascii=False)}")
+        log(f"[{fase_nome}] SCENE {json.dumps(riass, ensure_ascii=False)}")
         return riass
 
     # Più giri: la temperatura 0 non dà la stessa risposta ogni volta. Passa solo se passano tutti
     giri = [giro_scene() for _g in range(3)]
     out["_scene"] = {"giri": giri, "passa": all(g["passa"] for g in giri)}
-    log(f"[riassunto] CRITERIO {'passa' if out['_scene']['passa'] else 'NON passa'} in tutti e 3 i giri")
+    log(f"[{fase_nome}] CRITERIO {'passa' if out['_scene']['passa'] else 'NON passa'} in tutti e 3 i giri")
     return out
 
 
@@ -2095,6 +2099,13 @@ def main(argv=None):
                     guardiano_modello=a.guardiano_modello, guardiano_url="", llm_native_url=a.ollama,
                     guardiano_timeout_s=20.0, guardiano_enabled=True))
             riep["riassunto"] = fase_riassunto(cli, materiali, testi, uscita, log, a.voce, guardiano)
+        if "podcast" in fasi:
+            import types as _t
+            from calliope.guardiano import Guardiano
+            from calliope.studio import podcast as _podcast
+            riep["podcast"] = fase_riassunto(cli, materiali, testi, uscita, log, None, Guardiano(_t.SimpleNamespace(
+                guardiano_modello=a.guardiano_modello, guardiano_url="", llm_native_url=a.ollama,
+                guardiano_timeout_s=20.0, guardiano_enabled=True)) if a.guardiano_modello else None, _podcast)
     except Fermati as e:
         log(f"[banco] FERMO: {e}")
         riep["fermo"] = str(e)

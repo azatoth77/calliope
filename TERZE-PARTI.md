@@ -57,6 +57,7 @@ whisper.cpp (MIT), SearXNG (AGPL-3.0, in un container suo), OpenSSH, Docker, ope
 | Feature di openWakeWord v0.5.1 | Apache-2.0 | i modelli di wake word preaddestrati di openWakeWord sono CC BY-NC-SA 4.0: non usati |
 | Gemma 4 (voce) | termini di Google per i modelli Gemma (verificare la licenza della versione usata) | |
 | Qwen3.6 (agente) | Apache-2.0 (verificare alla versione usata) | |
+| MOSS-TTSD v1.0 (podcast dello Studio, #387) | Apache-2.0, codice e pesi; codice `46973e4`, pesi `OpenMOSS-Team/MOSS-TTSD-v1.0` `c7cd852`, `OpenMOSS-Team/MOSS-Audio-Tokenizer` `3cd226b`; hash in `setup/linux/motore/moss.sha256` | facoltativo, spento di serie; in un container senza rete, con `trust_remote_code`; i campioni di voce del progetto (`asset/reference_02_s*.wav`) non si usano |
 | Llama Guard 3 8B (guardiano dei minori) | Llama 3.1 Community License (attribuzione «Built with Llama», condizioni d'uso di Meta) | facoltativo |
 | qwen3-embedding:0.6b | Apache-2.0 | |
 | Voci di Piper | serena: CC BY 4.0 (attribuzione); paola: CC0-1.0 nel repository dell'autrice; riccardo: dati M-AILABS (permissiva); le voci della comunità hanno licenze diverse, alcune non commerciali (miro, dii: CC BY-NC-ND 4.0): vedi [`voices/LEGGIMI.md`](voices/LEGGIMI.md) | |

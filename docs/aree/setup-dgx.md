@@ -209,6 +209,11 @@ calliope motore whisper-lento stato|memoria|ferma|avvia|disinstalla
   avvia|rifai|ferma|stato|riprendi` e, sulla DGX, `PAUSA=1` (modalità sviluppo di vLLM per la
   pausa dell'arbitro; rete Docker sua, solo 127.0.0.1: rischi in `prove/LEGGIMI.md`).
   `vllm.sh` non scarica pesi: dice il comando, da lanciare solo con il consenso.
+- **Podcast dello Studio** (#387, `studio_podcast`, spenta di serie; [studio](studio.md)): prima di accenderlo `calliope motore
+  moss adotta ~/prove-voci` (o `installa`, 28 GB, una volta), che pota ciò che non serve e finisce con la verifica degli hash; poi le due voci di Piper
+  in `studio_podcast_voce_a` e `_b`. Di notte (`studio_podcast_fascia`) ferma vLLM con `docker stop` e lo riparte con `docker
+  start`: lo stesso container. Un segno `podcast_vllm_fermo.json` nella cartella dello Studio vuol dire che una sessione è caduta:
+  Calliope lo riprende da sola all'avvio; a mano `docker start calliope-vllm`. Serve `arbitro_memoria: ombra`, senza non parte.
 - **Casa**: la DGX è in ufficio e Home Assistant di casa è già esposto con DuckDNS: lì
   `casa_url` è l'indirizzo DuckDNS (`https://<nome>.duckdns.org:8123`) con la verifica TLS
   normale, senza `casa_tls_nome`. In casa resta l'IP del Raspberry con `casa_tls_nome`.

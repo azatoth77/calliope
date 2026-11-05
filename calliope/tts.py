@@ -7,6 +7,7 @@ import queue
 import re
 import threading
 import time
+import wave
 
 import numpy as np
 import sounddevice as sd
@@ -343,6 +344,27 @@ class _Silenzio:
 
     def __init__(self, secondi: float):
         self.secondi = max(0.0, min(30.0, float(secondi)))
+
+
+class _File:
+    """Un WAV già pronto, nell'ordine della coda (04/11, il podcast dello Studio, #387): `segno` va in `played`."""
+
+    def __init__(self, percorso: str, segno: str, salta: float = 0.0):
+        self.percorso, self.segno, self.salta = percorso, segno, max(0.0, salta)
+
+
+def _pcm_del_file(item: _File, rate: int) -> bytes:
+    """I campioni del file alla frequenza dell'uscita, senza i secondi di testa da saltare."""
+    from .suoni import a_pcm, ricampiona
+    with wave.open(item.percorso, "rb") as w:
+        da, n = w.getframerate(), w.getnframes()
+        if w.getnchannels() != 1 or w.getsampwidth() != 2:
+            raise ValueError("non è un WAV mono a 16 bit")
+        w.setpos(min(n, int(item.salta * da)))
+        grezzo = w.readframes(n)
+    if da == rate:
+        return grezzo
+    return a_pcm(ricampiona(np.frombuffer(grezzo, dtype="<i2").astype(np.float32) / 32768.0, da, rate))
 
 
 def sintesi_pcm(voice, text: str, pronuncia=None) -> bytes:
@@ -765,10 +787,14 @@ class Speaker:
                         rate = getattr(getattr(self.voice, "config", None), "sample_rate",
                                        0) or self._rate
                         audio_q.put(("", b"\0\0" * int(rate * item.secondi)))
+                elif isinstance(item, _File):
+                    if not self._interrupted.is_set():
+                        audio_q.put((item.segno, _pcm_del_file(item, self._rate)))
                 elif not self._interrupted.is_set():      # interrotta: non si sintetizza più
                     audio_q.put((item, self._synth(item)))
             except Exception as e:  # noqa: BLE001 — Piper/espeak su un testo strano
-                self._salta(item.text if isinstance(item, _Filler) else item, e)
+                self._salta(item.text if isinstance(item, _Filler) else
+                            item.segno if isinstance(item, _File) else item, e)
 
     def _play_worker(self, gen=None, audio_q=None):
         audio_q = self.audio_q if audio_q is None else audio_q
@@ -931,6 +957,14 @@ class Speaker:
         if self.muto:
             return
         self.text_q.put(_Silenzio(secondi))
+
+    def suona_file(self, percorso: str, segno: str, salta: float = 0.0):
+        """Un WAV mono già pronto in coda, dopo le frasi già mandate (04/11, il podcast dello Studio, #387):
+        passa dalla stessa coda delle frasi, va in `played` come una frase (`segno`), si interrompe come una
+        frase, anche dal satellite. Portato alla frequenza della voce (l'uscita è aperta su quella)."""
+        if self.muto:
+            return
+        self.text_q.put(_File(str(percorso), str(segno), float(salta)))
 
     def voce_per(self, voice_path: str):
         """La voce di Piper di quel percorso, caricata una volta sola (`_load`): per l'audio del

@@ -1,4 +1,4 @@
-"""Il banco della rilettura (04/11/2026, issue #384, epic #251, decisione 0035 punto 58): misura il
+"""Il banco della rilettura (04/11/2026, issue #384, epic #251, decisione 0035 punto 59): misura il
 meccanismo che manda carte e domande generate a chi studia, contro un **criterio numerico scritto**.
 Decisione di chi amministra del 04/11: nessuna persona valida le voci prima che lo studente le veda, e
 nemmeno l'accensione dipende da una rilettura. La sicurezza sta nei controlli automatici, e una voce

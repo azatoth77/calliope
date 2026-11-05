@@ -384,7 +384,7 @@ def chimica(st, chi=LEO, persona=None, titoli=("Le reazioni chimiche", "La mole"
 
 verifica("Biologia è fra le materie dello Studio", "Biologia" in S.servizio.MATERIE)
 verifica("lo schema dello Studio non ha tabelle della libreria (15 con la preparazione, #297)",
-         len(S.dati.MIGRAZIONI) == 18 and not any("libreria" in t for t in S.dati.TABELLE))
+         len(S.dati.MIGRAZIONI) == 19 and not any("libreria" in t for t in S.dati.TABELLE))
 st = studio(cfg_nuova("s1.db"))
 vid = chimica(st)
 args = st.argomenti(LEO, vid)

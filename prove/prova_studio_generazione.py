@@ -1,7 +1,7 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-"""La generazione a lettura finita a secco (04/11, issue #384, epic #251, decisione 0035 punto 58;
+"""La generazione a lettura finita a secco (04/11, issue #384, epic #251, decisione 0035 punto 59;
 studio/genera.py, studio/domande_genera.py, studio/servizio.py, studio/prove.py, studio/lettura.py).
 Con il vLLM finto e i materiali di fantasia di `prova_studio_argomenti.py` (Leo, il tutore Andrea).
 

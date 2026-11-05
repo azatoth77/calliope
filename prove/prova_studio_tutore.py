@@ -146,8 +146,8 @@ def nascosta(f) -> bool:
 print("— schema")
 st = studio(cfg_nuova("tutore.db"))
 from calliope.conserva import TABELLE_STUDIO  # noqa: E402
-verifica("schema «studio» alla versione 18 (11 col passo 10, 12 coi premi, 13 con l'importazione, 14 con gli esercizi guidati, 15 con la preparazione)",
-         D.versione_schema(st.dati.db) == 18 and len(D.MIGRAZIONI) == 18)
+verifica("schema «studio» alla versione 19 (11 col passo 10, 12 coi premi, 13 con l'importazione, 14 con gli esercizi guidati, 15 con la preparazione)",
+         D.versione_schema(st.dati.db) == 19 and len(D.MIGRAZIONI) == 19)
 verifica("studio_indicazioni in TABELLE e in conserva.TABELLE_STUDIO",
          "studio_indicazioni" in D.TABELLE and set(TABELLE_STUDIO) == set(D.TABELLE))
 verifica("le chiavi nella Config e nel file d'esempio, con i limiti",
