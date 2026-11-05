@@ -438,7 +438,9 @@ def _sha_finta(nome):
 
 _HASH_VERI = P.hash_ammessi
 _FINTE = {_sha_finta(n) for n in ("it_IT-paola-medium", "it_IT-serena-high", "it_IT-serena-altra")}
-P.hash_ammessi = lambda chiave: _FINTE       # i file finti al posto dei modelli veri; quelli veri si guardano qui sotto
+_CATALOGO_VERO = P.hash_catalogo
+P.hash_ammessi = lambda: _FINTE       # i file finti al posto dei modelli veri; quelli veri si guardano qui sotto
+P.hash_catalogo = lambda: _FINTE
 
 
 def cfg_nuova(nome, modo="attiva"):
@@ -1157,9 +1159,8 @@ verifica("l'attribuzione di serena, col modello che si usa", "committa" in _terz
          and "committa/it_IT-serena-medium" not in _terze)
 _SERENA_ALTA, _PAOLA = "7462fbdf03727fb4c0c161286ad538fe6436b7e4b1c3059ef52930032475955f", "6fc918b5a0ea6137382833dddfa567bffbe6a5060c02043c87192ee59c04210c"
 _GIORGIO = "6bfc837a53dd420a7d10e6d237eee2d7d276ee5cb3bf521bfa2b2446d0ff1dc9"
-verifica("gli hash veri del catalogo: le due voci, e giorgio no", _HASH_VERI("studio_podcast_voce_b") == {_SERENA_ALTA, _PAOLA}
-         and _GIORGIO not in _HASH_VERI("studio_podcast_voce_a"))
-verifica("…e nemmeno per la voce di Calliope", _GIORGIO not in _HASH_VERI("piper_voice") and _SERENA_ALTA in _HASH_VERI("piper_voice"))
+verifica("gli hash veri del catalogo: le due voci, e giorgio no", _HASH_VERI() == {_SERENA_ALTA, _PAOLA} and _GIORGIO not in _HASH_VERI())
+verifica("…e nemmeno nelle voci di servizio", _GIORGIO not in _CATALOGO_VERO() and _SERENA_ALTA in _CATALOGO_VERO())
 
 
 class _VocePiperFinta:
@@ -1229,13 +1230,31 @@ try:
         verifica(f"il contenuto di giorgio, con un altro nome ({nome})", _prova_nome(nome, _voce_finta("it_IT-giorgio-medium")) == "voce_non_ammessa")
     verifica("un'altra voce mai scelta (leonardo): nemmeno", _prova_nome("x.onnx", _voce_finta("it_IT-leonardo-medium")) == "voce_non_ammessa")
     verifica("contrario: serena con un altro nome passa", _prova_nome("rinominata.onnx", _voce_finta("it_IT-serena-high")) == "ok")
-    verifica("giorgio come voce di Calliope nel podcast: non vale", _prova_nome("c.onnx", _voce_finta("it_IT-giorgio-medium"), "piper_voice") == "voce_non_ammessa")
+    _prova_nome("c.onnx", _voce_finta("it_IT-giorgio-medium"))
     try:
         PA.crea_motore_moss(cfg, m.voce_per)(lambda: None)
         _no = False
     except P.VoceNonUsabile as e:
         _no = e.motivo == "voce_non_ammessa"
     verifica("…il motore non si crea, e Piper non la carica mai", _no and "c" not in m.chieste, str(m.chieste))
+    print("— la voce di Calliope non ferma il podcast, e non ci entra se è fuori catalogo")
+    m3, c3 = _mondo_voci("servizio")
+    cf3 = m3.st.cfg
+    verifica("una voce del catalogo dice l'avviso", P.voce_di_servizio(cf3) == (cf3.piper_voice, True))
+    (c3 / "aurora.onnx").write_bytes(_voce_finta("it_IT-aurora-medium"))
+    cf3.piper_voice = str(c3 / "aurora.onnx")
+    verifica("una voce sana fuori catalogo: la dice la voce A", P.voce_di_servizio(cf3) == (cf3.studio_podcast_voce_a, False))
+    verifica("…e il podcast non si ferma", _esito_voce(cf3, "studio_podcast_voce_a") == "ok" and m3.st._voci_ok() and "si prepara da solo" in (m3.st.podcast_nota(m3.st.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (m3.vid,))) or "si prepara da solo"))
+    (c3 / "g.onnx").write_bytes(_voce_finta("it_IT-giorgio-medium"))
+    cf3.piper_voice = str(c3 / "g.onnx")
+    verifica("giorgio come voce di Calliope, con un altro nome: nel podcast non entra", P.voce_di_servizio(cf3)[1] is False)
+    registro.clear()
+    cf3.stt_url = "http://127.0.0.1:1/v1"
+    m3.st.lettore = types.SimpleNamespace(guardia=None, occupato=lambda: False)
+    _sentite = []
+    pp3 = PA.prepara(m3.st, m3.r, None, types.SimpleNamespace(voce_per=lambda p: _sentite.append(p) or object()), log=registro.append, avvia=False)
+    verifica("…chi amministra lo legge, e l'avviso è della voce A", pp3 is not None and _sentite == [cf3.studio_podcast_voce_a]
+             and any("non è del catalogo" in r and "it_IT-paola-medium" in r for r in registro), str(registro))
     m2, c2 = _mondo_voci("hash-una-volta")
     _aperti = []
     _open_vero = open
@@ -1279,6 +1298,25 @@ try:
         _no = True
     _VocePiperFinta.muta = False
     verifica("Piper che dà silenzio: guasto, prima di fermare vLLM", _no)
+    # Il modello cambiato col cache di `Speaker`: il riferimento rifatto deve leggere il disco
+    m4, c4 = _mondo_voci("riferimento-dal-disco")
+    m4.st.cfg.stt_url = "http://127.0.0.1:1/v1"
+    m4.st.lettore = types.SimpleNamespace(guardia=None, occupato=lambda: False)
+    _dal_disco, _dalla_cache = [], []
+    import calliope.tts as _tts
+    _cv = _tts.carica_voce
+    _tts.carica_voce = lambda cfg, p: _dal_disco.append(Path(p).stem) or object()
+    try:
+        pp4 = PA.prepara(m4.st, m4.r, None, types.SimpleNamespace(voce_per=lambda p: _dalla_cache.append(Path(p).stem) or object()), log=registro.append, avvia=False)
+        _dalla_cache.clear()
+        pp4.crea_motore(lambda: None)
+        verifica("il riferimento carica il modello dal disco, non dal cache della voce", _dal_disco == ["it_IT-paola-medium", "it_IT-serena-high"] and not _dalla_cache, f"{_dal_disco} {_dalla_cache}")
+        (c4 / "it_IT-serena-high.onnx").write_bytes(_voce_finta("it_IT-serena-altra"))
+        _dal_disco.clear()
+        pp4.crea_motore(lambda: None)
+        verifica("…anche dopo un modello cambiato, e solo quello", _dal_disco == ["it_IT-serena-high"] and not _dalla_cache, f"{_dal_disco} {_dalla_cache}")
+    finally:
+        _tts.carica_voce = _cv
     (c / "it_IT-serena-high.onnx").unlink()
     verifica("voce tolta col riferimento rimasto: si dice lo stesso", m.prep.passo() == "voce_mancante" and not m.d.azioni())
 
@@ -1289,7 +1327,7 @@ try:
     m.st.lettore = types.SimpleNamespace(guardia=None, occupato=lambda: False)
     pp = PA.prepara(m.st, m.r, None, types.SimpleNamespace(voce_per=lambda p: object()), log=registro.append, avvia=False)
     verifica("all'avvio si dice subito quale manca", pp is not None and any("manca la voce it_IT-serena-high" in r for r in registro)
-             and not any("paola" in r for r in registro), str(registro))
+             and not any("manca la voce it_IT-paola" in r for r in registro), str(registro))
 finally:
     PA.S.VocePiper = _vero_vp
 
@@ -1422,16 +1460,33 @@ verifica("usa il modello già caricato", "impronta=s.registry.embed" in (QUI.par
          and "SpeakerEmbedder" not in (QUI.parent / "calliope/studio/podcast_audio.py").read_text(encoding="utf-8"))
 
 
+import httpx  # noqa: E402
+
+
 class _RispostaW:
+    def __init__(self, stato, corpo):
+        self.status_code, self.corpo = stato, corpo
+
     def raise_for_status(self):
-        pass
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError("no", request=None, response=self)
 
     def json(self):
-        return {"text": " una frase", "segments": [{"start": 0.0, "end": 1.0, "text": " una frase"}]}
+        if self.corpo is None:
+            raise ValueError("non è JSON")
+        return self.corpo
+
+
+# Com'è su whisper.cpp della DGX: `text` spezzato a token, i tratti uniti uguali a `json`
+_SPEZZATO = {"text": " Il colleg atore misura la massa dell ' uran io . Capito .",
+             "segments": [{"start": 0.0, "end": 2.0, "text": " Il collegatore misura la massa dell'uran"},
+                          {"start": 2.0, "end": 3.0, "text": "io. Capito."}]}
+_INTERO = " Il collegatore misura la massa dell'uranio. Capito."
 
 
 class _ClientW:
-    chiesto = {}
+    chiesti = []
+    risposte = {}
 
     def __init__(self, **k):
         pass
@@ -1443,19 +1498,82 @@ class _ClientW:
         return False
 
     def post(self, url, files=None, data=None):
-        type(self).chiesto = data
-        return _RispostaW()
+        type(self).chiesti.append(data["response_format"])
+        r = type(self).risposte[data["response_format"]]
+        if isinstance(r, Exception):
+            raise r
+        return r
 
 
-import httpx  # noqa: E402
-_cl = httpx.Client
-httpx.Client = _ClientW
+def _chiedi_w(verbose, semplice, volte=1):
+    _ClientW.chiesti, _ClientW.risposte = [], {"verbose_json": verbose, "json": semplice}
+    _cl = httpx.Client
+    httpx.Client = _ClientW
+    registro.clear()
+    try:
+        ch = PA.ritrascrivi_http("http://127.0.0.1:1/v1", "m", log=registro.append)
+        return [ch(PA.in_wav_byte(b"\0\0" * 1600, 16000)) for _ in range(volte)]
+    finally:
+        httpx.Client = _cl
+
+
+_JS = _RispostaW(200, {"text": _INTERO})
+_tr = _chiedi_w(_RispostaW(200, _SPEZZATO), _JS)[0]
+verifica("il testo spezzato a token non arriva a `confronta`: i tratti uniti", _tr == _INTERO, _tr)
+verifica("…una passata sola, coi tempi", _ClientW.chiesti == ["verbose_json"] and _tr.segmenti[1]["end"] == 3.0 and isinstance(_tr, str))
+_btt = [{"voce": "A", "testo": "Il collegatore misura la massa dell'uranio.", "detto": "Il collegatore misura la massa dell'uranio.", "tipo": "frase"},
+        {"voce": "B", "testo": "Capito.", "detto": "Capito.", "tipo": "cenno"}]
+verifica("…e il pezzo è buono, che col testo spezzato non era", PA.confronta(_btt, _tr)["ok"] and not PA.confronta(_btt, _SPEZZATO["text"])["ok"], str(PA.confronta(_btt, _SPEZZATO["text"])["frasi"]))
+_tr = _chiedi_w(_RispostaW(200, {"text": " solo testo"}), _JS)[0]
+verifica("senza tratti: il suo testo", _tr == " solo testo" and not _tr.segmenti)
+for _st in (400, 415, 422):
+    _tt = _chiedi_w(_RispostaW(_st, None), _JS, volte=2)
+    verifica(f"un server che rifiuta il formato ({_st}) non è giù: ricade su json, senza tratti", _tt[0] == _INTERO and not _tt[0].segmenti)
+    verifica("…lo dice una volta, e non lo richiede a ogni pezzo", _ClientW.chiesti == ["verbose_json", "json", "json"]
+             and sum("Whisper non dà i tempi" in r for r in registro) == 1, str(_ClientW.chiesti))
+_tt = _chiedi_w(_RispostaW(200, None), _JS)
+verifica("una risposta non JSON: lo stesso", _tt[0] == _INTERO)
+_tt = _chiedi_w(_RispostaW(503, None), _JS, volte=2)
+verifica("un guasto passeggero (503) non spegne i tempi per sempre", _tt[1] == _INTERO and _ClientW.chiesti == ["verbose_json", "json", "verbose_json", "json"], str(_ClientW.chiesti))
 try:
-    _tr = PA.ritrascrivi_http("http://127.0.0.1:1/v1", "m")(PA.in_wav_byte(b"\0\0" * 1600, 16000))
+    _chiedi_w(_RispostaW(500, None), _RispostaW(500, None))
+    _giu = False
+except httpx.HTTPStatusError:
+    _giu = True
+verifica("contrario: se non risponde nemmeno a json è giù davvero", _giu)
+try:
+    _chiedi_w(httpx.ConnectError("no"), _JS)
+    _giu = False
+except httpx.ConnectError:
+    _giu = True
+verifica("contrario: la connessione che cade è giù davvero", _giu)
+
+print("— le impronte che non si possono scrivere")
+import contextlib  # noqa: E402
+m = Mondo("impronte-sole")
+_fv = Path(m.st.cfg.studio_podcast_voce_a)
+_blocco = TMP / "blocco"
+_blocco.write_text("un file al posto della cartella", encoding="utf-8")
+_fi = P._file_impronte
+P._file_impronte = lambda cfg: _blocco / "x" / "impronte.json"
+P._SCRITTURA_DETTA.clear()
+P._MEMO.clear()
+_usc = io.StringIO()
+_aperti = []
+_open_vero = open
+def _open_conta(p, *a, **k):
+    if str(p).endswith(".onnx"):
+        _aperti.append(p)
+    return _open_vero(p, *a, **k)
+P.open = _open_conta
+try:
+    with contextlib.redirect_stdout(_usc):
+        _h = [P.impronta_voce(m.st.cfg, str(_fv)) for _ in range(3)]
 finally:
-    httpx.Client = _cl
-verifica("Whisper con i tempi nella stessa passata", _ClientW.chiesto["response_format"] == "verbose_json" and _tr == " una frase"
-         and isinstance(_tr, str) and _tr.segmenti[0]["end"] == 1.0)
+    del P.open
+    P._file_impronte = _fi
+verifica("una riga nel registro, una sola", _usc.getvalue().count("impronte delle voci non scritte") == 1, _usc.getvalue())
+verifica("…e l'hash non si rifà a ogni domanda", len(_aperti) == 1 and len(set(_h)) == 1 and _h[0], str(_aperti))
 m = Mondo("memoria-giri")
 def _fm(wav, m=m):
     m.mem = 3000 if wav in m.detti else m.mem

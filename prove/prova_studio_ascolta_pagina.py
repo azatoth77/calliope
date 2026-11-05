@@ -217,7 +217,7 @@ def scenario_podcast(t, st, vid):
         setattr(st.cfg, chiave, str(voci / f"{chiave}.onnx"))
         finte.add(hashlib.sha256(chiave.encode()).hexdigest())
     st.cfg.piper_voice = st.cfg.studio_podcast_voce_a
-    PO.hash_ammessi = lambda chiave: finte
+    PO.hash_ammessi = lambda: finte
     firma = st._firma_podcast(vid)
     c = PO.cartella_podcast(st.cfg, vid)
     c.mkdir(parents=True, exist_ok=True)

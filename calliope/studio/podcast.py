@@ -54,6 +54,8 @@ CHIAVI_VOCI = ("studio_podcast_voce_a", "studio_podcast_voce_b")
 CHIAVE_VOCE_CALLIOPE = "piper_voice"
 VOCI_DEL_PODCAST = ("voce_paola", "voce_serena_alta")    # id del catalogo: 05/11, l'ascolto di Dario
 _LOCK_IMPRONTE = threading.Lock()
+_MEMO: dict = {}                   # le impronte di questo processo, se il file non si può scrivere
+_SCRITTURA_DETTA: list = []
 CARTELLA_LAVORO = "podcast_lavoro"  # la sola cartella scrivibile del container: si svuota a ogni sessione
 
 # La versione entra nella firma: un prompt, un elenco o un taglio nuovi rifanno i copioni
@@ -530,12 +532,17 @@ def percorso_voce(cfg, chiave: str) -> str:
     return p
 
 
-def hash_ammessi(chiave: str) -> set[str]:
+def hash_ammessi() -> set[str]:
     """L'elenco è per contenuto: un elenco di nomi lasciava passare `giorgio.onnx`, una copia rinominata, un'altra qualità.
-    Si accettano solo i modelli del catalogo, col loro SHA-256: paola e serena-high per le due voci, scelte all'ascolto;
-    per la voce di Calliope, che dice l'avviso e i pezzi a una voce, tutte le voci ufficiali. Una voce nuova va aggiunta qui."""
+    Per le due voci solo gli SHA-256 del catalogo di paola e serena-high, scelte all'ascolto. Una voce nuova va aggiunta qui."""
     from ..installa.catalogo import VOCI as CATALOGO
-    return {v[3][1] for v in CATALOGO if chiave == CHIAVE_VOCE_CALLIOPE or v[0] in VOCI_DEL_PODCAST}
+    return {v[3][1] for v in CATALOGO if v[0] in VOCI_DEL_PODCAST}
+
+
+def hash_catalogo() -> set[str]:
+    """Le voci ufficiali: quelle che possono dire l'avviso e i pezzi a una voce."""
+    from ..installa.catalogo import VOCI as CATALOGO
+    return {v[3][1] for v in CATALOGO}
 
 
 def _come_installarla(nome: str) -> str:
@@ -571,8 +578,10 @@ def scrivi_impronte(cfg, d: dict) -> None:
         t = f.with_name(f"{f.name}.{os.getpid()}.{threading.get_ident()}.tmp")
         t.write_text(json.dumps(d), encoding="utf-8")
         os.replace(t, f)
-    except OSError:      # in sola lettura si ricalcola: costa un hash
-        pass
+    except OSError as e:      # il disco pieno, la cartella in sola lettura: resta `_MEMO`, e dopo un riavvio si rifà l'hash
+        if not _SCRITTURA_DETTA:
+            _SCRITTURA_DETTA.append(True)
+            print(f"   [STUDIO] podcast: impronte delle voci non scritte ({type(e).__name__}): il riferimento si rifarà a ogni sessione", flush=True)
 
 
 def impronta_voce(cfg, percorso: str) -> str | None:
@@ -584,9 +593,10 @@ def impronta_voce(cfg, percorso: str) -> str | None:
         try:
             st = os.stat(percorso)
         except OSError:
-            return x.get("sha")
-        if x.get("sha") and x.get("dim") == st.st_size and x.get("ora") == st.st_mtime_ns:
-            return x["sha"]
+            return x.get("sha") or (_MEMO.get(percorso) or {}).get("sha")
+        for y in (x, _MEMO.get(percorso) or {}):
+            if y.get("sha") and y.get("dim") == st.st_size and y.get("ora") == st.st_mtime_ns:
+                return y["sha"]
         h = hashlib.sha256()
         try:
             with open(percorso, "rb") as fh:
@@ -595,6 +605,7 @@ def impronta_voce(cfg, percorso: str) -> str | None:
         except OSError:
             return x.get("sha")
         d[percorso] = {**x, "sha": h.hexdigest(), "dim": st.st_size, "ora": st.st_mtime_ns}
+        _MEMO[percorso] = d[percorso]
         scrivi_impronte(cfg, d)
         return d[percorso]["sha"]
 
@@ -613,14 +624,23 @@ def controlla_voce(cfg, chiave: str) -> str:
     nome = Path(percorso).stem
     if not (os.path.isfile(percorso) and os.path.isfile(percorso + ".json")):
         raise VoceNonUsabile("voce_mancante", nome, f"manca la voce {nome}{_come_installarla(nome)}: il podcast non parte")
-    if impronta_voce(cfg, percorso) not in hash_ammessi(chiave):
+    if impronta_voce(cfg, percorso) not in hash_ammessi():
         raise VoceNonUsabile("voce_non_ammessa", nome, f"la voce {nome} (`{chiave}`) non è fra quelle ammesse: il podcast non parte")
     return percorso
 
 
 def controlla_voci(cfg) -> None:
-    for chiave in (*CHIAVI_VOCI, CHIAVE_VOCE_CALLIOPE):
+    for chiave in CHIAVI_VOCI:
         controlla_voce(cfg, chiave)
+
+
+def voce_di_servizio(cfg) -> tuple[str, bool]:
+    """(la voce dell'avviso e dei pezzi a una voce, se è quella di Calliope). Una voce di Calliope sana fuori dal catalogo non ferma il
+    podcast, ma dentro il podcast non entra: quel poco lo dice la voce A, così nessuna voce esclusa ci finisce sotto un altro nome."""
+    p = percorso_voce(cfg, CHIAVE_VOCE_CALLIOPE)
+    if os.path.isfile(p) and impronta_voce(cfg, p) in hash_catalogo():
+        return str(getattr(cfg, CHIAVE_VOCE_CALLIOPE)), True
+    return percorso_voce(cfg, CHIAVI_VOCI[0]), False
 
 
 # ─────────────────────────── i metodi di Studio ───────────────────────────

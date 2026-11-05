@@ -288,9 +288,11 @@ giudicano; con giorgio 0 su 59, sugli stessi copioni): non è un blocco, resta u
   di Calliope (`piper_voice`) non è nella firma: dice l'avviso e i pezzi a una voce, composti tutti insieme alla fine, e cambiarla non deve far riscrivere ogni copione.
 - **Lo schermo.** Senza una voce usabile `podcast_nota` dice «adesso non si può preparare», non «si prepara da solo». E il modello non scrive copioni che nessuno può dire.
 - **Le voci per contenuto.** L'elenco dei nomi lasciava passare `giorgio.onnx`, un'altra qualità e le copie. Ora `hash_ammessi` accetta gli SHA-256 del catalogo: `voce_paola` e `voce_serena_alta` per le
-  due voci, tutte le voci ufficiali per `piper_voice` (nel podcast, non altrove). Un elenco di hash *da escludere* non reggeva: bastava un'altra esportazione. Il prezzo: una voce nuova, anche sul banco, va messa nell'elenco;
+  due voci. La voce di Calliope (`piper_voice`) non ferma il podcast: dice solo l'avviso e i pezzi a una voce, e fermare tutto per una voce sana come aurora non valeva. Se non è del catalogo quel poco lo dice la voce A,
+  con una riga nel registro all'avvio: così nessuna voce esclusa entra nel podcast, nemmeno sotto un altro nome. Un elenco di hash *da escludere* non reggeva: bastava un'altra esportazione. Il prezzo: una voce nuova, anche sul banco, va messa nell'elenco;
   l'hash si ricalcola solo se cambiano dimensione o data del file.
-- **Il riferimento si rifà** se il modello è cambiato, se il WAV è vuoto o muto o più corto di un secondo. Piper che dà silenzio è un guasto prima di fermare vLLM.
+- **Il riferimento si rifà** se il modello è cambiato, se il WAV è vuoto o muto o più corto di un secondo. Piper che dà silenzio è un guasto prima di fermare vLLM. Si carica dal disco (`carica_voce`), non da `Speaker.voce_per`: col suo
+  cache la voce vecchia finiva segnata come nuova. Se le impronte non si possono scrivere (disco pieno, cartella in sola lettura) una riga nel registro, l'hash resta in memoria e il riferimento si rifà a ogni sessione.
 - **È la stessa voce del banco?** Sì, senza MOSS: il riferimento del codice (`carica_voce` + `VocePiper`, CPU) contro quello del banco ha correlazione 0,00–0,04, ma due generazioni dello stesso codice fra loro
   anche (0,01–0,03): Piper estrae il rumore a ogni sintesi (`noise_scale` 0,6), e la forma d'onda non dice niente. CAM++ dice 0,97–0,98, come due generazioni del codice (0,97), altezza 205–215 Hz contro 210, con paola 0,13–0,15. Sul banco
   gli scambi non cambiano con l'uno o con l'altro riferimento. Non provato: MOSS con il riferimento rigenerato, e Piper sulla GPU.
@@ -301,7 +303,9 @@ nei `conti` del podcast e nel registro, solo tempi e numeri. **Non rigenera e no
 
 Rimisura coi 6 pezzi di prima e il codice vero: 66 tratti, 20 misti, 1 sospetto, chimica-01 27,2–29,5 s, margine −0,62 (−0,64 col riferimento del codice), minimo dei buoni +0,23. **Il costo**: 54–57 ms a tratto, ricampionamento
 compreso, non i 33 attesi (che erano la sola impronta): 3,5–3,8 s sui 6 pezzi, contro un fermo di vLLM di 758 s (0,5 %). È il CAM++ già caricato per chi parla (`SpeakerRegistry.embed`), su CPU con i suoi 2 thread e il suo lock: nessun modello né memoria in più, e la
-voce è ferma per definizione. Whisper fa la stessa passata con `verbose_json`, solo con i tempi; un Whisper senza tempi lascia la misura vuota. Il pezzo aspetta la misura: spostarla dopo la ripartenza complicherebbe lo stato per risparmiare 0,5 %.
+voce è ferma per definizione. **Whisper.** Una passata sola con `verbose_json`, ma su whisper.cpp della DGX il suo `text` è spezzato a token («dell'uran io», «Capito .») e diverso da `json`: `confronta` scartava chimica-01, che è buono (seconda revisione). Il testo ora sono i tratti uniti. Con Whisper vero
+su 18 audio (6 pezzi e 7 tentativi con Serena, 5 pezzi con giorgio senza l'intro e senza la parte a una voce): 0 parole diverse da `json`, solo gli spazi, e `confronta` dà lo stesso esito in 18 su 18, compresi i due «no». Un server che rifiuta `verbose_json` non è giù: si ricade su `json`, senza tratti, e manca solo
+questa misura; se non risponde nemmeno così è `whisper_giu`. Non provato: un server vero senza quel formato. Il pezzo aspetta la misura: spostarla dopo la ripartenza complicherebbe lo stato per risparmiare 0,5 %.
 
 ### La revisione indipendente della PR #393 (05/11)
 
