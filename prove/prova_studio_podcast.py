@@ -534,6 +534,9 @@ class Finto:
     def __call__(self, body):
         if self.solleva:
             raise self.solleva
+        if "Controlli un testo destinato" in str(body["messages"][0]["content"]):
+            # Il giudizio sulla sola frase (#384, `voce_sicura`): «no» passa
+            return {"content": '{"risposta": "no"}', "fine": "stop", "prompt": 10, "eval": 2}
         if "risposta" in json.dumps(body.get("format") or {}):
             self.giudizi.append(body)
             return {"content": self.giudizio(body["messages"][1]["content"]), "fine": "stop", "prompt": 10, "eval": 2}

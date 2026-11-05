@@ -373,7 +373,8 @@ dell'eco della stanza.
     scartate: SM-2 e FSRS (analisi nella #246), il giudizio del modello sulla risposta, i tocchi per
     le risposte, le carte del tutore come dato fidato (due regole invece di una).
 
-34. **Le carte generate dal lettore sono proposte e restano un dato** (seconda parte del passo 6,
+34. *[rivisto il 04/11 dal punto 59: le pulite vanno subito nel ripasso, senza conferma; il resto resta]*
+    **Le carte generate dal lettore sono proposte e restano un dato** (seconda parte del passo 6,
     #246). Le chiede a qwen3.6 lo stesso thread della lettura, con la sua guardia e il suo client,
     per una verifica aperta e i suoi argomenti confermati, dal solo testo letto (pagine e argomenti
     in busta, schema guidato, nessun tool). Il codice le controlla con le regole degli argomenti
@@ -433,7 +434,8 @@ dell'eco della stanza.
     5.4), un tool che legge la mappa in busta (non serve alle quattro fasi), tre tabelle per concetti e
     collegamenti, la padronanza in ombra per scegliere le caselle.
 
-36. **Lo scheletro generato dal lettore è proposto e resta un dato** (seconda parte del passo 7).
+36. *[rivisto il 04/11 dal punto 59: parte a lettura finita; lo scheletro resta proposto finché non lo si
+    conferma per «Fai la tua»]* **Lo scheletro generato dal lettore è proposto e resta un dato** (seconda parte del passo 7).
     Lo chiede a qwen3.6 lo stesso thread della lettura, con la sua guardia e il suo client, dopo le
     carte: le triple *(concetto, relazione, concetto)* dal solo testo letto, pagine e argomenti in
     busta, schema guidato, nessun tool. Il codice le controlla con le regole di argomenti e carte
@@ -539,7 +541,8 @@ dell'eco della stanza.
     - il tutore che fa la prova al posto del minore;
     - le domande generate subito nelle prove.
 
-41. **Le domande generate dal lettore sono proposte e restano un dato.** Come le carte (punto
+41. *[rivisto il 04/11 dal punto 59: le pulite sono subito nelle prove, senza conferma; il resto resta]*
+    **Le domande generate dal lettore sono proposte e restano un dato.** Come le carte (punto
     34): lo stesso thread, la stessa guardia, pagine e argomenti in busta, schema guidato coi
     tipi, nessun tool. Il codice controlla la forma: una sola opzione giusta, un numero
     leggibile, le parole chiave nelle pagine citate (le altre si tolgono). Controlla anche le
@@ -1096,6 +1099,84 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     banco: una dimenticanza e la pausa è persa); domande del modello con un nome dentro (un canale non controllato); il blocco intero
     invece dei pezzi (una frase sbagliata rifarebbe tutto); tenere il testo di Whisper per rileggerlo (è materiale di un minore).
 
+
+## La generazione a lettura finita (#384, 04/11)
+
+59. *(05/11: anche i titoli, le lezioni e le guide passano dai cancelli; chi studia sa quale pagina non è stata usata, il tutore anche il conto delle voci fermate; dettagli in `docs/aree/studio.md`.)* **Dopo la scansione lo Studio prepara da solo, e chi studia trova pronto** (decisione di chi amministra del
+    04/11; rivede i punti 34, 36 e 41). Le regole di fondo non cambiano: il testo generato è un dato in busta,
+    l'esito lo decide il codice, ogni voce ha la sua pagina.
+    - **Nessuna chiave nuova.** `studio_carte_genera` e `studio_domande_genera`
+      su «attiva» cambiano significato: «subito in uso, a lettura finita» (*[storico: «proposte, da confermare»
+      fino al 04/11]*; nessuna installazione le aveva accese). Con almeno una delle due la verifica **si apre da
+      sola** quando la lettura è finita e c'è un argomento buono, col piano. `studio_mappa_genera` da sola non
+      basta: è attiva sulla DGX dal 30/10, e un aggiornamento non deve cambiare niente finché nessuno accende.
+      **Di serie resta tutto in ombra**: chi installa da zero non ha un minore che studia su carte mai misurate
+      sulla sua macchina. Scartate: una chiave nuova «generazione automatica» (quattro combinazioni, tre senza
+      senso), accendere di serie.
+    - **Gli argomenti proposti senza avvisi valgono per il piano e per ciò che si genera** (`Studio._nel_piano`),
+      restando «proposti»: nessuno li ha confermati e la pagina continua a dirlo. La conferma resta per correggere,
+      e **non rifà niente**: non cambia la firma. Scartato: promuoverli a «tenuti» da soli (un'estrazione nuova
+      non potrebbe più sostituirli, «Rifai gli argomenti» non varrebbe più).
+    - **Pulite subito in uso, le altre fuori.** Carte e domande senza avvisi sono «attive», con la loro pagina visibile e
+      «Togli» (`genera.stato_iniziale`). Quelle con un avviso restano «proposte»: non nel ripasso, non a voce, non
+      nelle prove, «Tieni» una per una.
+    - **Nessuna persona valida prima: tre cancelli automatici** (decisione di chi amministra del 04/11, come il
+      punto 57). **Il codice** vuole una **frase** su cui la risposta si regge (`genera.appoggio`): i valori tutti lì,
+      la stessa negazione, le parole e i numeri della domanda lì o accanto, e non uno scambio con un valore della
+      frase accanto. «Il valore sta da qualche parte nella pagina» lasciava passare scambi e negazioni, come ha mostrato
+      la revisione del riassunto. **Una sola** pagina citata con le istruzioni basta per l'avviso (prima tutte). Il
+      **giudizio indipendente per coppia** (`genera.corpo_giudizio`, `Lettore._cancelli`): un'altra richiesta chiusa, senza
+      ciò che ha scritto la voce, con la frase e la voce in busta; solo un «si» tiene. Il **guardiano**, con le regole del
+      riassunto (`voce_guardia`, `riassunto_guardia`): per un minore senza guardiano non parte niente, un guasto riprova. Un «falso» di un
+      vero o falso ora può passare: il codice trova la frase di cui parla, il giudizio dice se è il contrario. A dover
+      scegliere, una voce buona in meno, come le mappe (punto 56).
+    - **Il giudizio sulla sola voce, senza la pagina, e il terreno** (revisione della PR #396, `voce_sicura`). Il giudizio per
+      coppia chiede se la fonte lo dice, e una pagina ostile lo dice; il guardiano ferma poco di ciò che ha il tono di un
+      manuale. Una richiesta chiusa sulla sola voce non ha una pagina che le parli; raccontare non è consigliare, e i temi
+      scolastici delicati restano. Lo stesso giudizio, una frase alla volta, sulle pagine prima di chiedere al modello:
+      una voce o un collegamento staccati dalla frase possono non sembrare niente. Vale per carte, domande e mappe; il riassunto
+      ha il giudizio sulla frase. Scartato: giudicare la pagina intera (potrebbe parlare al giudice).
+    - **Sicurezza e fedeltà sono distinte.** La voce fermata per sicurezza non si scrive: non arriva a nessuna pagina, nessuno
+      la tiene, nemmeno il tutore; si dice al più quante sono. Il dubbio di fedeltà resta «proposta» e si può tenere. Un guasto non
+      è un giudizio. Un argomento che i cancelli lasciano scoperto ha una richiesta mirata. L'origine «generata» resta
+      finché il testo non cambia davvero: togliere e rimettere o «Correggi» senza cambiare niente non valgono un premio.
+    - **Le mappe** hanno i cancelli di sicurezza: un collegamento o un concetto fermato cade, e la mappa regge col resto; la
+      firma è nuova, quindi le mappe mai toccate si rifanno da sole anche dove `studio_mappa_genera` è già attiva. Non hanno
+      il giudizio di fedeltà per collegamento.
+    - **L'accensione dipende da un criterio numerico scritto**, non da una rilettura (`banco_rilettura.CRITERIO`): sulle
+      voci di fantasia con la verità nota, per carte e per domande separate, ostili tenute 0, sbagliate tenute al più
+      il 5 %, vere tenute almeno il 70 %. Una voce sbagliata che passa è un difetto del meccanismo.
+    - **Si rifà solo la parte cambiata.** Ogni argomento ha la sua firma (`genera.firma_parte`, scritta in
+      `studio_verifiche.firme_parti`, schema 19): si chiedono i soli argomenti con la firma diversa, con le sole loro
+      pagine. **Non si perde ciò che la persona ha toccato**: una voce ripassata, corretta, tenuta, rimessa o usata in
+      una prova resta; quella tolta resta tolta e non torna; una generata mai toccata dell'argomento rifatto se ne va.
+      Un argomento tolto addormenta le sue carte, rimesso le risveglia. Con la stessa estrazione un proposto resta la
+      stessa riga, con lo stesso id; uno che non si trova più va via con le sue voci mai toccate, se non ne ha di toccate.
+    - **Le righe in ombra non diventano vere: si rigenerano.** Il modo sta nella firma: passando ad «attiva» le righe
+      dell'ombra vanno via e si richiedono tutte, senza migrazioni a mano. Sono state scritte da un prompt e un
+      controllo più vecchi, e nessuno le ha mai viste. Costa una richiesta per tipo.
+    - **Le prove già aperte non cambiano**: con «attiva» e una prova aperta si aspetta, e dopo la consegna si riparte.
+    - **«Mi può interrogare?» usa ciò che c'è**: dove la generazione ha prodotto domande basta anche una
+      (`Prove.minimo_prova`); senza, ne servono ancora tre. La frase dice la cosa vera: le sta preparando, sono da
+      controllare, o non ci è riuscita.
+    - **Il materiale generato è pratica, non riuscita** (`premi.py`, `padronanza.py`). Generare costa zero, e un traguardo
+      non può venire da ciò che nessuno ha scritto né riletto, e che può essere sbagliato. La **serie** e la stella
+      del **ripasso** contano le carte generate: è fatica vera, e con più carte quella stella è più lontana. La stella di
+      una **prova** non conta le risposte alle voci generate (valgono 0 sul totale), quella di un **argomento** non
+      conta i loro tentativi. La **padronanza** li pesa la metà (`PESO_GENERATA`). Una voce corretta o tenuta da una
+      persona non è più «generata». Prezzo noto: chi usa solo materiale generato non prende le stelle delle prove.
+      Scartate: toglierle dalla serie (la pratica è vera), pesarle come le altre.
+    - **Voce e agenti hanno la precedenza, come prima**: la guardia del lettore prima di ogni passo. Domande prima
+      delle mappe, che sono tante richieste. **Il tutore** vede cosa è stato generato e lo toglie; orari e permessi dei
+      minori non cambiano. **Il posto dichiarato** per altro materiale è `Lettore._passi_materiali`, con una riga in
+      `Studio.pronto`; il riassunto (punto 57) e la preparazione partono da soli a fine giro, con la voce ferma e il loro interruttore.
+    - **Lo stesso modello scrive e giudica**, in richieste separate: è un limite. Il banco lo misura con gli errori che fa
+      da solo e con una verità scritta prima. Sui dati veri solo conti e categorie.
+
+    Alternative scartate: il giudizio sul modello della voce (più indipendente, ma contende la voce: qwen cede a voce e
+    agenti); le carte fuori dal ripasso finché non le guarda un adulto (è ciò che la decisione rivede); il controllo
+    delle frasi citate dal modello, come il riassunto (un prompt e uno schema nuovi per carte e domande: la frase la
+    trova il codice, e la funzione comune si può fare dopo).
 
 ## Conseguenze
 

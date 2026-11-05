@@ -586,8 +586,17 @@ def _v18(db):
         audio TEXT)""")
 
 
+def _v19(db):
+    """La generazione a lettura finita (04/11, #384): `firme_parti` è la firma di ogni argomento
+    all'ultima generazione, {"carte"|"domande": {id: firma}}, per rifare solo la parte cambiata, e quante voci sono
+    state fermate per sicurezza (solo conti); `generata` dice che un tentativo viene da una carta o una domanda
+    scritta dal modello, e il testo è ancora quello (pesa meno e non dà stelle, punto 59 della 0035)."""
+    db.execute("ALTER TABLE studio_verifiche ADD COLUMN firme_parti TEXT")
+    db.execute("ALTER TABLE studio_tentativi ADD COLUMN generata INTEGER NOT NULL DEFAULT 0")
+
+
 MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12, _v13, _v14, _v15, _v16,
-              _v17, _v18]
+              _v17, _v18, _v19]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
 CON_ORFANI = ("studio_eventi", "studio_tentativi", "studio_pratica")

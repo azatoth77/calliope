@@ -488,7 +488,9 @@ def componi(args: list[dict], pagine: list[dict], carte: list[dict], cosa: str,
         corrente, car = [], 0
         for p in mie:
             et = _etichetta(p, indici[p["id"]])
-            if p.get("stato") != "letta" or not str(p.get("testo") or "").strip():
+            if p.get("_saltata"):
+                pars, salt = None, {p["_saltata"]: 1}
+            elif p.get("stato") != "letta" or not str(p.get("testo") or "").strip():
                 pars, salt = None, {}
             else:
                 istr = "istruzioni" in D.da_j(p.get("avvisi"))
@@ -560,8 +562,12 @@ def componi(args: list[dict], pagine: list[dict], carte: list[dict], cosa: str,
                     cp.voci.append(Voce(CALLIOPE, SEZIONE_SENZA, n, cp.nuovo_par()))
             for et, pars, salt in cont:
                 if pars is None:
-                    cp.voci.append(Voce(CALLIOPE, f"La pagina {et} non l'ho ancora letta: la "
-                                                  "salto.", n, cp.nuovo_par()))
+                    # Senza il testo né il motivo: la stessa riga della scheda (`Studio.pronto`, #384)
+                    cp.voci.append(Voce(CALLIOPE, (f"Non ho usato la pagina {et}." if salt.get("fuori") else
+                                                   f"La pagina {et} non è ancora pronta: la salto."
+                                                   if salt.get("non_giudicata") else
+                                                   f"La pagina {et} non l'ho ancora letta: la salto."),
+                                        n, cp.nuovo_par()))
                     continue
                 if any(salt.get(k) for k in ("nome", "messaggio", "annuncio", "ordine")):
                     cp.voci.append(Voce(CALLIOPE, MESSAGGIO_SALTATO, n, cp.nuovo_par()))
@@ -1032,6 +1038,8 @@ class Ascolti:
         pagine = [p for p in self.dati.tutti(
             "SELECT p.* FROM studio_pagine p JOIN studio_materiali m ON m.id = p.materiale "
             "WHERE m.verifica = ? ORDER BY p.ordine, p.id", (v["id"],)) if p["stato"] != "tolta"]
+        # Ciò che il terreno ferma non si dice (#384)
+        pagine = self.pagine_per_chi_studia(v["id"], pagine)
         carte = self._carte_ascolto(v, chi)
         solo, con_carte = None, True
         if cosa == "oggi":

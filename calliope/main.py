@@ -920,7 +920,7 @@ class Avvio:
             return
         try:
             guardiano = s.guardiano = guardia.Guardiano(cfg)
-            # Il riassunto da ascoltare (#386): le frasi del copione passano anche da lui
+            # Il riassunto da ascoltare (#386) e le voci generate (#384) passano anche da lui
             if getattr(s, "studio", None) is not None:
                 s.studio.guardiano = guardiano
             atexit.register(guardiano.close)

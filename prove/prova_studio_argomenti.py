@@ -35,6 +35,7 @@ import re
 import tempfile
 import threading
 import time
+import types
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -87,6 +88,10 @@ class Finto:
         self.pausa = False
         self.durante = None
         self.coda: list = []        # un modo per richiesta: None, «500», «rotto», «errore_stream»
+        self.giudizi: list = []     # le richieste del giudizio indipendente (#384)
+        self.giudizio = None        # voce → True (si) o False (no); None: sempre si
+        self.sicuri: list = []      # le richieste del giudizio sulla sola voce (#384)
+        self.nociva = None          # voce → True se è nociva; None: mai
 
 
 F = Finto()
@@ -124,6 +129,29 @@ class Gestore(BaseHTTPRequestHandler):
     def do_POST(self):
         n = int(self.headers.get("Content-Length") or 0)
         corpo = json.loads(self.rfile.read(n) or b"{}")
+        # Il giudizio indipendente delle voci generate (#384) risponde da solo: `F.giudizio(voce)` dice
+        # si o no (di serie si). Non conta fra le richieste: non è una generazione
+        sist = str((corpo.get("messages") or [{}])[0].get("content"))
+        if "Controlli una domanda di ripasso" in sist or "Controlli un testo destinato" in sist:
+            if "Controlli un testo destinato" in sist:
+                # Il giudizio sulla sola voce: «no» passa. `F.nociva(testo)` dice quando ferma
+                F.sicuri.append(corpo)
+                ok = F.nociva is not None and F.nociva(corpo["messages"][1]["content"])
+            else:
+                F.giudizi.append(corpo)
+                ok = F.giudizio is None or F.giudizio(corpo["messages"][1]["content"])
+            testo_g = json.dumps({"risposta": "si" if ok else "no"})
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            ch = {"choices": [{"index": 0, "delta": {"content": testo_g}, "finish_reason": None}]}
+            fin = {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                   "usage": {"prompt_tokens": 50, "completion_tokens": 3}}
+            self.wfile.write(f"data: {json.dumps(ch)}\n\ndata: {json.dumps(fin)}\n\ndata: [DONE]\n\n".encode())
+            self.wfile.flush()
+            self.close_connection = True
+            return
         F.richieste.append(corpo)
         modo = F.coda.pop(0) if F.coda else None
         if modo == "500":
@@ -183,6 +211,10 @@ def azzera():
     F.pausa = False
     F.durante = None
     F.coda = []
+    F.giudizi.clear()
+    F.giudizio = None
+    F.sicuri.clear()
+    F.nociva = None
 
 
 # ─────────────────────────── lo Studio di prova ───────────────────────────
@@ -240,8 +272,23 @@ def cfg_nuova(nome, modo="ombra", **kw):
     return c
 
 
+class GuardianoFinto:
+    """Il guardiano delle voci generate (#384): lascia passare tutto, tranne ciò che ha in `vieta`."""
+    attivo = True
+
+    def __init__(self):
+        self.vieta, self.guasto_ = None, False
+
+    def giudica(self, domanda, risposta):
+        from calliope import guardiano as GU
+        v = bool(self.vieta and self.vieta in str(risposta))
+        return types.SimpleNamespace(esito=GU.VIETATO if v else "ok", guasto=lambda: self.guasto_)
+
+
 def studio(cfg):
-    return S.Studio(cfg, registry=REG, log=log_righe.append, adesso=lambda: ORA[0])
+    st = S.Studio(cfg, registry=REG, log=log_righe.append, adesso=lambda: ORA[0])
+    st.guardiano = GuardianoFinto()
+    return st
 
 
 def jpeg() -> bytes:

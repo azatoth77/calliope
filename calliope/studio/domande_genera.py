@@ -20,16 +20,22 @@ a 5» dava 35 domande diverse e fine dei token a 3500, due volte, e nessuna doma
   `da_controllare`; un argomento che non c'è, anche;
 - le parole chiave che non stanno nelle pagine citate si tolgono (una chiave inventata farebbe
   sbagliare il codice);
-- un vero o falso con «falso» resta `da_controllare` (il codice vede le parole, non che è falso);
+- un vero o falso con «falso» vuole una frase di cui l'affermazione parla (`genera.appoggio_falso`), e che
+  dica il contrario lo decide il giudizio (*[storico fino al 04/11: «resta sempre `da_controllare`»]*);
   la scelta multipla generata ha da 3 a 4 opzioni, le altre si scartano (revisione della PR #342);
 - solo pagine con «ISTRUZIONI: sì» → `pagina_con_istruzioni`; un ordine, un indirizzo o un
   annuncio nella domanda, nelle opzioni o nella risposta → `testo_ordine` (principio 10, forma);
 - una domanda chiusa (scelta, vero o falso, numero, parole) la cui risposta attesa, detta così
   com'è, il codice non dà «giusta» (`risposte.valuta`) → `da_controllare` (banco del 31/10, #344);
 - doppioni tolti, al più `MAX_DOMANDE`.
-Mai scartata per un avviso, mai un secondo giro. **Nessuna domanda generata entra in una prova
-senza la persona o il tutore**: con `studio_domande_genera: attiva` arrivano «proposte» e si
-confermano come le carte; in «ombra» (di serie) restano «ombra», solo conti nel registro.
+- la risposta attesa si appoggia a una frase delle pagine citate (`genera.appoggio`, #384), altrimenti
+  `da_controllare`; poi, con «attiva», il giudizio indipendente per coppia e il guardiano, come le carte.
+Mai scartata per un avviso, mai un secondo giro. Con `studio_domande_genera: attiva` **le domande
+pulite sono subito usabili** da interrogazione e verifica finta, a lettura finita (04/11, #384, 0035
+punto 58); quelle con un avviso restano «proposte», fuori dalle prove, e si tengono una per una; in
+«ombra» (di serie) restano «ombra», solo conti nel registro. Come le carte, si rifanno solo le
+domande degli argomenti cambiati. *[storico fino al 04/11: «nessuna domanda generata entra in una
+prova senza la persona o il tutore»]*
 """
 
 from __future__ import annotations
@@ -79,6 +85,7 @@ DA_CONTROLLARE = G.DA_CONTROLLARE
 PAGINA_CON_ISTRUZIONI = G.PAGINA_CON_ISTRUZIONI
 TESTO_ORDINE = G.TESTO_ORDINE
 DA_DECIDERE = G.DA_DECIDERE
+SICUREZZA = G.SICUREZZA
 
 PROPOSTE, VUOTO, ROTTO, ERRORE = G.PROPOSTE, G.VUOTO, G.ROTTO, G.ERRORE
 SPENTA, OMBRA, ATTIVA = G.SPENTA, G.OMBRA, G.ATTIVA
@@ -87,6 +94,10 @@ ERRORI_MAX = G.ERRORI_MAX
 firma_e_errori = G.firma_e_errori
 da_generare = G.da_generare
 firma_da_scrivere = G.firma_da_scrivere
+stato_iniziale = G.stato_iniziale
+firma_parte = G.firma_parte
+da_rifare = G.da_rifare
+pagine_di_parte = G.pagine_di_parte
 
 
 def modo(cfg) -> str:
@@ -154,7 +165,7 @@ def proposte(grezzi: list[dict], rif, arif) -> list[dict]:
     avvisi}], col controllo del codice; senza doppioni e al più `MAX_DOMANDE`."""
     from ..provenienza import parole
     from . import dati as D
-    testi = {r: p["testo"] for r, p in rif}
+    testi = {r: G.ricuci(p["testo"]) for r, p in rif}
     ids = {r: int(p["id"]) for r, p in rif}
     istruzioni = {r for r, p in rif if "istruzioni" in D.da_j(p.get("avvisi"))}
     args = {r: int(a["id"]) for r, a in arif}
@@ -192,25 +203,28 @@ def proposte(grezzi: list[dict], rif, arif) -> list[dict]:
             avvisi.append(TESTO_ORDINE)
         # La risposta nelle pagine citate; una risposta corta («1492», «vero», un'opzione) si
         # cerca con la domanda, come le carte
-        base = d["attesa"] if len(parole(d["attesa"])) >= 2 else f"{d['testo']} {d['attesa']}"
-        if d["tipo"] == "vero_falso":
-            base = d["testo"]
-        _e, dentro = A.controlla(base, citate, testi)
         aid = args.get(G._arg(g.get("argomento")))
-        # Un «falso» non si regge sulle pagine (il codice vede le parole, non che l'affermazione
-        # è falsa): resta da controllare (revisione della PR #342)
+        # Un «falso» non si regge su una frase che lo dice: il codice vede di cosa parla, il giudizio
+        # indipendente se dice il contrario (#384; *[storico fino al 04/11: da controllare, PR #342]*)
         falso = d["tipo"] == "vero_falso" and d["attesa"] == "falso"
         # La risposta attesa, detta così com'è, deve valere «giusto» per il codice (banco del
         # 31/10, #344): se no la domanda farebbe sbagliare chi risponde giusto
         sbagliata = d["tipo"] in RS.CHIUSE + ("parole",) and RS.valuta(d, d["attesa"])[0] \
             != RS.GIUSTO
-        if not dentro or aid is None or not testo_pag or falso or sbagliata:
+        # La frase d'appoggio: per «vero» l'affermazione stessa è la risposta (#384)
+        vf = d["tipo"] == "vero_falso"
+        pag_c = [testi[r] for r in esistono]
+        fonte = (G.appoggio_falso(d["testo"], pag_c) if falso
+                 else G.appoggio("" if vf else d["testo"], d["testo"] if vf else d["attesa"], pag_c))
+        if aid is None or not testo_pag or sbagliata or fonte is None or len(esistono) != len(set(map(str, citate))):
             avvisi.append(DA_CONTROLLARE)
-        if esistono and all(r in istruzioni for r in esistono):
+        # Anche una sola pagina con le istruzioni (#384), come le carte
+        if any(r in istruzioni for r in esistono):
             avvisi.append(PAGINA_CON_ISTRUZIONI)
         visti.add(A.chiave(d["testo"]))
         out.append({**d, "argomento": aid, "pagine": [ids[r] for r in esistono],
-                    "avvisi": list(dict.fromkeys(avvisi))})
+                    "avvisi": list(dict.fromkeys(avvisi)), "fonte": fonte,
+                    "voce": G.testo_voce(d["testo"], d["attesa"], d["opzioni"])})
         if len(out) >= MAX_DOMANDE:
             break
     return out

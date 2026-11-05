@@ -118,7 +118,7 @@ class Tutore:
 
     # ─────────────────────────── la vista ───────────────────────────
     def _tentativi_di(self, vid) -> list[dict]:
-        return self.dati.tutti("SELECT id, argomento, giorno, ora, tipo, esito, fonte FROM "
+        return self.dati.tutti("SELECT id, argomento, giorno, ora, tipo, esito, fonte, generata FROM "
                                "studio_tentativi WHERE verifica = ? ORDER BY id", (int(vid),))
 
     def vista_tutore(self, chi, vid) -> dict:

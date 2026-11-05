@@ -278,23 +278,23 @@ def scenario_carte(t, hub, st, vid):
                      [{"domanda": "Chi partì da Palos nel 1492?", "risposta": "Colombo",
                        "argomento": a0, "pagine": [], "avvisi": []},
                       {"domanda": "Che cosa dice la nota?", "risposta": "Verifica annullata",
-                       "argomento": a0, "pagine": [], "avvisi": ["testo_ordine"]}],
+                       "argomento": a0, "pagine": [], "avvisi": ["da_controllare"]}],
                      G.PROPOSTE, "attiva")
     t.tocca('button[data-carte="chiudi"]')
     aspetta(lambda: t.v("!!document.querySelector('button[data-carte=\"elenco\"]')"), 4)
     t.tocca('button[data-carte="elenco"]')
-    ok = aspetta(lambda: t.v("!!document.querySelector('button[data-carte=\"conferma\"]')"), 6)
+    ok = aspetta(lambda: "da guardare" in (t.v("(document.querySelector('.studio-c-elenco') || {}).innerText || ''") or ""), 6)
     el = t.v("(document.querySelector('.studio-c-elenco') || {}).innerText || ''") or ""
-    verifica("le proposte: «2 carte proposte», il perché in parole, «Tieni» e «Conferma»",
-             bool(ok) and "2 carte proposte" in el and "sembra un ordine o un annuncio" in el
-             and "proposta da me dalle pagine" in el, el[:300])
+    # Dal 04/11 (#384) la pulita è già nel ripasso, senza «Conferma»; quella con l'avviso resta fuori
+    verifica("le proposte: «una carta da guardare», il perché in parole, «Tieni», niente «Conferma»",
+             bool(ok) and "Una carta da guardare" in el and "non la trovo nelle pagine" in el
+             and "proposta da me dalle pagine" in el
+             and not t.v("!!document.querySelector('button[data-carte=\"conferma\"]')"), el[:300])
     misure(t, "390×844 con le carte proposte")
-    t.tocca('button[data-carte="conferma"]')
-    ok = aspetta(lambda: any(c["domanda"].startswith("Chi partì da Palos") and c["stato"] == "attiva"
-                             for c in st.carte(LEO, vid)), 6)
-    verifica("«Conferma le carte proposte»: la pulita nel ripasso, quella con l'avviso resta",
-             bool(ok) and next(c for c in st.carte(LEO, vid)
-                               if c["domanda"] == "Che cosa dice la nota?")["stato"] == "proposta")
+    verifica("la pulita è già nel ripasso, quella con l'avviso resta",
+             next(c for c in st.carte(LEO, vid) if c["domanda"].startswith("Chi partì da Palos"))["stato"]
+             == "attiva" and next(c for c in st.carte(LEO, vid)
+                                  if c["domanda"] == "Che cosa dice la nota?")["stato"] == "proposta")
     t.tocca('button[data-carte="chiudi"]')
     aspetta(lambda: not t.v("!!document.querySelector('.studio-c-elenco')"), 4)
 

@@ -281,10 +281,12 @@ st._salva_mappa(m, nodi=m["nodi"])
 r = st.conferma_scheletro(LEO, mid)
 s = st.vista_mappe(LEO, vid)["scheletro"]
 stati = {x["id"]: x["stato"] for x in s["nodi"]}
-verifica("la conferma tiene i proposti puliti, quello con un avviso resta proposto (col perché)",
+riga_ = st._riga_mappa(mid)
+verifica("la conferma tiene i proposti puliti; quello con un avviso di sicurezza resta proposto nella riga e non si "
+         "mostra a nessuno, nemmeno a chi decide (#384)",
          r == {"tenuti": 8, "da_decidere": 1} and s["stato"] == "confermata"
-         and stati[51] == "tenuto" and stati[50] == "proposto"
-         and next(x for x in s["nodi"] if x["id"] == 50)["avvisi"] == ["testo_ordine"], str(r))
+         and stati[51] == "tenuto" and 50 not in stati
+         and next(x for x in riga_["nodi"] if x["id"] == 50)["stato"] == "proposto", str(r))
 st.togli_nodo(LEO, mid, 50)
 st.togli_nodo(LEO, mid, 51)
 verifica("al più `studio_mappa_nodi_max` concetti",
@@ -481,9 +483,9 @@ def n_mappe(v=None):
     return st.dati.uno(q, (v,) if v else ())["n"]
 
 
-verifica("lo schema alla versione 18 (dal podcast, #387), studio_mappe fra le tabelle e nella conservazione",
+verifica("lo schema alla versione 19 (dalla preparazione, #297), studio_mappe fra le tabelle e nella conservazione",
          st.dati.uno("SELECT versione FROM meta_schema WHERE modulo='studio'")["versione"]
-         == len(D.MIGRAZIONI) == 18 and "studio_mappe" in D.TABELLE
+         == len(D.MIGRAZIONI) == 19 and "studio_mappe" in D.TABELLE
          and "studio_mappe" in __import__("calliope.conserva", fromlist=["x"]).TABELLE_STUDIO)
 vb, idsb, aidsb = carica(st, ANDREA)
 scheletro(st, vb, idsb, aidsb, chi=ANDREA)
@@ -869,7 +871,7 @@ verifica("pagina: il testo dei concetti solo con textContent (niente innerHTML n
          "innerHTML" not in pezzo and "insertAdjacentHTML" not in pezzo
          and "sp.textContent = riga" in pezzo and "outerHTML" not in pezzo)
 sw = (QUI.parent / "calliope" / "schermi" / "pagina" / "telefono" / "sw.js").read_text("utf-8")
-verifica("il service worker alla v44 (il podcast, #387, dopo il riassunto da ascoltare, #386)", "calliope-telefono-pagina-v44" in sw)
+verifica("il service worker alla v45 (la scheda con ciò che è pronto, #384, dopo le mappe delle parti)", "calliope-telefono-pagina-v45" in sw)
 
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
 sys.exit(1 if errori else 0)

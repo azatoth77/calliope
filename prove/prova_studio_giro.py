@@ -132,7 +132,7 @@ def rif_arif(st, vid):
 
 
 def dom(a, i):
-    return {"argomento": a, "tipo": "aperta", "domanda": f"Chi partì da Palos, viaggio {i}?",
+    return {"argomento": a, "tipo": "aperta", "domanda": f"Chi partì da Palos, viaggio {str(i).replace('-', ' x') if not str(i).isdecimal() else f'x{i}'}?",
             "risposta": "Colombo partì da Palos", "pagine": ["P1"]}
 
 
@@ -334,7 +334,7 @@ st, vid, vv, args = stato_lettore(studio_domande_genera="ombra")
 lt = lettore(st, (json.dumps({"domande": [dom("A1", 1)]}), "stop"), ('{"domande": []}', "stop"))
 lt.genera_domande(vv)
 pid_ = st._pagine_di(vid)[0]["id"]
-st.dati.scrivi("UPDATE studio_verifiche SET domande_firma = NULL WHERE id = ?", (vid,))
+st.dati.scrivi("UPDATE studio_verifiche SET domande_firma = NULL, firme_parti = NULL WHERE id = ?", (vid,))
 lt = lettore(st, ("non è json", "stop"), ("non è json", "stop"))
 ok_ = lt.genera_domande(vv)
 verifica("l'esito «rotto» aggiorna il campo: tutti scoperti, non il valore vecchio",
@@ -350,11 +350,11 @@ verifica("…anche per le carte", lt.genera_carte(vv) == "rotto"
 st.close()
 # Una seconda richiesta può solo aggiungere (terza revisione della PR #388)
 def buona(a, i):
-    return {**dom(a, f"{a}-{i}"), "domanda": f"Chi partì da Palos, {a} numero {i}?"}
+    return {**dom(a, f"{a}-{i}"), "domanda": f"Chi partì da Palos, {a} n{i}?"}
 
 
 def sporca(a, i):
-    return {**fuori(a), "domanda": f"Chi perse a Waterloo, {a} numero {i}?"}
+    return {**fuori(a), "domanda": f"Chi perse a Waterloo, {a} n{i}?"}
 
 
 def pulite_per(st_, vid_):
@@ -403,12 +403,12 @@ st, vid, args, lt = giro_domande(3, [buona("A1", 1), buona("A2", 1), sporca("A3"
                                  [buona("A1", 9), buona("A3", 1), sporca("A2", 9)])
 testi_ = {r["testo"] for r in st.dati.tutti("SELECT testo FROM studio_domande")}
 verifica("delle nuove contano solo i codici mancanti",
-         not any("A1 numero 9" in x or "A2 numero 9" in x for x in testi_)
-         and any("A3 numero 1" in x and "Palos" in x for x in testi_), testi_)
+         not any("A1 n9" in x or "A2 n9" in x for x in testi_)
+         and any("A3 n1" in x and "Palos" in x for x in testi_), testi_)
 st.close()
 st, vid, args, lt = giro_domande(3, [buona("A1", 1), buona("A2", 1), sporca("A3", 1)], [])
 verifica("contrario: se non arriva niente di nuovo la vecchia con l'avviso resta",
-         any("A3 numero 1" in r["testo"] for r in st.dati.tutti("SELECT testo FROM studio_domande")))
+         any("A3 n1" in r["testo"] for r in st.dati.tutti("SELECT testo FROM studio_domande")))
 st.close()
 x_ = L._aggiungi([{"argomento": f"A{i}", "domanda": f"A{i}"} for i in range(1, 4)],
                  [{"argomento": "A9", "domanda": "nuova A9"}], {"A9"}, lambda v_: True)
@@ -440,7 +440,7 @@ lt.genera_carte(vv)
 verifica("un argomento con una sola carta confermata è coperto: niente seconda richiesta, niente scoperti",
          len(lt._chiedi_corpo.richieste) == 1 and st.scoperti_di(vid) == {}, st.scoperti_di(vid))
 st.dati.scrivi("UPDATE studio_carte SET stato = 'tolta' WHERE origine = 'persona'")
-st.dati.scrivi("UPDATE studio_verifiche SET carte_firma = NULL WHERE id = ?", (vid,))
+st.dati.scrivi("UPDATE studio_verifiche SET carte_firma = NULL, firme_parti = NULL WHERE id = ?", (vid,))
 lt = lettore(st, (json.dumps({"carte": [c1, c2]}, ensure_ascii=False), "stop"), ('{"carte": []}', "stop"))
 lt.genera_carte(vv)
 verifica("contrario: una carta tolta non copre", len(lt._chiedi_corpo.richieste) == 2

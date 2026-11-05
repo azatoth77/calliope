@@ -1063,7 +1063,7 @@ tel = (QUI.parent / "calliope" / "schermi" / "pagina" / "telefono" / "telefono.j
 verifica("telefono: mentre suona il ripasso la stanza vale «Calliope parla»",
          "() => player.inCorso() || !!st.ripasso" in tel and '"calliope:voce"' in tel)
 sw = (QUI.parent / "calliope" / "schermi" / "pagina" / "telefono" / "sw.js").read_text("utf-8")
-verifica("il service worker alla v44 (il podcast, #387, dopo il riassunto da ascoltare, #386)", "calliope-telefono-pagina-v44" in sw)
+verifica("il service worker alla v45 (la scheda con ciò che è pronto, #384, dopo le mappe delle parti)", "calliope-telefono-pagina-v45" in sw)
 
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
 sys.exit(1 if errori else 0)

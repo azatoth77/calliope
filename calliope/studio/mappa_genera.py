@@ -174,8 +174,9 @@ def modo(cfg) -> str:
 
 def firma(argomenti: list[dict], pagine: list[dict], modo_: str) -> str:
     """Come la firma delle carte (argomenti del piano, pagine, modo), per la mappa. «v2» dal 04/11
-    (#385): uno scheletro del modello mai toccato si rifà con la richiesta nuova."""
-    return hashlib.sha256(("mappa:v2:" + G.firma(argomenti, pagine, modo_)).encode()
+    (#385): uno scheletro del modello mai toccato si rifà con la richiesta nuova. «v3» dal 05/11 (#384): si
+    rifà coi cancelli di sicurezza, anche dove è già su «attiva» e senza accendere altro."""
+    return hashlib.sha256(("mappa:v3:" + G.firma(argomenti, pagine, modo_)).encode()
                           ).hexdigest()[:16]
 
 
@@ -188,7 +189,7 @@ def pagine_di(argomento: dict, pagine: list[dict]) -> list[dict]:
 def firma_parte(argomento: dict, pagine: list[dict], modo_: str) -> str:
     """La firma della mappa di una parte: il suo argomento, le sue pagine, il modo. Una pagina nuova
     di un altro argomento non rifà questa parte."""
-    return hashlib.sha256(("parte:v1:" + G.firma([argomento], pagine_di(argomento, pagine), modo_)
+    return hashlib.sha256(("parte:v2:" + G.firma([argomento], pagine_di(argomento, pagine), modo_)
                            ).encode()).hexdigest()[:16]
 
 

@@ -42,6 +42,13 @@ solo in casa, accesi dal tutore; il tutore vede tutto nella sua vista e spegne s
 duelli, tutti o in parte, per ciascun minore. Per un adulto le stesse meccaniche, e gli
 interruttori li decide lui. Lo stato d'animo non entra mai.
 
+**Il materiale generato** (04/11, #384, decisione 0035 punto 59): generare costa zero, e un traguardo
+non può venire da ciò che nessuno ha scritto né riletto. Conta per la **pratica** (la serie, la stella
+del ripasso: una carta ripassata in due giorni è fatica vera, e con più carte quella stella è più
+lontana, mai più vicina), mai per la **riuscita**: nella stella di una prova le risposte alle voci
+generate valgono 0 (`punti_affidabili`), in quella di un argomento i loro tentativi non contano. Una
+carta corretta dalla persona è sua e conta. Davanti a un dubbio, meno e non di più.
+
 Permessi come il resto dello Studio (`servizio.permesso`); tutto dentro `self.dati.lock` quando
 legge e scrive insieme. Le frasi le scrive il codice: numeri, tipi e nomi dei profili, mai titoli
 di argomenti né testo delle pagine o delle domande.
@@ -232,9 +239,11 @@ def serie(giorni_pratica: dict[str, dict], pianificati: set[str], oggi, pause: i
 
 def punti_affidabili(voci: list[dict]) -> float:
     """I punti delle risposte decise dal codice o dal tutore (giusto 1, indizio 0,5): quelle
-    rivedute dalla persona stessa non contano per le stelle."""
+    rivedute dalla persona stessa non contano per le stelle, e nemmeno quelle a una voce generata
+    dal modello che nessuno ha corretto (#384)."""
     return sum(PD.ESITI.get(x.get("esito"), 0.0) for x in voci
-               if x.get("fonte_esito") in FONTI_STELLE and x.get("esito") in PD.ESITI)
+               if x.get("fonte_esito") in FONTI_STELLE and x.get("esito") in PD.ESITI
+               and not x.get("generata"))
 
 
 def superata(voci: list[dict], obiettivo: int) -> bool:
@@ -405,9 +414,10 @@ class Premi:
                 # Un argomento all'obiettivo coi soli esiti del codice e del tutore (mai le
                 # autovalutazioni né i giudizi del tutore, che non sono pratica)
                 tent = [t for t in self.dati.tutti(
-                    "SELECT id, argomento, giorno, ora, tipo, esito, fonte FROM studio_tentativi "
-                    "WHERE verifica = ?", (v["id"],))
+                    "SELECT id, argomento, giorno, ora, tipo, esito, fonte, generata FROM "
+                    "studio_tentativi WHERE verifica = ?", (v["id"],))
                     if t["fonte"] in FONTI_STELLE and t["tipo"] != PD.GIUDIZIO
+                    and not t["generata"]
                     and str(t["giorno"]) <= oggi.isoformat()]
                 pad = PD.calcola(tent, oggi)
                 for a in self._argomenti_numerati(v["id"]):

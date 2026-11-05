@@ -93,6 +93,8 @@ TITOLO_ORDINE = "titolo_ordine"              # un titolo che è un ordine o ha u
 # L'avviso di un argomento unito a un altro dalla persona (tolto, mai cancellato: PR #315)
 UNITO = "unito"
 # Con uno di questi un argomento resta «proposto» anche dopo la conferma dell'elenco
+# Con una generazione su «attiva» un titolo così non si scrive (#384): andrebbe a chi studia
+SICUREZZA = (PAGINA_CON_ISTRUZIONI, TITOLO_ORDINE)
 DA_DECIDERE = (DA_CONTROLLARE, PAGINA_CON_ISTRUZIONI, TITOLO_ORDINE)
 
 # Gli esiti di un'estrazione (studio_verifiche.argomenti_esito)

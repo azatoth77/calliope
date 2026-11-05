@@ -215,7 +215,8 @@ class Mappe:
         for r in self.dati.tutti("SELECT id, tipo FROM studio_mappe WHERE verifica = ? AND "
                                  "stato != 'ombra' AND tipo != 'parte' ORDER BY id", (int(vid),)):
             out[r["tipo"]] = r["id"]
-        return {t: self._riga_mappa(i) for t, i in out.items()}
+        # Da qui leggono lo schermo, la voce e il riferimento: mai una voce fermata per sicurezza (#384)
+        return {t: self._senza_ferme(m) if (m := self._riga_mappa(i)) else m for t, i in out.items()}
 
     def _scheletro_confermato(self, vid) -> dict | None:
         s = self._mappe_di(vid).get(M.SCHELETRO)
@@ -1082,6 +1083,13 @@ class Mappe:
         return {"lunghezza": len(testo or ""), "svelati": sv}
 
     # ── la generazione dello scheletro (dal lettore, studio/lettura.py, mappa_genera.py) ──
+    def segna_fermate_mappa(self, vid, chiave: str, n: int):
+        """Quante voci di una mappa sono state fermate per sicurezza: solo un conto (`Studio.fermate_di`)."""
+        with self.dati.lock:
+            db = self.dati.db
+            self._scrivi_fermate(db, vid, "mappe", {chiave: int(n)} if n else {}, {chiave})
+            db.commit()
+
     def _scheletro_toccabile(self, db, vid) -> tuple[bool, list[int]]:
         """(si può generare?, gli id degli scheletri del modello da rifare). Mai sopra uno scheletro
         della persona: scritto a mano, confermato, o con una voce cambiata da una persona."""
@@ -1158,6 +1166,8 @@ class Mappe:
         for v in self.dati.tutti("SELECT * FROM studio_verifiche WHERE stato = 'aperta' AND "
                                  "data >= ? AND (? IS NULL OR id = ?) ORDER BY data, id",
                                  (self._oggi().isoformat(), vid, vid)):
+            if m == MG.ATTIVA and self.guardiano_manca(v["persona"]):
+                continue                 # senza guardiano per un minore niente esce (#384)
             args = self._argomenti_per_carte(v["id"])
             pagine = self._pagine_di(v["id"])
             lette = {int(p["id"]) for p in A.lette(pagine)}
@@ -1195,7 +1205,7 @@ class Mappe:
                 pagine = [dict(r) for r in db.execute(
                     "SELECT p.* FROM studio_pagine p JOIN studio_materiali m ON m.id = p.materiale"
                     " WHERE m.verifica = ?", (int(vid),))]
-                arg = None if a is None or a["stato"] not in D.ARGOMENTI_DEL_PIANO else {
+                arg = None if a is None or not self._nel_piano(a) else {
                     "id": a["id"], "titolo": a["titolo"],
                     "pagine": [int(x) for x in D.da_j(a["pagine"]) if str(x).isdecimal()]}
                 if v is None or arg is None or MG.firma_parte(arg, pagine, modo_) != firma:
@@ -1263,7 +1273,7 @@ class Mappe:
                          "pagine": [int(x) for x in D.da_j(a["pagine"]) if str(x).isdecimal()]}
                         for a in db.execute("SELECT * FROM studio_argomenti WHERE verifica = ? "
                                             "ORDER BY ordine, id", (int(vid),)).fetchall()
-                        if a["stato"] in D.ARGOMENTI_DEL_PIANO]
+                        if self._nel_piano(a)]
                 si, rifare = self._scheletro_toccabile(db, vid)
                 if v is None or not si or MG.firma(args, pagine, modo_) != firma:
                     db.rollback()
@@ -1381,6 +1391,7 @@ class Mappe:
         def per_schermo(m, senza_testi=False):
             if m is None:
                 return None
+            m = self._senza_ferme(m)
             if senza_testi:
                 return {"id": m["id"], "tipo": m["tipo"], "stato": m["stato"],
                         "origine": m["origine"], "nascosta": True, "parole": [], "nodi": [],
@@ -1461,7 +1472,7 @@ class Mappe:
                 "consigli": M.modo_consigli(self.cfg) != "spenta",
                 "argomenti": [{"id": a["id"], "numero": i, "titolo": a["titolo"]}
                               for i, a in enumerate(self.argomenti(chi, vid), 1)
-                              if a["stato"] in D.ARGOMENTI_DEL_PIANO],
+                              if self._nel_piano(a)],
                 "pagine": [{"id": k, "nome": x} for k, x in pagine.items()],
                 "aiuto": aiuto, "aiuti": dict(M.AIUTI),
                 "puo": {"scheletro": v["stato"] in ("bozza", "aperta") and not (
@@ -1477,6 +1488,18 @@ class Mappe:
                             "testo": M.NODO_MAX, "verbo": M.VERBO_MAX},
                 "prova": not self.per_schermi()}
 
+    @staticmethod
+    def _senza_ferme(m: dict) -> dict:
+        """Una mappa senza le voci con un avviso di sicurezza (#384), coi collegamenti che ne dipendono: non vanno a nessuna
+        pagina, nemmeno da decidere. Anche una riga scritta prima dei cancelli."""
+        from .genera import SICUREZZA
+        sic = set(SICUREZZA)
+        via = {x["id"] for x in m.get("nodi") or [] if set(x.get("avvisi") or ()) & sic}
+        return {**m, "nodi": [x for x in m.get("nodi") or [] if x["id"] not in via],
+                "collegamenti": [c for c in m.get("collegamenti") or []
+                                 if c.get("da") not in via and c.get("a") not in via
+                                 and not set(c.get("avvisi") or ()) & sic]}
+
     def _parti_mostrabili(self, vid) -> list[tuple]:
         """[(numero, argomento, riga o None, pagine lette dell'argomento)] di ciò che può andare alla
         persona: niente con le parti spente o in ombra, solo gli argomenti del piano con una pagina
@@ -1490,7 +1513,8 @@ class Mappe:
         for i, a in enumerate(self._argomenti_per_carte(vid), 1):
             sue = {int(x) for x in a["pagine"]} & lette
             if sue:
-                out.append((i, a, righe.get(int(a["id"])), sue))
+                r = righe.get(int(a["id"]))
+                out.append((i, a, self._senza_ferme(r) if r else r, sue))
         return out
 
     def _parti_per_schermo(self, v, nascoste: bool, per_schermo) -> dict:

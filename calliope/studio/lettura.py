@@ -778,59 +778,14 @@ class Lettore:
                     return {"fatte": fatte, "aspetta": esito}
                 fatte += 1
                 continue
-            # Le carte di una verifica aperta con gli argomenti confermati (passo 6, #246), con
-            # la stessa guardia: dopo gli argomenti, prima delle pagine di un'altra verifica
-            per_carte = self.studio.verifiche_per_carte()
-            if per_carte:
-                motivo = self.guardia.motivo()
-                if motivo is not None:
-                    if motivo != self.in_attesa:
-                        self._registra(f"carte in attesa: {motivo}")
-                    self.in_attesa = motivo
-                    self.misure["attese"] += 1
-                    return {"fatte": fatte, "aspetta": motivo}
-                self.in_attesa = None
-                esito = self.genera_carte(per_carte[0])
-                if esito in ("ceduta", "giu", "errore", "errore_server"):
-                    return {"fatte": fatte, "aspetta": esito}
+            # A lettura finita la verifica si apre da sola, senza la conferma (#384); poi i materiali
+            self.studio.apri_pronte()
+            esito = self._materiali_del_giro()
+            if esito == "fatto":
                 fatte += 1
                 continue
-            # Lo scheletro della mappa (passo 7, seconda parte, #247), con la stessa guardia: dopo
-            # le carte, prima delle pagine di un'altra verifica
-            per_mappa = self.studio.verifiche_per_mappa()
-            if per_mappa:
-                motivo = self.guardia.motivo()
-                if motivo is not None:
-                    if motivo != self.in_attesa:
-                        self._registra(f"mappa in attesa: {motivo}")
-                    self.in_attesa = motivo
-                    self.misure["attese"] += 1
-                    return {"fatte": fatte, "aspetta": motivo}
-                self.in_attesa = None
-                # Un passo alla volta (la generale o una parte): fra un passo e l'altro passano
-                # prima gli argomenti e le carte di una verifica nuova (#385)
-                esito = self.prepara_mappe(per_mappa[0], passi=1)
-                if esito in ("ceduta", "giu", "errore", "errore_server"):
-                    return {"fatte": fatte, "aspetta": esito}
-                fatte += 1
-                continue
-            # Le domande delle prove (passo 8, #248), con la stessa guardia: dopo lo scheletro,
-            # prima delle pagine di un'altra verifica
-            per_domande = self.studio.verifiche_per_domande()
-            if per_domande:
-                motivo = self.guardia.motivo()
-                if motivo is not None:
-                    if motivo != self.in_attesa:
-                        self._registra(f"domande in attesa: {motivo}")
-                    self.in_attesa = motivo
-                    self.misure["attese"] += 1
-                    return {"fatte": fatte, "aspetta": motivo}
-                self.in_attesa = None
-                esito = self.genera_domande(per_domande[0])
-                if esito in ("ceduta", "giu", "errore", "errore_server"):
-                    return {"fatte": fatte, "aspetta": esito}
-                fatte += 1
-                continue
+            if esito is not None:
+                return {"fatte": fatte, "aspetta": esito}
             righe = self.prossime(50)
             # Dopo una caduta si prova prima un'altra pagina: se va, la colpa è della pagina
             # caduta; se cade anche lei, è del server (seconda nota della PR #314)
@@ -868,6 +823,42 @@ class Lettore:
                 return {"fatte": fatte, "aspetta": esito}
             fatte += 1
         return {"fatte": fatte}
+
+    # ── i materiali generati ──
+    def _passi_materiali(self) -> list[tuple]:
+        """**Il posto dichiarato di ciò che si genera a lettura finita** (#384): (nome, le verifiche
+        da fare, chi fa un passo). Un materiale nuovo è una riga qui, con la sua lista e il suo ingresso, e
+        una riga in `Studio.pronto`. Il riassunto (#386) e la preparazione stanno dopo le pagine, perché
+        vogliono anche la voce ferma (`_passo_riassunto`, `_passo_preparazione`): partono da soli anche
+        loro, su una verifica che si è aperta da sola, ognuno col suo interruttore. Dopo gli argomenti e prima delle pagine
+        di un'altra verifica. Le domande prima delle mappe (#384): «mi interroghi?» arriva subito dopo
+        la scansione, e le mappe sono tante richieste."""
+        return [("terreno", self.studio.verifiche_per_terreno, self.passo_terreno),
+                ("carte", self.studio.verifiche_per_carte, self.genera_carte),
+                ("domande", self.studio.verifiche_per_domande, self.genera_domande),
+                # Un passo alla volta (la generale o una parte): fra un passo e l'altro passano
+                # prima gli argomenti e le carte di una verifica nuova (#385)
+                ("mappa", self.studio.verifiche_per_mappa,
+                 lambda v: self.prepara_mappe(v, passi=1))]
+
+    def _materiali_del_giro(self) -> str | None:
+        """Un passo sui materiali, con la guardia del lettore (voce e agenti hanno la precedenza):
+        «fatto», None (niente da fare), o il motivo per cui aspettare."""
+        for cosa, verifiche, fai in self._passi_materiali():
+            da_fare = verifiche()
+            if not da_fare:
+                continue
+            motivo = self.guardia.motivo()
+            if motivo is not None:
+                if motivo != self.in_attesa:
+                    self._registra(f"{cosa} in attesa: {motivo}")
+                self.in_attesa = motivo
+                self.misure["attese"] += 1
+                return motivo
+            self.in_attesa = None
+            esito = fai(da_fare[0])
+            return esito if esito in ("ceduta", "giu", "errore", "errore_server") else "fatto"
+        return None
 
     # ── gli esercizi guidati (31/10, issue #278, studio/esercizi.py) ──
     def _esercizi_del_giro(self) -> str | None:
@@ -980,6 +971,9 @@ class Lettore:
                     break
                 self._registra(f"esercizio {eid}: guida in tondo fino a max_tokens"
                                + (", la richiedo" if not prova else ""))
+            # I passi sono testo generato che arriva a chi studia: una voce fermata e la guida non c'è (#384)
+            ferma = grezzi is not None and self.studio.generazione_attiva() and self._guida_ferma(
+                grezzi, testo, riga.get("persona"), m)
         except Ceduta:
             m["cedute"] += 1
             return "ceduta"
@@ -1002,6 +996,10 @@ class Lettore:
             m["rotte"] += 1
             self.studio.scrivi_guida(eid, firma, [], None, ["guida_illeggibile"], EG.ROTTO)
             return "rotto"
+        if ferma:
+            self._registra(f"esercizio {eid}: guida fermata per sicurezza")
+            self.studio.scrivi_guida(eid, firma, [], None, [ferma], EG.SENZA_GUIDA)
+            return EG.SENZA_GUIDA
         passi, risultato, avvisi = EG.proposte(grezzi, testo)
         m["scartati"] += max(0, len(grezzi.get("passi") or ()) - len(passi))
         m["indizi_tolti"] += sum(EG.INDIZIO_TOLTO in p["avvisi"] for p in passi)
@@ -1289,10 +1287,17 @@ class Lettore:
         vid = int(v["id"])
         pagine = v["_pagine"]
         firma = A.firma(pagine)
-        rif = A.riferimenti(pagine)
         t0 = time.monotonic()
         grezzi = None
+        # I titoli vanno a chi studia, nel piano e nelle mappe delle parti: stessi cancelli delle voci (#384), con una
+        # generazione qualsiasi su «attiva», compresa la sola mappa
+        cancelli = self.studio.generazione_attiva()
+        fermati = 0
         try:
+            if cancelli:
+                v = self._terreno(v, m)
+                pagine = v["_pagine"]
+            rif = A.riferimenti(pagine)
             for prova in range(2):
                 r = self._chiedi_corpo(A.corpo(self.modello, v, rif))
                 m["token_in"] += int(r.get("prompt") or 0)
@@ -1307,6 +1312,11 @@ class Lettore:
                     break
                 self._registra(f"verifica {vid}: argomenti in tondo fino a max_tokens"
                                + (", li richiedo" if not prova else ""))
+            proposte = None
+            if grezzi is not None:
+                proposte = A.proposte(grezzi, rif)
+                if cancelli:
+                    proposte, fermati = self._titoli_sicuri(proposte, v["persona"], m)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: argomenti, ceduto il passo a un lavoro dell'agente")
@@ -1326,11 +1336,10 @@ class Lettore:
             self._attendi_errore()
             return "errore"
         s = time.monotonic() - t0
-        if grezzi is None:
-            proposte, esito = [], A.ROTTO
-        else:
-            proposte, esito = A.proposte(grezzi, rif), A.PROPOSTI
+        proposte, esito = ([], A.ROTTO) if proposte is None else (proposte, A.PROPOSTI)
         n = self.studio.proponi_argomenti(vid, firma, proposte, esito)
+        if n is not None and cancelli:
+            self.studio.segna_fermate_mappa(vid, "argomenti", fermati)
         if n is None:
             m["cambiate"] += 1
             self._registra(f"verifica {vid}: pagine cambiate durante gli argomenti, li richiedo")
@@ -1364,17 +1373,31 @@ class Lettore:
         vid = int(v["id"])
         modo = v["_modo"]
         firma = G.firma(v["_argomenti"], v["_pagine"], modo)
-        rif = A.riferimenti(v["_pagine"])
-        arif = G.argomenti_rif(v["_argomenti"])
+        tutti = G.argomenti_rif(v["_argomenti"])
+        # Solo la parte cambiata (#384): con gli argomenti di prima non si chiede niente
+        arif = G.da_rifare(tutti, v["_pagine"], modo, self.studio.firme_parti(vid, "carte"))
+        rifatti = {int(a["id"]) for _r, a in arif}
+        if not arif:
+            n = self.studio.proponi_carte(vid, firma, [], G.PROPOSTE, modo, rifatti=rifatti)
+            return "cambiate" if n is None else "proposte"
         t0 = time.monotonic()
         grezzi = None
         try:
+            if modo == G.ATTIVA:
+                v = self._terreno(v, m)
+            rif = A.riferimenti(v["_pagine"])
+            rif_r = rif if len(arif) == len(tutti) else G.pagine_di_parte(rif, arif)
             # Un argomento con una carta già decisa è coperto (#388): non si richiede
             decisi = self.studio.argomenti_decisi(vid, "studio_carte")
             grezzi, _finita = self._chiedi_lista(
-                lambda ar: G.corpo(self.modello, v, rif, ar), arif, m, vid, "carte", G.leggi,
+                lambda ar: G.corpo(self.modello, v, rif_r, ar), arif, m, vid, "carte", G.leggi,
                 G.parziale, lambda voci: _puliti(G.proposte(voci, rif, arif)) | decisi,
                 lambda x: bool(_puliti(G.proposte([x], rif, arif))))
+            proposte = None if grezzi is None else G.proposte(grezzi, rif, arif)
+            if proposte and modo == G.ATTIVA:
+                self._cancelli(proposte, m, v["persona"])
+                proposte = self._mirata(proposte, arif, decisi, lambda ar: G.corpo(self.modello, v, rif_r, ar), G,
+                                        m, vid, "carte", v["persona"], rif)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: carte, ceduto il passo a un lavoro dell'agente")
@@ -1394,11 +1417,8 @@ class Lettore:
         # Anche il controllo del codice e la scrittura (revisione della PR #327): un'eccezione qui
         # non deve far ripartire la richiesta a ogni giro e fermare le altre verifiche
         try:
-            if grezzi is None:
-                proposte, esito = [], G.ROTTO
-            else:
-                proposte, esito = G.proposte(grezzi, rif, arif), G.PROPOSTE
-            n = self.studio.proponi_carte(vid, firma, proposte, esito, modo)
+            proposte, esito = ([], G.ROTTO) if proposte is None else (proposte, G.PROPOSTE)
+            n = self.studio.proponi_carte(vid, firma, proposte, esito, modo, rifatti=rifatti)
         except Exception as e:  # noqa: BLE001
             return self._errore_generazione("carte", vid, e, lambda: self.studio.proponi_carte(
                 vid, firma, [], G.ERRORE, modo))
@@ -1412,19 +1432,20 @@ class Lettore:
         if esito == G.ROTTO:
             m["rotte"] += 1
             self._registra(f"verifica {vid}: carte illeggibili ({s:.1f} s)")
-            self._copertura(vid, "carte", arif, decisi)
+            self._copertura(vid, "carte", tutti, decisi | self._fermi(vid, "carte", tutti, rifatti))
             return "rotto"
-        self._copertura(vid, "carte", arif, _puliti(proposte) | decisi)
+        self._copertura(vid, "carte", tutti,
+                        _puliti(proposte) | decisi | self._fermi(vid, "carte", tutti, rifatti))
         m["carte"] += n
         if modo == G.OMBRA:
             m["ombra"] += n
         conta = {a: sum(a in c["avvisi"] for c in proposte) for a in G.DA_DECIDERE}
         for a, k in conta.items():
-            m[a] += k
+            m[a] = m.get(a, 0) + k
         if not n:
             m["vuote"] += 1
         avv = ", ".join(f"{k} {a}" for a, k in conta.items() if k)
-        self._registra(f"verifica {vid}: {n} carte {'in ombra' if modo == G.OMBRA else 'proposte'}"
+        self._registra(f"verifica {vid}: {n} carte {'in ombra' if modo == G.OMBRA else 'nuove'}"
                        f" da {len(arif)} argomenti ({s:.1f} s" + (f", avvisi {avv}" if avv else "")
                        + ")")
         return "proposte"
@@ -1488,6 +1509,195 @@ class Lettore:
             finita = finita or not tagliata
         return voci, finita
 
+    def _terreno(self, v: dict, m: dict) -> dict:
+        """La verifica col terreno pulito (`voce_sicura.terreno`), con «attiva»: le frasi nocive non arrivano al modello.
+        Un guasto risale come un errore del server. La frase si giudica una volta per testo, finché il lettore vive."""
+        from . import genera as G
+        from . import voce_sicura as VS
+        cache = self.__dict__.setdefault("_frasi_sicure", {})
+
+        def giudica(frase: str) -> bool:
+            if frase not in cache:
+                r = self._chiedi_corpo(VS.corpo(self.modello, frase))
+                if not r.get("fine"):
+                    raise ErroreServer("stream senza fine")
+                m["token_in"] += int(r.get("prompt") or 0)
+                m["token_out"] += int(r.get("eval") or 0)
+                cache[frase] = VS.passa(r.get("content"))
+            return cache[frase]
+        verdetti: dict = {}
+        pagine, conti = VS.terreno(v["_pagine"], giudica, G.frasi_di, verdetti)
+        self.studio.segna_terreno(v["id"], verdetti)
+        for k, n in conti.items():
+            m[f"terreno_{k}"] = m.get(f"terreno_{k}", 0) + n
+        if conti["nocive"]:
+            self._registra(f"verifica {v['id']}: {conti['nocive']} frasi nocive su {conti['frasi']}, "
+                           f"{conti['pagine_fuori']} pagine fuori dal terreno")
+        prima = {int(p["id"]): p for p in v["_pagine"]}
+        self.studio.segna_pagine_fuori(v["id"], [
+            int(p["id"]) for p in pagine
+            if p is not prima[int(p["id"])] and p.get("testo") == prima[int(p["id"])].get("testo")])
+        return {**v, "_pagine": pagine}
+
+    def passo_terreno(self, v: dict) -> str:
+        """Il giudizio di una verifica per ciò che si dice a chi studia. Un guasto non scrive niente: la pagina resta non
+        giudicata, quindi non si dice, e si riprova."""
+        vid = int(v["id"])
+        m = self.misure.setdefault("terreno", {"token_in": 0, "token_out": 0})
+        try:
+            self._terreno(v, m)
+        except Ceduta:
+            return "ceduta"
+        except _Giu:
+            return "giu"
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            attesa = self._attendi_errore()
+            self._registra(f"verifica {vid}: terreno, errore del server ({e}), riprovo fra {attesa:.0f} s")
+            return "errore_server"
+        except Exception as e:  # noqa: BLE001
+            self.misure["errori"] += 1
+            self._registra(f"verifica {vid}: terreno non riuscito ({type(e).__name__})")
+            self._attendi_errore()
+            return "errore"
+        return "fatto"
+
+    def _guida_ferma(self, grezzi: dict, testo: str, persona, m: dict) -> str | None:
+        """Il primo avviso dei cancelli sulla guida di un esercizio, o None."""
+        from . import esercizi_genera as EG
+        passi, risultato, _ = EG.proposte(grezzi, testo)
+        for t in [risultato] + [x for p in passi for x in (p.get("testo"), p.get("indizio"))]:
+            ferma = self._sicura(t, persona, m) if t else None
+            if ferma:
+                return ferma
+        return None
+
+    def _lezioni_sicure(self, ris: dict, persona, m: dict):
+        """I paragrafi delle lezioni, con «attiva»: quelli fermati hanno un avviso, e un paragrafo con un avviso non si
+        mostra (punto 53). Il testo resta sul disco del lettore solo così, mai a una pagina."""
+        for lz in ris["lezioni"]:
+            for p in lz["paragrafi"]:
+                ferma = None if p["avvisi"] else self._sicura(p["testo"], persona, m)
+                if ferma:
+                    p["avvisi"].append(ferma)
+        # Il nome del materiale è una parola presa dalla pagina e si mostra nell'attività
+        val = ris.get("valori") or {}
+        val["misure"] = [x for x in val.get("misure") or [] if not self._sicura(x["materiale"], persona, m)]
+
+    def _titoli_sicuri(self, proposte: list[dict], persona, m: dict) -> tuple[list[dict], int]:
+        """I titoli degli argomenti che possono arrivare a chi studia: un titolo da una pagina con le istruzioni, un ordine
+        o fermato dai cancelli non si scrive, quindi non entra nel piano e non apre la verifica. (i titoli, quanti fermati)."""
+        from . import argomenti as A
+        tieni, ferme = [], 0
+        for a in proposte:
+            if set(a["avvisi"]) & set(A.SICUREZZA) or self._sicura(a["titolo"], persona, m):
+                ferme += 1
+            else:
+                tieni.append(a)
+        return tieni, ferme
+
+    def _sicura(self, testo: str, persona, m: dict) -> str | None:
+        """I due cancelli di sicurezza su un testo generato: il giudizio sulla sola voce, senza la pagina
+        (`voce_sicura`), e il guardiano. None se passa, o l'avviso. Un guasto non è un giudizio: risale come un errore
+        del server, senza scrivere la firma, e si riprova il giro. Una risposta illeggibile del giudizio ferma."""
+        from . import genera as G
+        from . import voce_sicura as VS
+        r = self._chiedi_corpo(VS.corpo(self.modello, testo))
+        if not r.get("fine"):
+            raise ErroreServer("stream senza fine")
+        m["token_in"] += int(r.get("prompt") or 0)
+        m["token_out"] += int(r.get("eval") or 0)
+        m["giudizi_sicuri"] = m.get("giudizi_sicuri", 0) + 1
+        if not VS.passa(r.get("content")):
+            return G.NOCIVA_NO
+        g = self.studio.voce_guardia(persona, testo)
+        if g == "guasto":
+            raise ErroreServer("guardiano guasto o assente")
+        return G.GUARDIANO_NO if g == "guardiano" else None
+
+    def _cancelli(self, voci: list[dict], m: dict, persona) -> None:
+        """I cancelli automatici, con «attiva» (decisione di chi amministra del 04/11: nessuna persona valida
+        prima che lo studente le veda). Su **ogni** voce non già fermata per sicurezza, anche su quelle col solo dubbio
+        di fedeltà, che restano visibili: il giudizio sulla sola voce e il guardiano (`_sicura`). Sulle pulite, poi, il
+        **giudizio indipendente per coppia**: un'altra richiesta chiusa, senza ciò che ha scritto la voce, con la sola
+        frase d'appoggio e la voce in busta; solo un «si» tiene, una risposta che non si legge è un no; il server
+        giù risale e si riprova il giro. Solo conti."""
+        from . import genera as G
+        for v in voci:
+            if set(v["avvisi"]) & set(G.SICUREZZA):
+                continue
+            ferma = self._sicura(v["voce"], persona, m)
+            if ferma:
+                v["avvisi"].append(ferma)
+                continue
+            if v["avvisi"]:
+                continue
+            r = self._chiedi_corpo(G.corpo_giudizio(self.modello, v["voce"], v["fonte"]))
+            if not r.get("fine"):
+                raise ErroreServer("stream senza fine")
+            m["token_in"] += int(r.get("prompt") or 0)
+            m["token_out"] += int(r.get("eval") or 0)
+            m["giudizi"] = m.get("giudizi", 0) + 1
+            if not G.leggi_giudizio(r.get("content")):
+                v["avvisi"].append(G.GIUDIZIO_NO)
+
+    def _mirata(self, proposte: list[dict], arif: list, decisi: set, corpo_di, mod, m: dict, vid: int, cosa: str,
+                persona, rif) -> list[dict]:
+        """Gli argomenti che i cancelli hanno lasciato senza voci, che ne avevano: una richiesta mirata, con le sole loro
+        pagine, e le voci nuove passano dagli stessi cancelli (come il riassunto). Se non cambia niente, restano
+        scoperti e la scheda lo dice."""
+        coperti = _puliti(proposte) | decisi
+        avevano = {v["argomento"] for v in proposte}
+        mancano = [(r_, a) for r_, a in arif if int(a["id"]) not in coperti and int(a["id"]) in avevano]
+        if not mancano:
+            return proposte
+        self._registra(f"verifica {vid}: {cosa}, richiesta mirata per {len(mancano)} argomenti scoperti dopo i cancelli")
+        grezzi, _t = self._una_lista(corpo_di(mancano), m, vid, cosa, mod.leggi, mod.parziale)
+        if not grezzi:
+            return proposte
+        altre = mod.proposte(grezzi, rif, mancano)
+        self._cancelli(altre, m, persona)
+        chiave = "domanda" if mod.__name__.endswith(".genera") else "testo"
+        viste = {v[chiave] for v in proposte}
+        return proposte + [v for v in altre if v[chiave] not in viste]
+
+    def _mappa_sicura(self, nodi: list[dict], coll: list[dict], persona, m: dict) -> tuple[list, list, int]:
+        """I cancelli di sicurezza sulla mappa (#384): ogni collegamento come frase, e i concetti soli. Un
+        collegamento fermato cade, e con lui il concetto rimasto senza legami; un concetto fermato cade coi suoi
+        legami. La mappa regge se ne cade qualcuno. (nodi, collegamenti, quante voci fermate). Solo conti."""
+        from . import genera as G
+        sic = set(G.SICUREZZA)
+        testi = {x["id"]: str(x.get("testo") or "") for x in nodi}
+        # Una voce con un avviso di sicurezza (una pagina con le istruzioni, un ordine) cade qui, senza chiedere: con
+        # «attiva» non resta nello scheletro con l'avviso, dove una pagina la mostrerebbe
+        fermi: set = {x["id"] for x in nodi if set(x.get("avvisi") or ()) & sic}
+        tieni, ferme = [], len(fermi)
+        legati: set = set()
+        for c in coll:
+            if set(c.get("avvisi") or ()) & sic or c["da"] in fermi or c["a"] in fermi:
+                ferme += 1
+                continue
+            t = f"{testi.get(c['da'], '')} {c.get('verbo') or ''} {testi.get(c['a'], '')}".strip()
+            if self._sicura(t, persona, m):
+                ferme += 1
+                # Il capo che resta senza legami cade: da solo non dice più niente, o dice il consiglio
+                continue
+            tieni.append(c)
+            legati |= {c["da"], c["a"]}
+        toccati = {x for c in coll for x in (c["da"], c["a"])}
+        for x in nodi:
+            if x["id"] not in fermi and x["id"] not in toccati and self._sicura(testi[x["id"]], persona, m):
+                fermi.add(x["id"])
+                ferme += 1
+        nodi2 = [x for x in nodi if x["id"] not in fermi and (x["id"] in legati or x["id"] not in toccati)]
+        return nodi2, tieni, ferme
+
+    def _fermi(self, vid: int, cosa: str, tutti: list, rifatti: set) -> set:
+        """Gli argomenti non rifatti in questo giro e già coperti l'altra volta: restano coperti."""
+        prima = set((self.studio.scoperti_di(vid).get(cosa) or {}).get("argomenti") or ())
+        return {int(a["id"]) for _r, a in tutti if int(a["id"]) not in rifatti
+                and int(a["id"]) not in prima}
+
     def _copertura(self, vid: int, cosa: str, arif: list, coperti, finita: bool = True):
         """Scrive cosa è rimasto scoperto dopo il controllo del codice (`Studio.segna_scoperti`:
         gli argomenti fuori da `coperti`, quelli con una voce senza avvisi, e `valori` se reazioni e
@@ -1510,16 +1720,30 @@ class Lettore:
         vid = int(v["id"])
         modo = v["_modo"]
         firma = DG.firma(v["_argomenti"], v["_pagine"], modo)
-        rif = A.riferimenti(v["_pagine"])
-        arif = G.argomenti_rif(v["_argomenti"])
+        tutti = G.argomenti_rif(v["_argomenti"])
+        # Solo la parte cambiata (#384), come le carte
+        arif = DG.da_rifare(tutti, v["_pagine"], modo, self.studio.firme_parti(vid, "domande"))
+        rifatti = {int(a["id"]) for _r, a in arif}
+        if not arif:
+            n = self.studio.proponi_domande(vid, firma, [], DG.PROPOSTE, modo, rifatti=rifatti)
+            return "cambiate" if n is None else "proposte"
         t0 = time.monotonic()
         grezzi = None
         try:
+            if modo == DG.ATTIVA:
+                v = self._terreno(v, m)
+            rif = A.riferimenti(v["_pagine"])
+            rif_r = rif if len(arif) == len(tutti) else DG.pagine_di_parte(rif, arif)
             decisi = self.studio.argomenti_decisi(vid, "studio_domande")
             grezzi, _finita = self._chiedi_lista(
-                lambda ar: DG.corpo(self.modello, v, rif, ar), arif, m, vid, "domande", DG.leggi,
+                lambda ar: DG.corpo(self.modello, v, rif_r, ar), arif, m, vid, "domande", DG.leggi,
                 DG.parziale, lambda voci: _puliti(DG.proposte(voci, rif, arif)) | decisi,
                 lambda x: bool(_puliti(DG.proposte([x], rif, arif))))
+            proposte = None if grezzi is None else DG.proposte(grezzi, rif, arif)
+            if proposte and modo == DG.ATTIVA:
+                self._cancelli(proposte, m, v["persona"])
+                proposte = self._mirata(proposte, arif, decisi, lambda ar: DG.corpo(self.modello, v, rif_r, ar), DG,
+                                        m, vid, "domande", v["persona"], rif)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: domande, ceduto il passo a un lavoro dell'agente")
@@ -1537,11 +1761,8 @@ class Lettore:
                 self.studio.proponi_domande(vid, firma, [], DG.ERRORE, modo)))
         s = time.monotonic() - t0
         try:
-            if grezzi is None:
-                proposte, esito = [], DG.ROTTO
-            else:
-                proposte, esito = DG.proposte(grezzi, rif, arif), DG.PROPOSTE
-            n = self.studio.proponi_domande(vid, firma, proposte, esito, modo)
+            proposte, esito = ([], DG.ROTTO) if proposte is None else (proposte, DG.PROPOSTE)
+            n = self.studio.proponi_domande(vid, firma, proposte, esito, modo, rifatti=rifatti)
         except Exception as e:  # noqa: BLE001
             return self._errore_generazione("domande", vid, e, lambda: (
                 self.studio.proponi_domande(vid, firma, [], DG.ERRORE, modo)))
@@ -1555,15 +1776,17 @@ class Lettore:
         if esito == DG.ROTTO:
             m["rotte"] += 1
             self._registra(f"verifica {vid}: domande illeggibili ({s:.1f} s)")
-            self._copertura(vid, "domande", arif, decisi)
+            self._copertura(vid, "domande", tutti,
+                            decisi | self._fermi(vid, "domande", tutti, rifatti))
             return "rotto"
-        self._copertura(vid, "domande", arif, _puliti(proposte) | decisi)
+        self._copertura(vid, "domande", tutti,
+                        _puliti(proposte) | decisi | self._fermi(vid, "domande", tutti, rifatti))
         m["domande"] += n
         if modo == DG.OMBRA:
             m["ombra"] += n
         conta = {a: sum(a in d["avvisi"] for d in proposte) for a in DG.DA_DECIDERE}
         for a, k in conta.items():
-            m[a] += k
+            m[a] = m.get(a, 0) + k
         for d in proposte:
             m["tipi"][d["tipo"]] = m["tipi"].get(d["tipo"], 0) + 1
         if not n:
@@ -1572,7 +1795,7 @@ class Lettore:
         tipi = ", ".join(f"{t} {sum(d['tipo'] == t for d in proposte)}" for t in
                          dict.fromkeys(d["tipo"] for d in proposte))
         self._registra(f"verifica {vid}: {n} domande "
-                       f"{'in ombra' if modo == DG.OMBRA else 'proposte'} da {len(arif)} "
+                       f"{'in ombra' if modo == DG.OMBRA else 'nuove'} da {len(arif)} "
                        f"argomenti ({s:.1f} s" + (f"; tipi {tipi}" if tipi else "")
                        + (f"; avvisi {avv}" if avv else "") + ")")
         return "proposte"
@@ -1654,15 +1877,22 @@ class Lettore:
             "reazioni": 0, "misure": 0, "scartati": 0, "secondi": 0.0, "token_in": 0,
             "token_out": 0})
         vid, modo, firma = int(v["id"]), v["_modo"], v["_firma"]
-        rif = A.riferimenti(v["_pagine"])
         arif = G.argomenti_rif(v["_argomenti"])
         t0 = time.monotonic()
-        grezzo = None
+        grezzo = ris_sicuro = None
         try:
+            # La lezione è testo generato che arriva a chi studia: stessi cancelli di sicurezza (#384)
+            if modo == PR.ATTIVA:
+                v = self._terreno(v, m)
+            rif = A.riferimenti(v["_pagine"])
             grezzo, finita = self._chiedi_lista(
                 lambda ar: PR.corpo(self.modello, v, rif, ar), arif, m, vid, "preparazione",
                 PR.leggi, PR.parziale,
                 lambda voci: _lezioni_pulite(PR.valida(voci, rif, arif)))
+            if grezzo is not None:
+                ris_sicuro = PR.valida(grezzo, rif, arif)
+                if modo == PR.ATTIVA:
+                    self._lezioni_sicure(ris_sicuro, v["persona"], m)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: preparazione, ceduto il passo a un lavoro "
@@ -1684,7 +1914,7 @@ class Lettore:
             if grezzo is None:
                 ris, esito = None, G.ROTTO
             else:
-                ris, esito = PR.valida(grezzo, rif, arif), PR.PRONTE
+                ris, esito = ris_sicuro, PR.PRONTE
             n = self.studio.proponi_preparazione(vid, firma, ris, esito, modo)
         except Exception as e:  # noqa: BLE001
             return self._errore_generazione("preparazione", vid, e, lambda: (
@@ -1874,6 +2104,14 @@ class Lettore:
         if not R.leggi_giudizio(r.get("content")):
             m["giudizio_no"] += 1
             return "giudizio"
+        # Il giudizio sulla sola frase, senza la pagina (#384, `voce_sicura`): una pagina non può parlargli
+        from . import voce_sicura as VS
+        r = self._chiedi_corpo(VS.corpo(self.modello, f["testo"]))
+        if not r.get("fine"):
+            raise ErroreServer("stream senza fine")
+        if not VS.passa(r.get("content")):
+            m["nociva_no"] = m.get("nociva_no", 0) + 1
+            return "nociva"
         return self.studio.riassunto_guardia(v["persona"], f["testo"])
 
     def _errore_generazione(self, cosa: str, vid: int, e: Exception, scrivi_errore) -> str:
@@ -1904,17 +2142,22 @@ class Lettore:
         vid = int(v["id"])
         modo = v["_modo"]
         firma = MG.firma(v["_argomenti"], v["_pagine"], modo)
-        rif = A.riferimenti(v["_pagine"])
         arif = G.argomenti_rif(v["_argomenti"])
         t0 = time.monotonic()
         grezzi = None
         nodi, coll, forma = [], [], {}
         try:
+            if modo == MG.ATTIVA:
+                v = self._terreno(v, m)
+            rif = A.riferimenti(v["_pagine"])
             r = MG.rete(self._chiedi_mappa(vid, m), v, rif, arif, M.nodi_max(self.studio.cfg),
                         titolo=v.get("argomento"), argomenti=v["_argomenti"],
                         pagine=v["_pagine"])
             if not r["rotto"]:
                 grezzi, nodi, coll, forma = True, r["nodi"], r["coll"], r["forma"]
+                if modo == MG.ATTIVA:
+                    nodi, coll, ferme = self._mappa_sicura(nodi, coll, v["persona"], m)
+                    self.studio.segna_fermate_mappa(vid, "generale", ferme)
                 m["connessioni"] += int(forma.get("connessioni") or 0)
                 m["connessioni_rotte"] += int(forma.get("connessioni_rotte") or 0)
                 # Quanti ne propone il modello e quanti dentro una parte già unita (#349)
@@ -2029,12 +2272,22 @@ class Lettore:
         m = self.misure["mappa"]
         vid, aid, modo = int(v["id"]), int(a["id"]), v["_modo"]
         firma = MG.firma_parte(a, v["_pagine"], modo)
-        sue = MG.pagine_di(a, v["_pagine"])
-        pulite = MG.pagine_pulite(sue)
 
         def scrivi(nodi, coll, esito, esclusi=0, fuori=0):
             return self.studio.proponi_parte(vid, aid, firma, nodi, coll, esito, modo,
                                              esclusi=esclusi, fuori=fuori)
+        try:
+            if modo == MG.ATTIVA:
+                v = self._terreno(v, m)
+        except (Ceduta, _Giu):
+            raise
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            attesa = self._attendi_errore()
+            self._registra(f"verifica {vid}: mappa di una parte, errore del server ({e}), riprovo fra {attesa:.0f} s")
+            return "errore_server"
+        sue = MG.pagine_di(a, v["_pagine"])
+        pulite = MG.pagine_pulite(sue)
         try:
             if not pulite:
                 scrivi([], [], MG.SOLO_ISTRUZIONI)
@@ -2053,6 +2306,9 @@ class Lettore:
             r = MG.rete(self._chiedi_mappa(vid, m), v, rif, arif,
                         M.parte_nodi(self.studio.cfg, len(rif)), titolo=a.get("titolo"), parte=True,
                         altri=MG.altri_sulle_pagine(a, v["_argomenti"]))
+            if modo == MG.ATTIVA and not r["rotto"]:
+                r["nodi"], r["coll"], ferme = self._mappa_sicura(r["nodi"], r["coll"], v["persona"], m)
+                self.studio.segna_fermate_mappa(vid, str(aid), ferme)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: mappa di una parte, ceduto il passo a un lavoro "

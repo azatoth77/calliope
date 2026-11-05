@@ -119,7 +119,7 @@ class Prove:
 
     def _domanda(self, chi, did) -> tuple[dict, dict]:
         r = self.dati.uno("SELECT * FROM studio_domande WHERE id = ?", (int(did),))
-        if r is None or r["stato"] == "ombra":
+        if r is None or r["stato"] == "ombra" or self._voce_ferma(r):
             from .servizio import NonTrovata
             raise NonTrovata()
         v = self._verifica(chi, r["verifica"])
@@ -172,6 +172,8 @@ class Prove:
         senza = self._risposte_nascoste(v, chi)
         for i, r in enumerate(self.dati.tutti("SELECT * FROM studio_domande WHERE verifica = ? "
                                               "AND stato != 'ombra' ORDER BY id", (v["id"],)), 1):
+            if self._voce_ferma(r):
+                continue
             d = self._riga_domanda(r)
             d["numero"] = i
             d["argomento_numero"] = numeri.get(d["argomento"])
@@ -198,16 +200,19 @@ class Prove:
             lette = {int(p["id"]) for p in A.lette(pagine)}
             if not any(set(a["pagine"]) & lette for a in args):
                 continue
+            if m == G.ATTIVA and (self._prova_aperta(v["id"]) or self.guardiano_manca(v["persona"])):
+                continue                 # le prove già aperte non cambiano: si riprova dopo (#384)
             if G.da_generare(v.get("domande_firma"), v.get("domande_esito"),
                              v.get("domande_del"), G.firma(args, pagine, m), self.adesso()):
                 out.append({**v, "_pagine": pagine, "_argomenti": args, "_modo": m})
         return out
 
     def proponi_domande(self, vid, firma: str, proposte: list[dict], esito: str,
-                        modo_: str) -> int | None:
-        """Come `proponi_carte`: via le domande del modello non decise, dentro le nuove
-        («proposta» o «ombra»), la firma e l'esito; None se intanto argomenti o pagine sono
-        cambiati."""
+                        modo_: str, rifatti=None) -> int | None:
+        """Come `proponi_carte`: via le domande del modello mai toccate dei soli argomenti `rifatti`,
+        dentro le nuove (le pulite subito usabili con «attiva», le altre «proposte»; «ombra» in ombra),
+        la firma, le firme delle parti e l'esito; None se intanto argomenti o pagine sono cambiati, o
+        in «attiva» c'è una prova aperta."""
         from . import argomenti as A
         from . import domande_genera as G
         with self.dati.lock:
@@ -225,23 +230,30 @@ class Prove:
                          "pagine": [int(x) for x in D.da_j(a["pagine"]) if str(x).isdecimal()]}
                         for a in db.execute("SELECT * FROM studio_argomenti WHERE verifica = ? "
                                             "ORDER BY ordine, id", (int(vid),)).fetchall()
-                        if a["stato"] in D.ARGOMENTI_DEL_PIANO]
-                if v is None or G.firma(args, pagine, modo_) != firma:
+                        if self._nel_piano(a)]
+                if v is None or G.firma(args, pagine, modo_) != firma or (
+                        modo_ == G.ATTIVA and self._prova_aperta(int(vid))):
                     db.rollback()
                     return None
                 n = 0
                 if esito not in (G.ROTTO, G.ERRORE):
-                    db.execute("DELETE FROM studio_domande WHERE verifica = ? AND origine = "
-                               "'modello' AND stato IN ('proposta', 'ombra')", (int(vid),))
+                    for did in self._da_rifare(db, "studio_domande", vid, rifatti, args):
+                        db.execute("DELETE FROM studio_domande WHERE id = ?", (did,))
                     decise = {A.chiave(r[0]) for r in db.execute(
                         "SELECT testo FROM studio_domande WHERE verifica = ?", (int(vid),))}
+                    tolte = {(r[0], A.chiave(r[1])) for r in db.execute(
+                        "SELECT argomento, attesa FROM studio_domande WHERE verifica = ? AND stato = 'tolta'",
+                        (int(vid),))}
+                    proposte, ferme = self._fermate_di(proposte, modo_, G)
+                    self._scrivi_fermate(db, vid, "domande", ferme, rifatti)
                     tot = db.execute("SELECT COUNT(*) FROM studio_domande WHERE verifica = ? AND "
                                      "stato != 'ombra'", (int(vid),)).fetchone()[0]
                     adesso = self.adesso().isoformat(timespec="seconds")
-                    stato = "ombra" if modo_ == G.OMBRA else "proposta"
                     for d in proposte:
-                        if A.chiave(d["testo"]) in decise or tot + n >= RS.DOMANDE_MAX:
+                        if (A.chiave(d["testo"]) in decise or tot + n >= RS.DOMANDE_MAX
+                                or (d["argomento"], A.chiave(d["attesa"])) in tolte):
                             continue
+                        stato = G.stato_iniziale(d["avvisi"], modo_)
                         db.execute(
                             "INSERT INTO studio_domande (verifica, persona, argomento, tipo, "
                             "testo, opzioni, attesa, chiave, pagine, origine, stato, avvisi, "
@@ -251,10 +263,12 @@ class Prove:
                              stato, _j(d["avvisi"]) if d["avvisi"] else None, adesso))
                         decise.add(A.chiave(d["testo"]))
                         n += 1
+                    self._scrivi_firme(db, vid, "domande", args, pagine, modo_, rifatti)
                 scritta, errori = G.firma_da_scrivere(v["domande_firma"], firma, esito)
                 db.execute("UPDATE studio_verifiche SET domande_firma = ?, domande_esito = ?, "
                            "domande_del = ? WHERE id = ?",
-                           (scritta, esito if esito != G.PROPOSTE or n else G.VUOTO,
+                           (scritta, self._esito_scritto(db, "studio_domande", v, "domande_esito",
+                                                         esito, n, rifatti, G),
                             self.adesso().isoformat(timespec="seconds"), int(vid)))
                 db.commit()
                 if errori >= G.ERRORI_MAX:
@@ -330,22 +344,33 @@ class Prove:
         out = []
         for r in self.dati.tutti("SELECT * FROM studio_domande WHERE verifica = ? AND stato = "
                                  "'attiva' ORDER BY id", (v["id"],)):
+            if self._voce_ferma(r):
+                continue
             d = self._riga_domanda(r)
             if d["argomento"] in nel_piano:
                 out.append({"fonte": "domanda", "id": d["id"], "argomento": d["argomento"],
                             "tipo": d["tipo"], "testo": d["testo"], "opzioni": d["opzioni"],
-                            "attesa": d["attesa"], "chiave": d["chiave"], "pagine": d["pagine"]})
+                            "attesa": d["attesa"], "chiave": d["chiave"], "pagine": d["pagine"],
+                            "generata": self._generata(r)})
         libera = self._libera_aperta(v["id"])
         for c in self.dati.tutti("SELECT * FROM studio_carte WHERE verifica = ? AND stato = "
                                  "'attiva' ORDER BY id", (v["id"],)):
-            if c["argomento"] not in nel_piano or (libera and c["origine"] == "mappa"):
+            if c["argomento"] not in nel_piano or (libera and c["origine"] == "mappa") or self._voce_ferma(c):
                 continue
             out.append({"fonte": "carta", "id": c["id"], "argomento": c["argomento"],
                         "tipo": RS.CARTA if c["chiusa"] else "aperta", "testo": c["domanda"],
                         "opzioni": [], "attesa": c["risposta"], "chiusa": c["chiusa"],
                         "chiave": [], "pagine": [int(x) for x in D.da_j(c["pagine"])
-                                                 if str(x).isdecimal()]})
+                                                 if str(x).isdecimal()],
+                        "generata": self._generata(c)})
         return out
+
+    @staticmethod
+    def minimo_prova(pool: list[dict]) -> int:
+        """Quante domande servono per una prova: `PROVA_MIN`, se la persona deve scriverle; dove la
+        generazione ne ha prodotte si usa ciò che c'è, anche una sola (decisione del 04/11, #384). La
+        stella di una prova ne vuole comunque tre, e non conta le voci generate (`premi.superata`)."""
+        return 1 if any(d.get("generata") for d in pool) else PROVA_MIN
 
     def proposte_per_prove(self, v: dict) -> int:
         """Quante domande e carte aspettano una conferma che la persona può dare adesso: quelle
@@ -419,7 +444,7 @@ class Prove:
                 "attesa": d["attesa"], "chiave": list(d.get("chiave") or ()),
                 "chiusa": d.get("chiusa"), "pagine": list(d.get("pagine") or ()),
                 "risposta": None, "esito": None, "fonte_esito": None, "proposta": None,
-                "tentativo": None}
+                "tentativo": None, "generata": bool(d.get("generata"))}
 
     def inizia_prova(self, chi, vid, modalita: str = SCRITTA) -> dict:
         """Apre una prova sulla verifica (solo la persona; una aperta per volta: se c'è già della
@@ -442,7 +467,7 @@ class Prove:
             n = (ORALE_DOMANDE if modalita == ORALE
                  else int(getattr(self.cfg, "studio_prova_domande", 10) or 10))
             pool = self._pool(v)
-            if len(pool) < PROVA_MIN:
+            if len(pool) < self.minimo_prova(pool):
                 raise ValueError(POCHE)
             adesso = self.adesso().replace(microsecond=0)
             seme = random.SystemRandom().randrange(1, 2 ** 31)
@@ -506,11 +531,12 @@ class Prove:
             chiuse = [self._riga_prova(r) for r in self.dati.tutti(
                 "SELECT * FROM studio_prove WHERE verifica = ? AND stato != 'aperta' ORDER BY id "
                 "DESC LIMIT 10", (v["id"],))]
+            pool = self._pool(v)
             return {"verifica": v["id"], "prova_vera": v.get("prova") or "scritta",
                     "finestra": bool(v.get("finestra")),
                     "aperta": self._vista(aperta, chi, v) if aperta else None,
                     "chiuse": [self._vista(p, chi, v) for p in chiuse],
-                    "domande_pronte": len(self._pool(v)), "minimo": PROVA_MIN,
+                    "domande_pronte": len(pool), "minimo": self.minimo_prova(pool),
                     "minuti": int(getattr(self.cfg, "studio_prova_minuti", 20) or 20),
                     "quante": int(getattr(self.cfg, "studio_prova_domande", 10) or 10)}
 
@@ -649,7 +675,8 @@ class Prove:
                 continue
             try:
                 x["tentativo"] = self.registra_tentativo(chi_reg, v["id"], x["argomento"], tipo,
-                                                         x["esito"], fonte)
+                                                         x["esito"], fonte,
+                                                         generata=bool(x.get("generata")))
             except Exception as e:  # noqa: BLE001 — un tentativo che non va non ferma la prova
                 self._registra(f"tentativo della prova {p['id']} non scritto: "
                                f"{type(e).__name__}")
@@ -930,9 +957,9 @@ class Prove:
                     ultime[m] = {"punteggio": rp.get("punteggio"), "fine": r["fine"],
                                  "da_rivedere": int((rp.get("totali") or {}).get(RS.DA_RIVEDERE,
                                                                                  0))}
-            pronte = len(self._pool(v))
+            pool = self._pool(v)
         except Exception:  # noqa: BLE001 — schema di prima
             return {"aperta": None, "ultime": {}, "pronte": 0, "minimo": PROVA_MIN}
         return {"aperta": ({"id": aperta["id"], "modalita": aperta["modalita"]}
                            if aperta else None),
-                "ultime": ultime, "pronte": pronte, "minimo": PROVA_MIN}
+                "ultime": ultime, "pronte": len(pool), "minimo": self.minimo_prova(pool)}

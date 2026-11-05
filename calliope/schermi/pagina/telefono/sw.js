@@ -12,7 +12,8 @@
 // v42 (04/11, #385): le mappe delle parti dello Studio, «Le parti» (dopo la preparazione, v41)
 // v43 (04/11, #386): il riassunto da ascoltare e «Leggi le pagine» (dopo le mappe delle parti, v42)
 // v44 (04/11, #387): «Ascolta il podcast» accanto al riassunto
-const CACHE = "calliope-telefono-pagina-v44";
+// v45 (05/11, #384): la scheda con ciò che è pronto, l'origine delle carte e «Togli questa carta»
+const CACHE = "calliope-telefono-pagina-v45";
 const PAGINA = [
   "/telefono/", "/telefono/telefono.js", "/telefono/voce.js", "/telefono/microfono.js",
   "/telefono/schermo-acceso.js",

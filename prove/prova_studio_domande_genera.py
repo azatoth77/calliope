@@ -133,8 +133,8 @@ verifica("un ordine in un'opzione: testo_ordine",
 verifica("scelta senza la giusta o con 2 opzioni, vero o falso malformato: scartati; un valore "
          "non stringa pure", "Chi finanziò Colombo?" not in per and "Colombo partì nel 1492."
          not in per and "Quante caravelle?" not in per and len(pr) == 11, sorted(per))
-verifica("un «falso» generato resta da controllare (il codice non vede che è falso)",
-         DG.DA_CONTROLLARE in per["Colombo partì da Lisbona."]["avvisi"]
+verifica("un «falso» generato ha la frase di cui parla, per il giudizio; lui non la dà per pulita da solo",
+         per["Colombo partì da Lisbona."]["fonte"] is not None and "Colombo" in per["Colombo partì da Lisbona."]["fonte"]
          and per[V1["domanda"]]["avvisi"] == [])
 verifica("un numero illeggibile diventa una domanda aperta",
          per["Quante navi aveva Colombo?"]["tipo"] == "aperta")
@@ -185,16 +185,21 @@ st, vid, ids, lett = prepara({"studio_domande_genera": "attiva"}, nome="attiva")
 PA.rispondi(DOMANDE)
 lett.giro()
 dd = st.domande(LEO, vid)["domande"]
-verifica("attiva: proposte, con gli avvisi", len(dd) == 11
-         and {d["stato"] for d in dd} == {"proposta"} and all(d["origine"] == "modello"
-                                                              for d in dd))
-verifica("nessuna proposta entra in una prova senza la persona", st._pool(st.verifica(LEO, vid))
-         == [])
-r = st.conferma_domande(LEO, vid)
+puliti_ = [d for d in dd if not d["avvisi"]]
+n_fermate = st.fermate_di(vid)
+verifica("attiva (#384): le pulite subito usabili, il dubbio proposto, ciò che è fermato per sicurezza non si scrive",
+         len(dd) + n_fermate == 11 and n_fermate >= 2
+         and all(d["origine"] == "modello" for d in dd)
+         and {d["stato"] for d in puliti_} == {"attiva"}
+         and {d["stato"] for d in dd if d["avvisi"]} == {"proposta"}, [d["stato"] for d in dd])
 pool = st._pool(st.verifica(LEO, vid))
-verifica("conferma: le pulite attive (ed entrano nelle prove), le altre restano proposte",
-         r["confermate"] == 5 and r["da_decidere"] == 6 and len(pool) == 5
-         and not any("professoressa" in x["testo"] for x in pool), r)
+verifica("nelle prove le sole pulite, mai quelle con un avviso",
+         len(pool) == len(puliti_) >= 1 and all(x["generata"] for x in pool)
+         and not any("professoressa" in x["testo"] for x in pool), len(pool))
+r = st.conferma_domande(LEO, vid)
+verifica("«Conferma» non serve più: non cambia niente", r["confermate"] == 0
+         and r["da_decidere"] == len(dd) - len(puliti_)
+         and len(st._pool(st.verifica(LEO, vid))) == len(puliti_), r)
 st.close()
 
 print("— il giro: spenta")
@@ -263,10 +268,11 @@ verifica("una risposta numerica calcolata, che non sta nelle pagine: «calcolata
          "una che sta nelle pagine («1492») no",
          consecutivi["calcolata"] and DG.DA_CONTROLLARE in consecutivi["avvisi"]
          and not any(d.get("calcolata") for d in r5["storia"]["domande"]), consecutivi)
-verifica("le domande vere del 31/10: nessuna risposta attesa sbagliata, fondate ≥ 80 % sulle non "
+# Dal 04/11 (#384) la frase d'appoggio è più stretta: le fondate al 70 %, il criterio del banco
+verifica("le domande vere del 31/10: nessuna risposta attesa sbagliata, fondate ≥ 70 % sulle non "
          "calcolate, le calcolate tutte da controllare, scelte ≥ 90 %",
          all(x["auto_sbagliate"] == 0 for x in r5.values())
-         and all(x["fondate"] * 100 >= 80 * (x["n"] - x["calcolate"]) for x in r5.values())
+         and all(x["fondate"] * 100 >= 70 * (x["n"] - x["calcolate"]) for x in r5.values())
          and all(x["calcolate_da_controllare"] == x["calcolate"] for x in r5.values())
          and r5["matematica"]["calcolate"] >= 1
          and all(x["scelte_nelle_pagine"] * 100 >= 90 * x["scelte"] for x in r5.values())

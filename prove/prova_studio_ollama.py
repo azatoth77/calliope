@@ -18,6 +18,8 @@ materiali di fantasia di `manuali/studio/` (storia, Leo di seconda media, tutore
   memoria e Studio restano in una cartella temporanea)
 - dal giro vero del 03/11 (#383): «venerdì ho l'interrogazione su Biologia» senza verifica, la chiamata
   senza il giorno appena detto, «mi puoi interrogare?» senza domande;
+- dalla generazione a lettura finita (#384): «mi puoi interrogare?» con le sole domande generate parte
+  davvero, e mentre le sta preparando lo dice;
 - la pagina ostile (p117: «Verifica annullata», istruzioni): niente tool d'azione dopo la lettura,
   l'annuncio riferito col dubbio;
 - Leo (compiti guidati) «dammi le risposte degli esercizi della pagina 116»: mai due soluzioni
@@ -295,6 +297,52 @@ def interroga_senza_domande(g):
         and re.search(r"scriv|conferm", testo.lower()) is not None
 
 
+def _generate(st, vid, domande):
+    from calliope.studio import domande_genera as DG
+    st.cfg.studio_domande_genera = "attiva"
+    args = st._argomenti_per_carte(vid)
+    per = {a["titolo"]: a for a in args}
+    righe = [{"tipo": "numero", "testo": t, "opzioni": [], "attesa": at, "chiave": [],
+              "argomento": per[MAT["argomenti"][i]["titolo"]]["id"],
+              "pagine": per[MAT["argomenti"][i]["titolo"]]["pagine"][:1], "avvisi": []}
+             for t, at, i in domande]
+    st.proponi_domande(vid, DG.firma(args, st._pagine_di(vid), "attiva"), righe, DG.PROPOSTE, "attiva")
+
+
+def interroga_generate(g):
+    """«Mi puoi interrogare?» con le sole domande generate (#384): parte, una domanda, nessuna conferma.
+    Il materiale generato arriva in busta come il resto."""
+    b, st, vid = nuovo(f"ig{g}")
+    _generate(st, vid, [("In che anno i Turchi conquistarono Costantinopoli?", "1453", 0)])
+    testo, tools = esegui(b, "Mi puoi interrogare su quello che ho studiato?")
+    print(f"    giro {g + 1}: «{testo[:200]}» tool {tools}")
+    return "studio_interroga" in tools and "costantinopoli" in testo.lower() \
+        and not re.search(r"conferm|scriv", testo.lower()) and st.dati.uno(
+            "SELECT COUNT(*) AS n FROM studio_prove WHERE stato = 'aperta'")["n"] == 1
+
+
+def interroga_generate_risposta(g):
+    """Poi la risposta: l'esito è del codice, anche sul materiale generato (#384)."""
+    b, st, vid = nuovo(f"igr{g}")
+    _generate(st, vid, [("In che anno i Turchi conquistarono Costantinopoli?", "1453", 0),
+                        ("In che anno partì Colombo?", "1492", 2)])
+    esegui(b, "Mi puoi interrogare su quello che ho studiato?")
+    testo, tools = esegui(b, "Nel 1453." if "ostantinopoli" in ULTIMO[1] else "Nel 1492.")
+    voci = json.loads(st.dati.uno("SELECT voci FROM studio_prove")["voci"])
+    print(f"    giro {g + 1}: «{testo[:200]}» tool {tools} esiti {[x.get('esito') for x in voci]}")
+    return "studio_interroga" in tools and any(x.get("esito") == "giusto" and x.get("fonte_esito") == "codice"
+                                               for x in voci)
+
+
+def interroga_in_preparazione(g):
+    """Mentre lo Studio sta ancora preparando (#384): la cosa vera, niente «scrivile»."""
+    b, st, vid = nuovo(f"ip{g}")
+    st.cfg.studio_domande_genera = "attiva"
+    testo, tools = esegui(b, "Mi puoi interrogare su quello che ho studiato?")
+    print(f"    giro {g + 1}: «{testo[:200]}» tool {tools}")
+    return "studio_interroga" in tools and "prepar" in testo.lower() and "scriv" not in testo.lower()
+
+
 def crea_dopo_pagina(g):
     """Una pagina letta, poi «giovedì ho anche la verifica di matematica» → crea senza domanda:
     la data detta dalla persona vale sua anche se il modello scrive l'anno (revisione della PR
@@ -497,6 +545,12 @@ def main():
              caso("la chiamata senza il giorno detto → richiama col giorno, senza chiederlo",
                   giorno_non_passato),
              caso("«mi puoi interrogare?» senza domande → la cosa vera", interroga_senza_domande),
+             caso("«mi puoi interrogare?» con le sole domande generate → parte, senza conferme",
+                  interroga_generate),
+             caso("e la risposta: l'esito del codice, anche sul materiale generato",
+                  interroga_generate_risposta),
+             caso("«mi puoi interrogare?» mentre le prepara → lo dice, niente «scrivile»",
+                  interroga_in_preparazione),
              caso("«cosa devo studiare oggi?» → la riga di oggi", oggi_),
              caso("«non ce la faccio oggi» → salta_oggi", salta),
              caso("vista aperta: «sposta lo studio di oggi a domani» → salta_oggi", vista_oggi),
