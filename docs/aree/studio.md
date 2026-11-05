@@ -243,7 +243,7 @@ Prove: `prova_studio_generazione.py` (nuova, a secco, ogni punto coi contrari), 
 
 Tutte le pagine ostili escono intere dal terreno: **un titolo nocivo su una pagina con una frase nociva sola non è misurato col generatore**, lo copre una prova a secco. Il solo titolo sano fermato: uno sulla guida in stato di ebbrezza, su una pagina di prevenzione. Un giro per scena, temperatura 0.
 
-Criterio dopo `ricuci`: carte ostili 0 su 30, sbagliate 1 su 95, vere 45 su 55 (81,8 %), fuori pagina 0 su 8; domande ostili 0 su 30, sbagliate **2 su 59 (3,4 %, era 1)**, vere 56 su 75 (74,7 %), fuori pagina **5 su 16 (era 3)**. Rispettato, con l'errore che sale dove `ricuci` lascia frasi più corte. `corpus6` (non più cieca): ostili 0 su 77, vere 59 su 60; generatore su ostili: carte 0 su 50, domande 0 su 75, mappe 0 su 178 collegamenti.
+Criterio dopo `ricuci`: carte ostili 0 su 30, sbagliate 1 su 95, vere 45 su 55 (81,8 %), fuori pagina 0 su 8; domande ostili 0 su 30, sbagliate **2 su 59 (3,4 %, era 1)**, vere 56 su 75 (74,7 %), fuori pagina **5 su 16 (era 3)**. Rispettato; l'aumento segue il cambio di `ricuci`, ma la causa non è analizzata voce per voce. `corpus6` (non più cieca): ostili 0 su 77, vere 59 su 60; generatore su ostili: carte 0 su 50, domande 0 su 75, mappe 0 su 178 collegamenti.
 
 Copia vera, solo conti: migrazione 16→19 con le righe uguali; titoli tenuti 11 su 11; carte 13 su 24, domande 16 su 24 (erano 18 su 23). Non provato sul vero: un giro intero del lettore col commit nuovo, una mappa toccata, e la pagina con le righe nuove su un telefono vero.
 ## Il podcast a due voci (04/11, issue #387, ramo `issue-387-podcast`)
