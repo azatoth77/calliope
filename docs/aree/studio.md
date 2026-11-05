@@ -161,7 +161,8 @@ modello non ne scrive. Ogni battuta con la fonte può portarsi due campi, `prima
 valori da due elenchi chiusi (`RACCORDI_PRIMA`, `RACCORDI_DOPO`: «E poi?», «Perché?», «Capito.», «Interessante.»…), enum nello
 schema e confronto esatto nel codice (`normalizza`, di nuovo in `con_battute`). Niente valori, niente nomi, nessun campo
 libero: un cenno scritto come testo cade per lunghezza, «Quanta acqua porta?» per la forma, e un cenno cade con la sua
-battuta. Le domande sulla materia non ci sono, perché conterrebbero un nome. Il modello non ne metteva (0 su 28 al primo
+battuta. Le domande sulla materia non ci sono, perché conterrebbero un nome. *[storico fino al 05/11 notte: anche «Perché?», «E quindi?»,
+«Cioè?», «Come mai?», «In che senso?», «E dopo?», che fra due frasi affermano un nesso che la fonte non ha detto. Restano «E poi?» e «E ancora?»]* Il modello non ne metteva (0 su 28 al primo
 giro): sotto una battuta su tre il codice ne aggiunge. **Niente cenni che confermano** (*[storico fino al 05/11: c'erano «Esatto.»,
 «Giusto.», «Certo.»]*): dopo una frase che può essere sbagliata danno un'autorità che lei non ha, il giro della revisione ha
 sentito «gela intorno a 2 gradi» seguita da «Esatto!», e toglierli costa poco. Le voci le
@@ -202,8 +203,8 @@ paga lo swap (sotto). Un podcast per volta, 60 minuti per finestra.
 tetto. MOSS via con `rm -f`, vLLM riparte, e i pezzi fatti restano (`<firma>-stato.json`, solo numeri; un pezzo generato e non
 ancora controllato si controlla senza rifarlo).
 
-**Il controllo** (`confronta`): ogni pezzo ritrascritto dal Whisper dei turni, senza prompt, e confrontato col copione. Una
-battuta è a posto con il 70 % delle parole piene, tutti i numeri e le parole che cambiano il senso (`non`, `mai`, `senza`,
+**Il controllo** (`confronta`, *[storico per le soglie: vedi la seconda revisione, sotto]*): ogni pezzo ritrascritto dal Whisper dei turni, senza prompt, e confrontato col copione. Una
+battuta è a posto con il 60 % delle parole piene, tutti i numeri e le parole che cambiano il senso (`non`, `mai`, `senza`,
 `meno`, `più`); cenni e titoli non contano. Ciò che non torna si rigenera con un altro seme (`studio_podcast_rigenera`, 2);
 poi quel pezzo lo dice Calliope con Piper, dicendolo («Questo pezzo a due voci non è venuto bene: te lo dico io.»). Oltre
 metà dei pezzi non c'è podcast: resta il riassunto, e lo schermo lo dice. Il testo di Whisper non esce da `confronta`.
@@ -261,7 +262,7 @@ Ha detto «da correggere» su quattordici punti, che qui sopra restano come eran
 - **I titoli** arrivavano alla voce senza giudice né guardiano, **anche nel riassunto** (`ascolta.componi`): stesso varco, stessa correzione. Ora in
   `_copione_controllato`: il codice, un giudizio suo (`corpo_giudizio_titolo`: col giudizio delle frasi il modello li bocciava tutti, 4 su 4) e il
   guardiano. Un titolo fermato lascia solo «Argomento 1.». `riassunto.VERSIONE` passa a 3: i copioni si rifanno.
-- **Il confronto**: la radice in comune non basta più (faceva passare solfato per solfito). `_simile`: stessa iniziale e stessa fine, una lettera, due da 9
+- *[storico: tolto dalla seconda revisione, sotto]* **Il confronto**: la radice in comune non basta più (faceva passare solfato per solfito). `_simile`: stessa iniziale e stessa fine, una lettera, due da 9
   in su. `_scambio` segnala le coppie che si somigliano e vogliono dire altro (insolubile, ipertonica, nitrito), anche se il resto della frase torna.
   Nomi (fra le parole sentite, con `_nome_simile` per le storpiature), ordinali, formule devono esserci tutti. Inventate al più il 10 % (*[storico: 30 %]*).
 - **Gli hash**: l'elenco copre l'ambiente intero, l'immagine e rifiuta i file in più; `pota` lascia di MOSS-TTSD solo `generation_utils.py` e la licenza,
@@ -290,12 +291,59 @@ Piper 18 su 78 (23 %), 0 numeri persi su 38 (*[la prima versione, coi nomi cerca
 un minuto di generazione; dopo tre è a una voce. Un nome che Whisper non conosce («Calicut» sentito «Caligatto») resta segnato: è il costo scelto, da riguardare col materiale vero. Piper non passa da
 questo controllo in esercizio: la cifra dice quanto Whisper capisce peggio quella voce, non che il pezzo sia sbagliato.
 
-**Non annotato come difetto, ma resta.** Whisper che risponde sempre vuoto fa una sessione all'ora per pezzo, 3 volte. Il pezzo a una voce non è ritrascritto: dice `detto`, che `fedele` ha controllato.
+Il pezzo a una voce non è ritrascritto: dice `detto`, che `fedele` ha controllato.
+
+### La seconda revisione della PR #393 (05/11 notte)
+
+**Che cosa copre il controllo dell'audio.** Una domanda sola: **MOSS ha detto il copione, o ha saltato, ripetuto, storpiato?** Il significato è già deciso sul testo, prima dell'audio (citazione, codice, giudice, guardiano); una voce non scambia «mitosi» con «meiosi» per sbaglio. Le liste di scambi che c'erano (`_scambio`, prefissi opposti, composti chimici) e i controlli di nomi, ordinali e formule sono tolti: rispondevano a un'altra domanda.
+
+| Coperto | Come |
+|---|---|
+| Salti, anche la coda tronca | parole piene ritrovate per battuta (`SOGLIA_FRASE`, 60 %) |
+| Ripetizioni | parole in più nel pezzo, al più il 10 % |
+| Numeri sbagliati | i valori del `testo` scritto, col segno, **in ordine, nel tratto di audio della sua battuta** (*[storico: su tutto il pezzo, e «3 lune… 12 affluenti» scambiati passava]*) |
+| Una parola che ribalta la frase, saltata o storpiata | `non`, `mai`, `senza`, `meno`, `più`: «a meno 120» → «almeno 120», «molto meno calda» → «molto meravigliosa», visti su MOSS |
+
+**Non coperto, di proposito**, i casi del revisore: isotonica→ipotonica, Austria→Australia, aumenta→diminuisce, mitosi→meiosi, solfato→solfito, insolubile→solubile, Colombo→Magellano, terza→seconda. In tanti giri veri MOSS non ne ha fatto nessuno: sono prove a tavolino, se ne trovano all'infinito e una lista non converge. Passano anche le storpiature di una parola comune in una frase che torna («la pedese di Santarello» per «la pace»): il costo della soglia.
+
+**Gli errori veri di MOSS**, contati su 23 tentativi di storia e chimica (`coppie.json`, il testo di fantasia con ciò che Whisper ha sentito) e sugli audio di prima:
+
+| Errore | Quante volte |
+|---|---|
+| Coda tronca: si ferma dopo 35–50 parole su 100–150 | 3 tentativi su 21, tutti chimica; al tentativo dopo torna |
+| Numero lungo in lettere detto male | 1318 → «1818», «1300 di Ciotolapegie»; 1302 → «1902», tutti nello stesso pezzo; 120 con «a meno» → «almeno» |
+| Storpiatura di una parola | «lo ione» → «l'ottione» (ricorrente), «pace» → «pedese», «il collega Ettore» → «il colleghetto» |
+| Ripetizione | una: «CIO3. CIO3.» |
+| Scambi di significato come quelli del revisore | nessuno |
+
+**I nomi: confermato, e peggio.** Sugli stessi 21 tentativi veri, storia e chimica di fantasia (`prove/manuali/studio/podcast/storia_nomi.json`, `chimica_nomi.json`), pieni di nomi, ioni e formule: col criterio di prima **21 pezzi su 21 buttati**; col nuovo **6 su 21**, e sono i 6 con un difetto vero (coda tronca o numero sbagliato). Il revisore aveva misurato 5 su 5 con Piper; MOSS dice bene, è Whisper che non conosce i nomi e scrive le formule a modo suo («H2O», «OH-», «SO42-», «B12»).
+
+**Il criterio per i nomi e le formule** (`fragili`): la fonte è il copione, non l'orecchio di Whisper. Uno che nel suo posto è stato sentito in un altro modo non conta; uno **saltato** sì, perché lì non si è sentito niente. Il prompt di Whisper non si tocca. Il segno di uno ione e il meno di un'operazione non si possono verificare da Whisper: restano affidati a `detto` e `fedele`.
+
+**Il trattino a regola rovesciata** (`_segni`). Si dice o si toglie solo in forme chiuse: ione («Cl-» come «Na+»), operazione («d=a-b», «5-3=2»: «meno»), nome col numero («carbonio-14», «B-12»), numero negativo, intervallo crescente («1519-1521»), parola composta di due parole intere («anni-luce»). Ogni altro resta e `fedele` scarta la battuta («2-metilpropano», «5-3» senza uguale).
+
+**Gli altri punti**: Docker giù per un momento non è un container sparito, solo «no such» lo è; col messaggio vero in minuscolo. **Sul banco di stanotte un mio errore ha lasciato vLLM fermo circa 5 minuti, ripartenza compresa:** cercavo «No such» con la maiuscola, `inspect` scrive «no such object», e la sessione si credeva MOSS ancora vivo; l'ho ripartito a mano, e ora solo un `inspect` riuscito dice che MOSS c'è: un messaggio mai visto non può più lasciare vLLM fermo. Il disco pieno in `prenota` non lascia acceso niente. **Whisper si guarda prima del fermo** (`_whisper_vivo`, una frase di Piper): Whisper giù non ferma più vLLM, 8 giri 0 `docker stop`; e se sente la frase di prova ma non un pezzo, è quel pezzo a non valere.
+
+**Le misure di questa revisione, separate dalle altre** (DGX, MOSS vero, `--fasi diretto`: le frasi delle pagine tali e quali, salvo dove indicato):
+
+| | Storia | Chimica | Chimica, codice finale |
+|---|---|---|---|
+| Frasi, pezzi | 27, 4 | 20, 2 | 20, 2 |
+| Rigenerati, a una voce | 2, 1 | 4, 2 (niente podcast, col criterio di mezzo) | **0, 0** |
+| vLLM fermo | 709 s per 180 s | 834 s | 576 s per 127 s; ripartenza 245 s |
+| Fattore, memoria | 1,28–1,33; 23,6 GB, RSS 5,87 GB | | 1,28–1,29; 23,7 GB, RSS 5,86 GB |
+| Parole piene ritrovate | | | 96,6 % |
+
+Confronto di vLLM dopo l'ultima: stesso `Id`, `Env`, `Cmd`, `RestartPolicy`, `PortBindings`, `is_paused` falso. Lo swap è a 9,5 GB su 16,4.
+
+**Il copione col modello vero su questi materiali** è un'altra cosa, e **il podcast può mancare anche lì**: storia (133 s di pagine) esce **«scarso»** (4 frasi, copertura 0,285, 5 no del giudice), chimica «pronto» con 8 frasi. Sono materiali corti e densi; da guardare con le pagine vere, prima di accendere.
+
+**Da guardare.** La pronuncia degli anni lunghi: un punto dove staccare le parole («milletrecento diciotto») potrebbe evitare le rigenerazioni, non provato. «lo ione» esce quasi sempre «l'ottione»: un difetto vero che il controllo lascia passare.
 
 Prove: `prova_studio_podcast.py` (motore, Docker, Whisper e modello finti, compreso il riavvio di vLLM in ogni guasto),
 `prova_studio_ascolta_pagina.py` (il tasto nella pagina vera), `prove/manuali/banco_podcast.py`, `banco_studio.py --fasi podcast`.
 **Non provato:** la Calliope installata (la versione sulla DGX è ancora senza questo codice), un agente vero chiesto durante il
-riavvio, la lettura a voce vera e dal satellite, lo scaricamento dei pesi di `installa` (provati codice, ambiente, un file con `hf`), le pagine vere, l'ascolto a orecchio.
+riavvio, la lettura a voce vera e dal satellite, lo scaricamento dei pesi di `installa` (provati codice, ambiente, un file con `hf`), le pagine vere, l'ascolto a orecchio, il segno degli ioni su MOSS verificato da altro che Whisper.
 
 ## Il riassunto da ascoltare (04/11, issue #386, ramo `issue-386-riassunto`)
 

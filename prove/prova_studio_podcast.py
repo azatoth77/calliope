@@ -163,6 +163,8 @@ verifica("anche dopo il giudizio: «E poi?» se ne va con la sua battuta", "E po
 
 # ═══════════════════════════ 2. voci e numeri ═══════════════════════════
 print("— le voci")
+for x in ("Perché?", "Come mai?", "E quindi?", "Cioè?", "In che senso?", "E dopo?"):
+    verifica(f"seconda revisione, punto 6: «{x}» afferma un nesso: non c'è più", x not in P.RACCORDI_PRIMA)
 frasi = [{"testo": f"Frase numero {i}.", "fonti": ["P1.1"], "voce": "A"} for i in range(9)]
 rr = {"sezioni": [{"argomento": 11, "proposte": 9, "frasi": frasi}], "conti": {}}
 P.con_battute(rr)
@@ -206,7 +208,18 @@ for t, atteso in (("L'azoto bolle a -196 gradi.", "bolle a meno centonovantasei 
                   ("Scende a -3,5 gradi.", "meno tre virgola cinque"), ("La fossa sta a -400 metri.", "meno quattrocento metri"),
                   ("La carica vale +1 in tutto.", "più uno in")):
     verifica(f"«{t}» → «{atteso}»", atteso in P.detto(t), P.detto(t))
-for t, atteso in (("Dal 1519-1521 viaggiò.", "millecinquecentodiciannove millecinquecentoventuno"),
+print("— il trattino a regola rovesciata (seconda revisione, punto 1)")
+for t, atteso in (("Il cloro forma lo ione Cl- in acqua.", "Cl meno"), ("Lo ione OH- è una base.", "o acca meno"),
+                  ("Lo ione NO3- è comune.", "enne o tre meno"), ("Lo ione SO4 2- è comune.", "esse o quattro due meno"),
+                  ("La differenza è d=a-b.", "d uguale a meno b"), ("Vale v = s - t ovunque.", "v uguale s meno t"),
+                  ("Si ha 5-3=2.", "cinque meno tre uguale due"), ("Il carbonio-14 decade.", "carbonio quattordici"),
+                  ("L'uranio-235 è fissile.", "uranio duecentotrentacinque"), ("La vitamina B-12 serve.", "B dodici"),
+                  ("Lo ione Na+ è positivo.", "Na più")):
+    verifica(f"«{t}» → «{atteso}»", atteso in P.detto(t), P.detto(t))
+    verifica(f"…e si può dire: «{t}»", P.fedele(t), f"{P.detto(t)} {P.valori_di(t)} {P.valori_di(P.detto(t))}")
+for t in ("Il 2-metilpropano è un gas.", "Il modello 3-D cade.", "Pre- e post-bellico.", "Il rapporto 5-3 cala."):
+    verifica(f"contrario: un trattino che non si sa dire scarta la battuta: «{t}»", not P.fedele(t), P.detto(t))
+for t, atteso in (("Dal 1519-1521 viaggiò.", "millecinquecentodiciannove a millecinquecentoventuno"),
                   ("Sono anni-luce.", "anni luce"), ("Vale 1 metro.", "un metro")):
     verifica(f"contrario: «{t}» non ha un segno", atteso in P.detto(t) and "meno" not in P.detto(t), P.detto(t))
 for t in ("Bolle a -196 gradi.", "Vale -1 in unità.", "Il 99,8 % a 5.800 kelvin.", "Sono 4,6 miliardi di anni.", "Nel 1492 con 3 navi.",
@@ -311,36 +324,61 @@ verifica("contrario: testo inventato", not e["ok"] and e["inventate"] > 5, str(e
 cenni = [{"voce": "A", "testo": "Il fiume nasce sul monte.", "detto": "Il fiume nasce sul monte.", "tipo": "frase"},
          {"voce": "B", "testo": "Esatto.", "detto": "Esatto.", "tipo": "cenno"}]
 verifica("un cenno mangiato non conta", PA.confronta(cenni, "Il fiume nasce sul monte.")["ok"])
-print("— le parole che somigliano (revisione, punto 4)")
-for a, b in (("insolubile", "solubile"), ("irreversibile", "reversibile"), ("solfato", "solfito"), ("nitrato", "nitrito"),
-             ("ipotonica", "ipertonica"), ("endotermica", "esotermica"), ("colombo", "magellano"), ("terza", "seconda"),
-             ("carbonato", "carbonio"), ("cloruro", "clorato"), ("solfato", "solfuro")):
-    verifica(f"contrario: «{a}» non è «{b}»", not PA._simile(a, b) and not PA._simile(b, a))
-for a, b in (("kuiper", "kaiper"), ("cromosfera", "cronosfera"), ("tordesillas", "tordesigias"), ("nettuno", "netuno"),
-             ("pizarro", "pizzarro"), ("aztechi", "astechi"), ("spedizione", "spedizioni")):
-    verifica(f"una storpiatura di Whisper: «{a}» e «{b}»", PA._simile(a, b))
-for a, b in (("insolubile", "solubile"), ("solfato", "solfito"), ("ipotonica", "ipertonica"), ("irreversibile", "reversibile")):
-    verifica(f"«{a}» → «{b}» è uno scambio", PA._scambio(a, b) and PA._scambio(b, a))
-LUNGA = ("Il solfato di orsio resta insolubile in acqua anche quando la temperatura sale molto durante tutta la lunga stagione calda "
-         "del pianeta.")
-for nome_, sbagliata in (("solfato → solfito", LUNGA.replace("solfato", "solfito")), ("insolubile → solubile", LUNGA.replace("insolubile", "solubile"))):
-    e = PA.confronta(batt(LUNGA), sbagliata)
-    verifica(f"contrario: {nome_} in una frase lunga non passa", not e["ok"] and "scambio" in e["frasi"][0]["motivi"], str(e))
-e = PA.confronta(batt("Cristoforo Colombo partì con tre navi dalla città di Palos durante una lunga e calda estate di quei tempi."),
-                 "Ferdinando Magellano partì con tre navi dalla città di Palos durante una lunga e calda estate di quei tempi.")
-verifica("contrario: un nome cambiato in una frase lunga", not e["ok"] and "nome" in e["frasi"][0]["motivi"], str(e))
-verifica("un nome straniero storpiato da Whisper non fa rifare il pezzo", PA._nome_simile("atahualpa", "atauallpa")
-         and not PA._nome_simile("colombo", "magellano") and not PA._nome_simile("napoleone", "napoli"))
-verifica("«il Quattrocento» non è un nome", PA.nomi_di("Nel Quattrocento il principe Enrico partì.") == {"enrico"},
-         str(PA.nomi_di("Nel Quattrocento il principe Enrico partì.")))
-e = PA.confronta(batt("La terza spedizione partì dal porto vecchio con molte persone durante una lunga estate di quei tempi."),
-                 "La seconda spedizione partì dal porto vecchio con molte persone durante una lunga estate di quei tempi.")
-verifica("contrario: un ordinale cambiato", not e["ok"] and "ordinale" in e["frasi"][0]["motivi"], str(e))
+print("— MOSS ha detto il copione? (seconda revisione: la domanda del controllo)")
+for a_, b_ in (("kuiper", "kaiper"), ("cromosfera", "cronosfera"), ("tordesillas", "tordesigias"), ("nettuno", "netuno"),
+               ("pizarro", "pizzarro"), ("aztechi", "astechi"), ("spedizione", "spedizioni")):
+    verifica(f"la stessa parola sentita male: «{a_}» e «{b_}»", PA._simile(a_, b_))
+verifica("le liste degli scambi non ci sono più", not hasattr(PA, "_scambio") and not hasattr(PA, "_OPPOSTI") and not hasattr(PA, "_CHIMICA"))
+print("— i numeri frase per frase, in ordine (seconda revisione, punto 3)")
+DUE = batt("Il pianeta ha tre lune piccole e grigie.", "Il fiume ha dodici affluenti lunghi e stretti.")
+verifica("uguale", PA.confronta(DUE, "Il pianeta ha 3 lune piccole e grigie. Il fiume ha 12 affluenti lunghi e stretti.")["ok"])
+e = PA.confronta(DUE, "Il pianeta ha 12 lune piccole e grigie. Il fiume ha 3 affluenti lunghi e stretti.")
+verifica("contrario: 3 lune e 12 affluenti scambiati non passano", not e["ok"] and e["numeri_persi"] == 2, str(e))
+TIT = [{"voce": "A", "testo": "Argomento 3.", "detto": "Argomento tre.", "tipo": "titolo"}] + batt("Il pianeta ha tre lune piccole e grigie.")
+e = PA.confronta(TIT, "Argomento 3. Il pianeta ha lune piccole e grigie.")
+verifica("contrario: un «3» perso non passa se c'è «Argomento 3.»", not e["ok"] and "numero" in e["frasi"][0]["motivi"], str(e))
+e = PA.confronta(batt("Dal 1519 al 1522 fece il primo giro del mondo intero."), "Dal 1522 al 1519 fece il primo giro del mondo intero.")
+verifica("contrario: due numeri invertiti nella stessa frase", not e["ok"], str(e))
+print("— i nomi (seconda revisione: la fonte è il copione, non l'orecchio di Whisper)")
+NOMI_F = batt("Nel 1142 Ermengarda di Torvisca sposò Aldobrando Quirinelli nella fortezza di Montecalvo.")
+e = PA.confronta(NOMI_F, "Nel 1142 Armen Garda di Tor Visca sposò Aldo Brando Quirino nella fortezza di Monte Calvo.")
+verifica("nomi storpiati da Whisper, tutto il resto torna: il pezzo resta", e["ok"], str(e))
+e = PA.confronta(NOMI_F, "Nel 1142 sposò nella fortezza.")
+verifica("contrario: i nomi saltati da MOSS non passano", not e["ok"], str(e))
+e = PA.confronta(NOMI_F, "Nel 1143 Armen Garda di Tor Visca sposò Aldo Brando Quirino nella fortezza di Monte Calvo.")
+verifica("contrario: un numero sbagliato no, anche coi nomi storpiati", not e["ok"] and "numero" in e["frasi"][0]["motivi"], str(e))
+verifica("una frase saltata, ripetuta", not PA.confronta(batt("Il fiume nasce sul monte e scende verso il mare lontano."), "")["ok"])
 base_ = " ".join(f"parola{chr(97 + i % 26)}{chr(97 + i // 26)}" for i in range(96))
 e = PA.confronta(batt(base_ + "."), base_ + " " + " ".join(f"inventata{chr(97 + i)}" for i in range(23)) + ".")
-verifica("contrario: 23 parole inventate su 119", not e["ok"] and e["troppe"], str({k: e[k] for k in ("inventate", "sentite", "troppe")}))
+verifica("contrario: 23 parole in più su 119 (una ripetizione)", not e["ok"] and e["troppe"], str({k: e[k] for k in ("inventate", "sentite", "troppe")}))
 e = PA.confronta(batt("Il fiume nasce sul monte."), "Il fiume nasce proprio sul monte.")
 verifica("una parola in più non fa danni", e["ok"], str(e))
+print("— le formule: MOSS le dice, Whisper le scrive (chimica del 05/11, trascrizioni vere con nomi di fantasia)")
+for tes, sentito in (("Il cloruro di sodio ha formula NaCl.", "Il cloruro di sodio a formula NaCl."),
+                     ("L'acqua ha formula H2O e bolle a 100 gradi.", "L'acqua a formula H2O e bolle a 100 gradi."),
+                     ("Una base libera invece ioni OH- nell'acqua.", "Una base libera invece ioni OH- nell'acqua."),
+                     ("Lo ione solfato si scrive SO4 2- e lo ione nitrato NO3-.", "Lo ione solfato si scrive SO42- e lo ione nitrato N O3-."),
+                     ("Una soluzione neutra ha pH 7.", "Una soluzione neutra a P-acid 7."),
+                     ("La differenza è data da d=a-b.", "La differenza è data da uguale, A-B."),
+                     ("Falaschi scoprì la vitamina B-12 nelle alghe.", "Falaschi scoprì la vitamina B12 nelle alghe."),
+                     ("Il carbonio-14 decade in 5.730 anni.", "Il carbonio 14 decade in 5730 anni.")):
+    e = PA.confronta(batt(tes), sentito)
+    verifica(f"«{tes}» sentita «{sentito}»", e["ok"], str(e))
+e = PA.confronta(batt("L'acqua ha formula H2O e bolle a 100 gradi."), "L'acqua ha formula H2O e bolle a 200 gradi.")
+verifica("contrario: un numero vero sbagliato accanto a una formula", not e["ok"], str(e))
+e = PA.confronta(batt("Il cloruro di sodio ha formula NaCl e si scioglie bene nell'acqua fredda."), "Il cloruro di sodio ha.")
+verifica("contrario: saltato non è sentito male", not e["ok"], str(e))
+print("— non coperto, di proposito: il significato è già deciso sul testo")
+LUNGA = "Il solfato di orsio resta insolubile in acqua anche quando la temperatura sale molto durante tutta la lunga stagione calda."
+verifica("non è un controllo del senso: solfato → solfito in una frase lunga passa, ed è scritto nel documento d'area",
+         PA.confronta(batt(LUNGA), LUNGA.replace("solfato", "solfito"))["ok"])
+e = PA.confronta(batt("Il fiume non nasce sul monte alto e freddo del nord."), "Il fiume nasce sul monte alto e freddo del nord.")
+verifica("contrario: una parola che ribalta la frase, saltata dalla voce", not e["ok"] and "negazione" in e["frasi"][0]["motivi"], str(e))
+e = PA.confronta(batt("La grotta si apre a -120 metri sul fianco."), "La grotta si apre almeno 120 metri sul fianco.")
+verifica("contrario: «almeno 120» per «a meno 120» (visto su MOSS)", not e["ok"], str(e))
+for tr in ("L'azoto bolle a -196°C.", "L'azoto bolle a -196 °C.", "L'azoto bolle a -196 gradi."):
+    verifica(f"seconda revisione, punto 7: «{tr}» è un numero", PA.confronta(batt("L'azoto bolle a -196 gradi."), tr)["ok"],
+             str(PA.confronta(batt("L'azoto bolle a -196 gradi."), tr)))
 e = PA.confronta(batt("L'azoto bolle a -196 gradi."), "L'azoto bolle a 196 gradi.")
 verifica("contrario: il segno perso dalla voce", not e["ok"] and "numero" in e["frasi"][0]["motivi"], str(e))
 for tr in ("L'azoto bolle a -196 gradi.", "L'azoto bolle a meno 196 gradi.", "L'azoto bolle a meno centonovantasei gradi."):
@@ -353,8 +391,6 @@ e = PA.confronta(batt("La formula è CO2 anche di notte."), "La formula è CO2 a
 verifica("una formula sentita come è scritta", e["ok"], str(e))
 e = PA.confronta(batt("La formula è CO2 anche di notte."), "La formula è ci o due anche di notte.")
 verifica("…e come si dice", e["ok"], str(e))
-e = PA.confronta(batt("La formula è CO2 anche di notte."), "La formula è anche di notte.")
-verifica("contrario: la formula persa", not e["ok"] and "formula" in e["frasi"][0]["motivi"], str(e))
 verifica("nei conti niente testo", all(not isinstance(v, str) for k, v in e.items() if k != "frasi"))
 verifica("un audio vuoto non torna", not PA.confronta(B1, "")["ok"])
 
@@ -694,18 +730,23 @@ class Docker:
         self.pausa = False
         self.moss = False
         self.rm_guasto = False
+        self.giu = False         # il demone non risponde
 
     def __call__(self, argv, timeout=60.0):
         self.chiamate.append(list(argv))
         out = types.SimpleNamespace(returncode=0, stdout="", stderr="")
         az = argv[1]
+        if self.giu:
+            out.returncode, out.stderr = 1, "Cannot connect to the Docker daemon"
+            return out
         if az == "inspect":
             if argv[2] == "-f":
                 out.stdout = "true" if self.moss else "false"
                 out.returncode = 0 if self.moss else 1
+                out.stderr = "" if self.moss else "error: no such object: calliope-moss"   # il testo vero, in minuscolo
             else:
                 if self.inspect is None:
-                    out.returncode = 1
+                    out.returncode, out.stderr = 1, "Error: No such object: calliope-vllm"
                     return out
                 i = json.loads(json.dumps(self.inspect))
                 i["State"]["Running"] = self.vllm_su
@@ -717,7 +758,7 @@ class Docker:
                 self.vllm_su = False
         elif az == "start":
             if self.inspect is None:
-                out.returncode = 1
+                out.returncode, out.stderr = 1, "Error response from daemon: No such container: calliope-vllm"
             elif not self.non_riparte:
                 self.vllm_su = True
         elif az == "rm":
@@ -796,6 +837,45 @@ verifica("revisione, punto 9: il container sparito non si aspetta", "container" 
          and r.ripartito is False, str(o.t - t0_s))
 verifica("…il segno va via: `verifica` non dice «ok» per sempre, e chi vuole un lavoro trova il guasto vero",
          not r.segno.exists() and not r.in_ripresa())
+print("— Docker giù per un momento (seconda revisione, punto 2)")
+verifica("«no such» in minuscolo e maiuscolo, il testo vero di Docker", PM._non_esiste(types.SimpleNamespace(returncode=1, stderr="error: no such object: x", stdout=""))
+         and PM._non_esiste(types.SimpleNamespace(returncode=1, stderr="Error response from daemon: No such container: x", stdout=""))
+         and not PM._non_esiste(types.SimpleNamespace(returncode=1, stderr="Cannot connect to the Docker daemon", stdout="")))
+r, d, o = ripresa_finta("msg-ignoto")
+r.ferma({})
+d0_ = d.__call__
+def _strano(argv, timeout=60.0, d0_=d0_):
+    o_ = d0_(argv, timeout)
+    if argv[1] == "inspect" and argv[2] == "-f":
+        o_.stderr = "un messaggio mai visto"
+    return o_
+r.togli_motore = lambda: PM.togli_container(_strano)
+verifica("contrario (il banco del 05/11): un messaggio mai visto su MOSS non lascia vLLM fermo", r.riparti() and d.vllm_su)
+r, d, o = ripresa_finta("docker-giu")
+r.ferma({})
+d.giu = True
+verifica("non è un container sparito: il segno resta", r.riparti() is False and r.segno.exists() and r.in_ripresa() and not r.vllm.sparito)
+verifica("…e si riprova", r.controlla() is False and r.segno.exists())
+d.giu = False
+verifica("…tornato Docker vLLM riparte", r.controlla() and d.vllm_su and not r.segno.exists())
+r, d, o = ripresa_finta("docker-giu-avvio")
+r.ferma({})
+d.giu = True
+r2 = PM.Ripresa(r.segno.parent, r.vllm, togli_motore=lambda: PM.togli_container(d), log=registro.append, dorme=lambda s: (setattr(d, "giu", False), o.dorme(s)),
+                orologio=o, tetto_s=60)
+th = r2.all_avvio(attesa_s=0)
+th.join(5)
+verifica("all'avvio con Docker che non risponde: non si dimentica, e riparte quando torna", d.vllm_su and not r2.segno.exists())
+r, d, o = ripresa_finta("disco-pieno")
+def _pieno(x, r=None):
+    raise OSError("disco pieno")
+r._scrivi = _pieno
+try:
+    r.prenota({})
+    verifica("seconda revisione, punto 4: disco pieno", False)
+except OSError:
+    verifica("seconda revisione, punto 4: col disco pieno niente resta acceso", not r.in_ripresa())
+m_d = None
 r, d, o = ripresa_finta("moss-vivo")
 r.ferma({})
 d.moss, d.rm_guasto = True, True
@@ -963,6 +1043,8 @@ class Mondo:
     def whisper(self, wav):
         if self.errore_stt:
             raise self.errore_stt
+        if wav not in self.detti:
+            return "Una frase di prova."       # quella di Piper, per vedere se Whisper è vivo
         testo, n = self.detti[wav]
         return self.rompi(n, __import__("re").sub(r"\[S\d\]", " ", testo))
 
@@ -1005,7 +1087,7 @@ m.prep.crea_motore = lambda cede: (_ for _ in ()).throw(OSError("voce"))
 verifica("nemmeno i riferimenti: vLLM non si tocca", m.prep.passo() == "motore_OSError" and not m.d.azioni())
 m = Mondo("memoria-giri")
 def _fm(wav, m=m):
-    m.mem = 3000
+    m.mem = 3000 if wav in m.detti else m.mem
     return "x"
 m.prep.ritrascrivi = _fm
 esiti_mem = []
@@ -1031,6 +1113,12 @@ def _pren2(info, m=m, pren=pren):
 m.r.prenota = _pren2
 m.prep.passo()
 verifica("chi entra dopo la prenotazione vede `in_ripresa` già prima dello stop", visto == [True])
+
+m = Mondo("disco-pieno-sessione")
+def _pieno2(x):
+    raise OSError("disco pieno")
+m.r._scrivi = _pieno2
+verifica("il disco pieno: vLLM non si tocca", m.prep.passo() == "segno_non_scritto" and "stop" not in m.d.azioni() and not m.r.in_ripresa())
 
 print("— quando non parte")
 for nome, prepara_, atteso in (
@@ -1073,12 +1161,17 @@ m = Mondo("genera-errore")
 m.errore_in_wav = OSError("disco")
 verifica("il disco pieno", m.prep.passo() == "errore_OSError" and riparte(m))
 m = Mondo("stt-guasto")
-m.errore_stt = OSError("whisper giù")
-verifica("Whisper giù", m.prep.passo() == "errore_OSError" and riparte(m))
+caduto = []
+def _caduto(wav, m=m, orig_w=m.whisper):
+    if wav in m.detti and not caduto:
+        caduto.append(1)
+        raise OSError("whisper giù")
+    return orig_w(wav)
+m.prep.ritrascrivi = _caduto
+verifica("Whisper giù a metà", m.prep.passo() == "guasto_whisper_giu" and riparte(m))
 c_p = P.cartella_podcast(m.st.cfg, m.vid)
 n_prima = m.chiamate
 verifica("il pezzo generato resta da controllare", bool(list(c_p.glob("*.prova.wav"))))
-m.errore_stt = None
 m.prep._riprova_dopo = 0
 verifica("la sessione dopo lo controlla senza rifarlo", m.prep.passo() == "finito" and m.semi[0] == 42
          and m.st.podcast_stato(m.vid)["audio"]["esito"] == "pronto", str(m.chiamate))
@@ -1118,7 +1211,7 @@ verifica("la sessione dopo riparte da dove era", m.prep.passo() == "finito" and 
 m = Mondo("lavoro")
 orig_w = m.whisper
 def _w(wav, m=m, orig_w=orig_w):
-    m.lavori = True
+    m.lavori = wav in m.detti
     return orig_w(wav)
 m.prep.ritrascrivi = _w
 fine = m.prep.passo()
@@ -1128,7 +1221,7 @@ m.st.cfg.studio_podcast_tetto_min = 0.2
 verifica("il tetto di tempo", m.prep.passo() == "tetto" and riparte(m) and m.prep.motivo() == "pausa")
 m = Mondo("memoria-bassa")
 def _f(wav, m=m):
-    m.mem = 3000
+    m.mem = 3000 if wav in m.detti else m.mem
     return "x"
 m.prep.ritrascrivi = _f
 verifica("la memoria sotto il pavimento", m.prep.passo() == "memoria_bassa" and riparte(m))
@@ -1139,13 +1232,15 @@ verifica("con vLLM fermo la memoria non basta: subito su, nessun MOSS", m.prep.p
 m = Mondo("prova-aperta")
 pa = m.st._prova_aperta
 def _w2(wav, m=m, orig_w=m.whisper):
-    m.st._libreria_chiusa = lambda v: True
+    if wav in m.detti:
+        m.st._libreria_chiusa = lambda v: True
     return orig_w(wav)
 m.prep.ritrascrivi = _w2
 verifica("una prova aperta intanto: ci si ferma", m.prep.passo() == "verifica_cambiata" and riparte(m))
 m = Mondo("pagine-cambiate")
 def _w3(wav, m=m, orig_w=m.whisper):
-    m.st.dati.scrivi("UPDATE studio_pagine SET testo = 'Altro testo della pagina.' WHERE id = ?", (m.ids[0],))
+    if wav in m.detti:
+        m.st.dati.scrivi("UPDATE studio_pagine SET testo = 'Altro testo della pagina.' WHERE id = ?", (m.ids[0],))
     return orig_w(wav)
 m.prep.ritrascrivi = _w3
 verifica("le pagine cambiate: niente audio di materiale vecchio", m.prep.passo() == "verifica_cambiata" and riparte(m))
@@ -1157,32 +1252,50 @@ m = Mondo("verifica-tolta")
 scaldata = []
 m.prep.dopo_sessione = lambda: scaldata.append(1)
 def _w4(wav, m=m, orig_w=m.whisper):
-    m.st.togli_verifica(LEO, m.vid)
+    if wav in m.detti and m.st._riga_podcast(m.vid):
+        m.st.togli_verifica(LEO, m.vid)
     return orig_w(wav)
 m.prep.ritrascrivi = _w4
 fine_t = m.prep.passo()
 verifica("revisione, punto 12: verifica tolta durante la sessione: niente eccezioni, vLLM su", riparte(m), fine_t)
 verifica("…il registro e il riscaldamento ci sono", bool(scaldata) and m.prep.misure["ultima"]["ripartito"] and not P.cartella_podcast(m.st.cfg, m.vid).exists()
          or bool(scaldata), str(m.prep.misure["ultima"]))
-print("— Whisper che risponde vuoto (revisione, punto 13)")
+print("— Whisper che risponde vuoto (revisione, punto 13; seconda revisione, punto 5)")
 m = Mondo("whisper-vuoto")
 m.prep.ritrascrivi = lambda wav: ""
-verifica("non è un pezzo sbagliato: si riprova", m.prep.passo() == "guasto_whisper_vuoto" and riparte(m)
-         and m.st.podcast_stato(m.vid)["audio"] is None and m.chiamate == 1, str(m.chiamate))
+verifica("Whisper giù: si sa prima, vLLM non si tocca", m.prep.passo() == "whisper_giu" and "stop" not in m.d.azioni() and not m.semi)
+esiti_v = []
+for _g in range(8):
+    m.prep._riprova_dopo = 0
+    esiti_v.append(m.prep.passo())
+verifica("8 giri, nessun `docker stop`", esiti_v == ["whisper_giu"] * 8 and "stop" not in m.d.azioni(), str(esiti_v))
+m.prep._riprova_dopo = 0
+verifica("…e si aspetta un po' fra un giro e l'altro", m.prep.passo() == "whisper_giu" and m.prep.passo() == "pausa")
 m.prep.ritrascrivi = m.whisper
 m.prep._riprova_dopo = 0
-verifica("tornato Whisper si controlla lo stesso audio, senza rifarlo", m.prep.passo() == "finito" and m.semi[0] == 42 and m.semi.count(42) == len(m.pezzi() or [1]) * 0 + m.semi.count(42)
-         and m.st.podcast_stato(m.vid)["audio"]["esito"] == "pronto" and m.st.podcast_stato(m.vid)["audio"]["conti"]["a_una_voce"] == 0)
-m = Mondo("whisper-sempre")
+verifica("tornato Whisper si riparte", m.prep.passo() == "finito" and m.st.podcast_stato(m.vid)["audio"]["esito"] == "pronto")
+m = Mondo("whisper-cade")
+n_ok = [0]
+def _wc(wav, m=m, n_ok=n_ok):
+    n_ok[0] += 1
+    return m.whisper(wav) if n_ok[0] == 1 else ""       # la frase di prova sì, poi tace
+m.prep.ritrascrivi = _wc
+verifica("Whisper che cade durante la sessione: guasto suo, il pezzo non è sbagliato", m.prep.passo() == "guasto_whisper_giu" and riparte(m), str(m.d.azioni()))
+c_w = P.cartella_podcast(m.st.cfg, m.vid)
+verifica("…l'audio resta da controllare, senza rifarlo", bool(list(c_w.glob("*.prova.wav"))) and m.chiamate == 1)
+m.prep.ritrascrivi = m.whisper
+m.prep._riprova_dopo = 0
+verifica("…tornato si controlla quello", m.prep.passo() == "finito" and m.semi.count(42) == len(m.semi))
+m = Mondo("whisper-audio")
 m.st.cfg.studio_podcast_rigenera = 0
-m.prep.ritrascrivi = lambda wav: ""
-esiti_v = []
-for _g in range(4):
-    esiti_v.append(m.prep.passo())
-    m.prep._riprova_dopo = 0
-firma_v = m.pezzi()[0]["firma"]
-stato_v = json.loads((P.cartella_podcast(m.st.cfg, m.vid) / f"{firma_v}-stato.json").read_text())
-verifica("solo se continua vale un no", esiti_v[:3] == ["guasto_whisper_vuoto"] * 3 and stato_v["pezzi"]["1"]["stato"] == "una_voce", str(stato_v["pezzi"]["1"]))
+n_x = [0]
+def _wa(wav, m=m):
+    return "" if wav in m.detti and m.detti[wav][1] == 1 else m.whisper(wav)     # solo il primo pezzo non si capisce
+m.prep.ritrascrivi = _wa
+fine_a = m.prep.passo()
+firma_a = json.loads(m.st._riga_podcast(m.vid)["audio"])["firma"]
+verifica("se Whisper sente la frase di prova, è quell'audio a non valere: niente guasti in tondo", fine_a == "finito"
+         and json.loads(m.st._riga_podcast(m.vid)["audio"])["parti"][0]["una_voce"], fine_a)
 muto = io.BytesIO()
 with wave.open(muto, "wb") as w:
     w.setnchannels(1)

@@ -10,6 +10,8 @@ Le fasi (`--fasi`, nell'ordine):
   guardiano del riassunto): frasi tenute, cenni, durata, tempi. Serve vLLM.
 - **whisper**: quante volte sbaglia Whisper da solo. Ogni pezzo detto da Piper (che i numeri li legge giusti) e
   ritrascritto: un confronto che non torna qui è colpa sua, e dà le soglie di `podcast_audio.confronta`.
+- **diretto**: al posto del copione, le frasi delle pagine tali e quali: serve a misurare solo l'audio, senza il modello di mezzo.
+- **titoli**: il giudizio dei titoli col modello vero, buoni e ostili.
 - **sessione**: la sessione vera, `podcast_audio.Preparatore`: vLLM fermato, MOSS nel suo container, ogni pezzo
   ritrascritto, vLLM ripartito con il confronto e `is_paused`. Con `--simula-turno N` un turno finto dopo N pezzi: si
   ferma tutto, e la sessione dopo riparte da lì. I file finiti in `--uscita/podcast/`.
@@ -90,7 +92,9 @@ def lavori_vivi(cache={"t": 0.0, "v": False}) -> bool:
     if ora - cache["t"] >= 5.0:
         r = subprocess.run(["find", os.path.expanduser("~/calliope/lavori"), "-mmin", "-15", "-type", "f"],
                            capture_output=True, text=True, check=False)
-        cache["t"], cache["v"] = ora, bool(r.stdout.strip())
+        # Un altro banco sulla stessa macchina (l'e2e di un revisore): vLLM non si ferma sotto di lui
+        altro = subprocess.run(["pgrep", "-f", "e2e.py"], capture_output=True, text=True, check=False)
+        cache["t"], cache["v"] = ora, bool(r.stdout.strip() or altro.stdout.strip())
     return cache["v"]
 
 
@@ -204,6 +208,25 @@ def main():
         if r and r["contenuto"]:
             (a.uscita / "copione.json").write_text(json.dumps(json.loads(r["contenuto"]), ensure_ascii=False, indent=1),
                                                    encoding="utf-8")
+    if "diretto" in fasi:
+        # Per misurare l'audio e basta: le frasi delle pagine tali e quali, senza il modello. Solo per il banco, su materiale di fantasia
+        from calliope.studio import riassunto as R
+        from calliope.studio import riassunto_controllo as C
+        args = st._argomenti_per_carte(vid)
+        pag = {int(p["id"]): p for p in st._pagine_di(vid)}
+        sezioni = []
+        for ar in args:
+            frasi_d = [{"testo": f, "fonti": ["P1.1"], "pagine": list(ar["pagine"]), "argomento": int(ar["id"]), "voce": "AB"[i % 2]}
+                       for x in ar["pagine"] for i, f in enumerate(C.frasi_pulite(pag[int(x)]["testo"], ("Calliope",)))
+                       if len(f) > 25]
+            sezioni.append({"argomento": int(ar["id"]), "proposte": len(frasi_d), "frasi": frasi_d, "titolo": ar["titolo"]})
+        ris = P.con_battute({"sezioni": sezioni, "conti": {"motivi": {}}})
+        st.podcast_pronuncia = Pronuncia()
+        n = st.proponi_podcast(vid, st._firma_podcast(vid), ris, R.PRONTO)
+        misure["diretto"] = {"sezioni": n, "conti": ris["conti"]}
+        log(f"diretto: {json.dumps(misure['diretto'], ensure_ascii=False)}")
+        r = st._riga_podcast(vid)
+        (a.uscita / "copione.json").write_text(json.dumps(json.loads(r["contenuto"]), ensure_ascii=False, indent=1), encoding="utf-8")
     if "titoli" in fasi:
         # Il giudizio dei titoli col modello vero: quelli buoni restano, quelli ostili no (materiale di fantasia)
         from calliope.studio import riassunto as R
@@ -303,6 +326,16 @@ def main():
             m.ambiente = ("MOSS_PROVA=1",)
             return motori.append(m) or m
         motori = []
+        # Ogni tentativo col suo copione e ciò che si è sentito (materiale di fantasia): gli errori veri di MOSS si contano da qui
+        coppie = []
+        conf0 = PA.confronta
+
+        def confronta_e_tieni(battute, testo):
+            e = conf0(battute, testo)
+            coppie.append({"battute": battute, "sentito": testo, "ok": e["ok"], "frasi": e["frasi"], "inventate": e["inventate"]})
+            (a.uscita / "coppie.json").write_text(json.dumps(coppie, ensure_ascii=False, indent=1), encoding="utf-8")
+            return e
+        PA.confronta = confronta_e_tieni
         prep = PA.Preparatore(st, ripresa, crea_con_prova, ritrascrivi_e_conta,
                               A.VocePiper(voce_per(cfg.piper_voice), pron), voce_ferma, lavori_vivi, log=log)
         cfg.studio_podcast_quiete_s = 600

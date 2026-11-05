@@ -50,7 +50,7 @@ CARTELLA_PODCAST = "podcast"       # i file finiti: podcast/<verifica>/<firma>-<
 CARTELLA_LAVORO = "podcast_lavoro"  # la sola cartella scrivibile del container: si svuota a ogni sessione
 
 # La versione entra nella firma: un prompt, un elenco o un taglio nuovi rifanno i copioni
-VERSIONE = 2
+VERSIONE = 3
 VOCI = ("A", "B")
 DI_FILA_MAX = 2                    # le battute di fila della stessa voce
 QUOTA_RACCORDI = 0.5               # dei cenni per battuta con la fonte, al più
@@ -60,7 +60,9 @@ QUOTA_MINIMA = 1 / 3               # …e almeno: il modello tende a non mettern
 PEZZO_CAR = 900
 PEZZO_MIN_CAR = 500                # a un argomento nuovo si va a capo da qui in su
 
-RACCORDI_PRIMA = ("E poi?", "Perché?", "Come mai?", "In che senso?", "E quindi?", "Cioè?", "E dopo?")
+# Niente «Perché?», «E quindi?», «Cioè?», «E dopo?», «Come mai?», «In che senso?» (seconda revisione della PR #393): fra due frasi
+# senza nesso affermano un nesso che la fonte non ha detto. Solo chi chiede di andare avanti
+RACCORDI_PRIMA = ("E poi?", "E ancora?")
 # Niente «Esatto.», «Giusto.», «Certo.» (revisione della PR #393): una voce che conferma una frase che può essere sbagliata
 # le dà un'autorità che non ha, e costano poco. Solo cenni che non confermano niente
 RACCORDI_DOPO = ("Capito.", "Interessante.", "Ah, ecco.", "Chiaro.")
@@ -274,9 +276,52 @@ def con_battute(ris: dict) -> dict:
 
 # ─────────────────────────── ciò che si dà a MOSS ───────────────────────────
 _NUMERO = re.compile(r"(?<![\w,.])(\d{1,3}(?:[. ]\d{3})+|\d+)(?:,(\d+))?(?![\w])(?![.,]\d)")
-_TRATTINO = re.compile(r"(?<=\w)\s*[-–—]\s*(?=\w)")
-# Il segno di un numero: «-196», «a -2», «(-5», mai «1519-1521» né «anni-luce»
-_NEGATIVO = re.compile(r"(?<![\w)\]])[-−–](?=\d)")
+# Il trattino, a regola rovesciata (seconda revisione della PR #393): si dice o si toglie **solo** in queste forme; ogni altro resta,
+# e `fedele` scarta la battuta. Prima si toglieva ovunque, e «Cl-», «OH-», «d=a-b» perdevano il meno senza che nessuno lo vedesse.
+_TERMINE = r"(?:[A-Za-z]|\d+(?:[.,]\d+)?)"
+_OPERAZIONE = re.compile(rf"(?<![\w,.])({_TERMINE})\s*[-−–]\s*(?={_TERMINE}(?![A-Za-z]))")
+_NOME_NUMERO = re.compile(r"(?<=[A-Za-zÀ-ÿ])[-–](?=\d)")        # «carbonio-14», «B-12»
+_NEGATIVO = re.compile(r"(?<![\w)\]])[-−–](?=\d)")             # «-196», «a -2», «(-5»
+_INTERVALLO = re.compile(r"(?<![\w,.])(\d+)[-–](\d+)(?![\w])")  # «1519-1521», «3-5»
+_COMPOSTA = re.compile(r"(?<=[A-Za-zÀ-ÿ]{3})[-–](?=[A-Za-zÀ-ÿ]{3})")   # «anni-luce», «nord-est»: la sola forma che si toglie
+_RESTA = re.compile(r"[-−–]")
+
+
+def _ione(m: re.Match) -> str:
+    from ..pronuncia import ELEMENTI, _PEZZO_FORMULA
+    f = m.group(1)
+    pezzi = _PEZZO_FORMULA.findall(f)
+    if "".join(a + b for a, b in pezzi) != f or any(a not in ELEMENTI for a, _ in pezzi):
+        return m.group(0)
+    return f"{f}{m.group(2) or ''}⁻"
+
+
+_IONE = re.compile(r"(?<![\w-])((?:[A-Z][a-z]?\d*)+)(\s\d)?-(?=[\s.,;:)]|$)")
+
+
+def e_operazione(testo: str) -> bool:
+    """Una frase con un'operazione: il trattino è un meno fra due termini, e il valore dopo non ha il suo segno da solo."""
+    t = str(testo or "")
+    return "=" in t and bool(_OPERAZIONE.search(t)) or bool(re.search(r"(?<![\w,.])[A-Za-z]\s*[-−–]\s*[A-Za-z](?![\w])", t))
+
+
+def _segni(testo: str) -> str:
+    """Il segno e il trattino, prima di ogni altra pulizia. Gli ioni come i positivi («Cl-» come «Na+»), il meno di un'operazione,
+    il nome col numero, il numero negativo, l'intervallo, la parola composta. Il resto non si tocca."""
+    t = _IONE.sub(_ione, str(testo or ""))
+    if e_operazione(t):
+        for _i in range(6):      # «a-b-c»: i termini si sovrappongono
+            nuovo = _OPERAZIONE.sub(r"\1 − ", t)
+            if nuovo == t:
+                break
+            t = nuovo
+    t = _NOME_NUMERO.sub(" ", t)
+    t = _NEGATIVO.sub("meno ", t)
+
+    def intervallo(m: re.Match) -> str:
+        return f"{m.group(1)} a {m.group(2)}" if int(m.group(1)) < int(m.group(2)) else m.group(0)
+    t = _INTERVALLO.sub(intervallo, t)
+    return _COMPOSTA.sub(" ", t)
 
 
 def intero_detto(n: int) -> str:
@@ -321,13 +366,10 @@ def numeri_in_lettere(testo: str) -> str:
 
 
 def detto(testo: str) -> str:
-    """La frase come va detta: unità, formule, sigle e simboli a parole, numeri in lettere, il segno a parole («meno
-    centonovantasei»), niente trattini (`normalize_text` di MOSS li toglie e attacca le parole: «anniluce»). Il
-    trattino e il segno vanno distinti prima: «bolle a -196 gradi» è diventato «bolle a 196 gradi» (revisione della PR
-    #393); `fedele` e `confronta` guardano il testo di prima di questa pulizia."""
+    """La frase come va detta: il segno e il trattino (`_segni`), unità, formule, sigle e simboli a parole, numeri in lettere. Un
+    trattino che non si sa dire resta qui, e `fedele` scarta la battuta: `normalize_text` di MOSS lo toglierebbe in silenzio."""
     from ..pronuncia import per_ripasso
-    t = _NEGATIVO.sub("meno ", per_ripasso(testo))
-    return " ".join(_TRATTINO.sub(" ", numeri_in_lettere(t)).split())
+    return " ".join(numeri_in_lettere(per_ripasso(_segni(testo))).split())
 
 
 def valori_di(testo: str) -> list[float]:
@@ -336,17 +378,26 @@ def valori_di(testo: str) -> list[float]:
     from . import riassunto_controllo as C
     t = re.sub(r"(?<!\d)(\d{1,3})((?:\.\d{3})+)(?!\d)", lambda m: m.group(1) + m.group(2).replace(".", ""),
                str(testo or "").replace("%", " per cento "))
-    return [round(v, 9) for v, _u in U.leggi(C._normale(t))]
+    # La carica di uno ione («SO4 2-») e il numero di una sigla («B-12») stanno con la formula: Whisper li scrive attaccati («SO42-»,
+    # «B12»), e non sono valori della frase. «carbonio-14» è un nome col suo numero, non un quattordici negativo
+    t = _IONE.sub(lambda m: m.group(1), t)
+    t = re.sub(r"(?<![\w])([A-Z][a-z]?)[-–](\d+)(?![\w])", r"\1\2", t)
+    return [round(v, 9) for v, _u in U.leggi(C._normale(_NOME_NUMERO.sub(" ", t)))]
 
 
 def fedele(testo: str) -> bool:
-    """Ciò che si dice ha tutti i valori della frase controllata, col loro segno. Se la pulizia ne ha cambiato uno la
-    battuta non si dice: una rete sotto `detto`, che questa frase non l'ha mai vista."""
-    dopo = valori_di(detto(testo))
+    """Ciò che si dice ha tutti i valori della frase controllata, col loro segno, e nessun trattino di cui non si sa niente. Se no la
+    battuta non si dice. Una rete sotto `detto`, che questa frase non l'ha mai vista."""
+    d = detto(testo)
+    if _RESTA.search(d):
+        return False
+    dopo = valori_di(d)
+    op = e_operazione(testo)
     for v in valori_di(testo):
-        if v not in dopo:
+        c = next((x for x in dopo if x == v or (op and abs(x) == abs(v))), None)
+        if c is None:
             return False
-        dopo.remove(v)
+        dopo.remove(c)
     return True
 
 
@@ -372,7 +423,7 @@ def pezzi(sezioni: list[dict], argomenti: list[dict], nomi=(), pronuncia=None, m
         a = per_id.get(aid) or {}
         # Solo il titolo che ha passato il codice, il giudice e il guardiano (`Lettore._copione_controllato`):
         # senza, resta il numero, che lo scrive il codice
-        titolo, _s = S.frasi_pagina(s.get("titolo"), nomi, True) if s.get("titolo") else ([], {})
+        titolo, _s = (S.frasi_pagina(s.get("titolo"), nomi, True) if s.get("titolo") and fedele(s["titolo"]) else ([], {}))
         testa = f"Argomento {a.get('numero', '')}.".replace(" .", ".")
         testi = [testa] + [f for pp in titolo for f in pp]
         prima = s["battute"][0]["voce"] if s["battute"] else "A"

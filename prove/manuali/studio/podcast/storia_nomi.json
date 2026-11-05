@@ -1,0 +1,20 @@
+{
+  "id": "storia_nomi",
+  "materia": "Storia",
+  "classe": "1ª superiore",
+  "data_verifica": "2026-12-20",
+  "argomento": "Il regno immaginario di Valdrana",
+  "nota": "Materiale di fantasia per il banco del podcast (#387): pieno di nomi di persona e di luogo che Whisper non conosce, per misurare quanti pezzi giusti si perderebbero.",
+  "pagine": [
+    {"id": "p1", "numero": "30", "testo": "La fondazione\nIl regno di Valdrana nacque nel 1142, quando Ermengarda di Torvisca sposò Aldobrando Quirinelli. Aldobrando conquistò la fortezza di Montecalvo e la valle del fiume Serpeia. Il suo consigliere, Gualtiero Ombrasco, scrisse il primo codice di leggi del regno. Il vescovo Teodulfo di Santarello benedisse la nuova capitale, Rocca Verdana. Nel 1167 il duca Berengario Malaspina attaccò Rocca Verdana con 3.000 soldati. Ermengarda fermò l'assedio con l'aiuto dei mercanti di Portoventoso. La pace di Campolungo divise il territorio fra Valdrana e il ducato di Altamura."},
+    {"id": "p2", "numero": "31", "testo": "L'età d'oro\nSotto il re Lamberto Quirinelli, nel 1204, il regno arrivò fino al mare di Sarvena. Lamberto affidò la flotta all'ammiraglio Ottone Scarpanera. Scarpanera sconfisse i pirati di Isola Cerva nella battaglia di Capo Lirano. Il mercante Baldassarre Gentilucci aprì la rotta verso Kharzenia e Ostrovala. A Rocca Verdana l'architetto Ginevra Tolomarchi costruì la cattedrale di San Teofilo. Il poeta Rinaldo Astolfi scrisse il poema delle Sette Torri. L'università di Montecalvo fu fondata nel 1231 da Matilde Quirinelli, sorella del re."},
+    {"id": "p3", "numero": "32", "testo": "La crisi\nNel 1289 la peste arrivò a Portoventoso sulle navi di Gentilucci. Morì circa un terzo degli abitanti di Valdrana. Il re Corrado Quirinelli non ebbe figli, e alla sua morte scoppiò la guerra fra Isabeau di Altamura e Guidobaldo Ombrasco. Guidobaldo vinse a Ponte Serpeia nel 1302. Isabeau si rifugiò a Ostrovala con il cancelliere Fulvio Marchesani. Nel 1318 la pace di Santarello riconobbe re Guidobaldo. Il regno perse il mare di Sarvena e la fortezza di Capo Lirano."},
+    {"id": "p4", "numero": "33", "testo": "La fine del regno\nNel 1405 l'imperatore Sigismondo Kervalen invase Valdrana da nord. Il generale Azzo Ferrandini resistette a Montecalvo per 14 mesi. Rocca Verdana cadde il 9 marzo 1407. L'ultima regina, Bianca Ombrasco, fuggì a Kharzenia con Ferrandini. I Kervalen governarono la valle fino al 1492, quando Lorenzo Scarpanera guidò la rivolta di Portoventoso. Oggi di Rocca Verdana restano le mura e la cattedrale di San Teofilo."}
+  ],
+  "argomenti": [
+    {"titolo": "La fondazione di Valdrana", "pagine": ["p1"]},
+    {"titolo": "L'età d'oro", "pagine": ["p2"]},
+    {"titolo": "La crisi del regno", "pagine": ["p3"]},
+    {"titolo": "La fine del regno", "pagine": ["p4"]}
+  ]
+}

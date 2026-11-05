@@ -47,14 +47,14 @@ from .podcast_motore import Ceduto, Guasto, MotoreMoss, TESTO_RIFERIMENTO, memor
 
 # ─────────────────────────── soglie (dal banco: `docs/aree/studio.md`, 04/11) ───────────────────────
 RIGENERA_MAX = 2              # i tentativi in più su un pezzo che non torna
-SOGLIA_FRASE = 0.70           # delle parole piene di una battuta, ritrovate
+SOGLIA_FRASE = 0.60           # delle parole piene di una battuta, ritrovate: dal banco del 05/11, le frasi giuste arrivano a 0,60–0,67 (formule, «lo ione»), i salti veri a 0
 SOGLIA_INVENTATO = 0.10       # delle parole sentite, in più rispetto al copione (MOSS sul banco: al più 4,5 %)
 UNA_VOCE_MAX = 0.5            # dei pezzi: oltre, niente podcast
 PAVIMENTO_MB = 4000           # durante la sessione, sotto si ferma tutto (la guardia del banco)
 ATTESA_MEMORIA_S = 60.0       # dopo il fermo di vLLM la memoria torna in qualche secondo
 ANCORA_OGNI_S = 5.0
 INVENTATE_POCHE = 4           # in un pezzo corto una manciata non è una percentuale
-VUOTI_MAX = 3                 # Whisper che risponde vuoto su un audio con la voce: si riprova, poi vale un no
+PAUSA_WHISPER_S = 1800.0      # Whisper giù: si riguarda fra un po', senza toccare vLLM
 PAUSA_DOPO_GUASTO_S = 3600.0
 PAUSA_FRA_SESSIONI_S = 1800.0
 GIRO_S = 60.0
@@ -66,9 +66,9 @@ WHISPER_RATE = 16000
 # ─────────────────────────── il confronto col copione ───────────────────────────
 _VUOTE = frozenset("""il lo la i gli le l un una uno del della dello dei degli delle al alla allo ai agli alle dal dalla
 dallo dai dagli dalle nel nella nello nei negli nelle sul sulla sullo sui sugli sulle col con per tra fra su di da in a e ed
-o ma che si ne ci d c""".split())
-# Le parole che cambiano il senso anche da sole: «molto meno calda» → «molto meravigliosa» (banco del 04/11) in una
-# frase lunga non si vedrebbe dalla parte di parole ritrovate
+o ma che si ne ci d c ha hanno e è""".split())       # «ha» e «a» Whisper non può distinguerli
+# Una parola sola che ribalta la frase, se una voce la salta o la storpia: «molto meno calda» → «molto meravigliosa», «a meno 120» →
+# «almeno 120» (visti su MOSS). Non è una lista di significati: sono quelle che la parte ritrovata non vede
 _NEGAZIONI = frozenset(("non", "mai", "nessun", "nessuno", "nessuna", "senza", "meno", "piu"))
 
 
@@ -94,129 +94,111 @@ def _norma(w: str) -> str:
     return "".join(c for c in t if not unicodedata.combining(c)).casefold()
 
 
-def _distanza(a: str, b: str) -> int:
-    if abs(len(a) - len(b)) > 2:
-        return 3
-    prima = list(range(len(b) + 1))
-    for i, x in enumerate(a, 1):
-        ora = [i]
-        for j, y in enumerate(b, 1):
-            ora.append(min(prima[j] + 1, ora[j - 1] + 1, prima[j - 1] + (x != y)))
-        prima = ora
-    return prima[-1]
-
-
-# Le coppie che cambiano il senso con poche lettere: la lista non convergerebbe sul significato, ma queste si somigliano
-# abbastanza da passare per una storpiatura di Whisper (revisione della PR #393)
-_PREFISSI_NEGATIVI = ("in", "im", "ir", "il", "dis", "a", "an", "s", "non", "anti", "de")
-_OPPOSTI = (("iper", "ipo"), ("endo", "eso"), ("macro", "micro"), ("omo", "etero"), ("mono", "poli"), ("sopra", "sotto"),
-            ("pre", "post"), ("inter", "intra"), ("ana", "cata"))
-_CHIMICA = re.compile(r"^(?:solf|nitr|clor|carbon|fosf|oss|idross|idr|ferr|cupr|sod|potass|calc|magnes|ammon|acet|alcol|"
-                      r"brom|iod|fluor|zinc|manganes|cromat|permangan)")
-_FINALI_CHIMICI = re.compile(r"(?:ato|ati|ito|iti|uro|uri|oso|osa|osi|ico|ica|ici)$")
-_VOCALI = "aeiou"
-
-
-def _scambio(a: str, b: str) -> bool:
-    """`a` è diventata `b`, che le somiglia e vuol dire un'altra cosa: insolubile e solubile, ipotonico e ipertonico, solfato e
-    solfito. Non è una storpiatura, anche se la frase intorno torna."""
-    if a == b or a[:1].isdigit() or b[:1].isdigit() or len(a) < 4 or len(b) < 4:
-        return False
-    corta, lunga = (a, b) if len(a) < len(b) else (b, a)
-    if lunga.endswith(corta) and lunga[:len(lunga) - len(corta)] in _PREFISSI_NEGATIVI:
-        return True
-    if any((a.startswith(x) and b.startswith(y)) or (a.startswith(y) and b.startswith(x)) for x, y in _OPPOSTI):
-        return _distanza(a[2:], b[2:]) <= 3 or a[-5:] == b[-5:]
-    # Due composti dello stesso elemento: finale diverso, composto diverso
-    if _CHIMICA.match(a) and _CHIMICA.match(b) and a[:4] == b[:4] and _FINALI_CHIMICI.search(a) and _FINALI_CHIMICI.search(b):
-        return a[-3:] != b[-3:]
-    return False
-
-
 def _simile(a: str, b: str) -> bool:
-    """Whisper storpia i nomi («Kuiper», «cromosfera», «Tordesillas»): al più una lettera, due da 9 in su, con la stessa
-    iniziale e la stessa fine; oppure l'ultima vocale («sole», «soli»). Mai sui numeri, le negazioni e gli scambi. La
-    radice in comune non basta più: faceva passare solfato per solfito (revisione della PR #393)."""
+    """La stessa parola sentita male: stessa iniziale e gran parte delle lettere. Mai sui numeri e sulle parole che ribaltano la frase.
+    **Non decide il significato** (seconda revisione della PR #393): quello è già deciso sul testo, prima dell'audio."""
     if a == b:
         return True
-    if a[:1].isdigit() or b[:1].isdigit() or a in _NEGAZIONI or b in _NEGAZIONI or _ORDINALE(a) or _ORDINALE(b):
-        return False
-    if len(a) < 5 or len(b) < 5 or _scambio(a, b):
+    if a[:1].isdigit() or b[:1].isdigit() or a in _NEGAZIONI or b in _NEGAZIONI or len(a) < 5 or len(b) < 5:
         return False
     if a[0] != b[0] and {a[0], b[0]} != {"c", "k"}:
         return False
-    if len(a) == len(b) and a[:-1] == b[:-1] and a[-1] in _VOCALI and b[-1] in _VOCALI:
-        return True
-    return _distanza(a, b) <= (2 if min(len(a), len(b)) >= 9 else 1) and a[-2:] == b[-2:]
-
-
-def _ORDINALE(w: str) -> bool:
-    from . import riassunto_controllo as C
-    if not C._ORDINALI:
-        C._ordinali("primo")          # le tabelle si riempiono al primo uso
-    return w in C._ORDINALI
+    return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio() >= 0.8
 
 
 _NOME = re.compile(r"(?<![\w])[A-ZÀ-Ý][a-zà-ÿ]{1,}")
 
 
-def _nome_simile(n: str, x: str) -> bool:
-    """Un nome storpiato da Whisper («Calicut», «Caligatto»): la stessa iniziale e gran parte delle lettere. Whisper non conosce
-    i nomi stranieri, e questo non deve far rifare un pezzo giusto; Colombo non è Magellano, Napoli non è Napoleone."""
-    if _simile(n, x):
-        return True
-    if len(n) < 5 or len(x) < 4 or n[0] != x[0] or _scambio(n, x):
-        return False
-    return difflib.SequenceMatcher(None, n, x, autojunk=False).ratio() >= 0.7
-
-
 def nomi_di(testo: str) -> set[str]:
-    """Le parole con la maiuscola di una frase, in forma confrontabile, senza le grammaticali in testa («Il»)."""
+    """Le parole con la maiuscola di una frase, in forma confrontabile, senza le grammaticali in testa («Il») e i numeri."""
     from . import riassunto_controllo as C
     from . import unita as U
-    # «il Quattrocento» è un numero, «La Terza» un ordinale: hanno i loro controlli
     return {n for n in (_norma(x) for x in _NOME.findall(str(testo or "")))
-            if n not in C._GRAMMATICA and U.parola_numero(n) is None and not _ORDINALE(n)}
+            if n not in C._GRAMMATICA and U.parola_numero(n) is None}
+
+
+def _chimiche(testo: str) -> list[str]:
+    """Le formule, gli ioni e le sigle col numero di una frase, come sono scritte («H2O», «OH-», «pH», «B-12»)."""
+    out = []
+    for w in str(testo or "").split():
+        pulita = w.strip(".,;:!?()«»\"'’")
+        lettere = pulita.rstrip("+-−⁺⁻")
+        if ((re.search(r"\d", lettere) and re.search(r"[A-Za-z]", lettere)) or re.search(r"[A-Za-z][A-Z]", lettere)
+                or re.fullmatch(r"[A-Z][a-z]?", lettere) or (pulita != lettere and lettere) or re.fullmatch(r"[A-Z][-–]\d+", lettere)):
+            out.append(pulita)
+    return out
+
+
+def fragili(testo: str, trascritto: str = "") -> tuple[set[str], set[str]]:
+    """(le parole che Whisper può sentire in un altro modo, quelle che ha scritto da formula). MOSS dice «acca due o», Whisper scrive
+    «H2O»; dice «o acca meno», scrive «OH-» (misurato sulla chimica del 05/11: 2 pezzi su 2 buttati, e MOSS li aveva detti giusti).
+    Sentite in un altro modo non buttano il pezzo; saltate sì."""
+    fr = set(nomi_di(testo))
+    scritte: set[str] = set()
+    tutto = re.sub(r"[\W_]", "", _norma(trascritto))
+    op = P.e_operazione(testo)
+    for w in _chimiche(testo):
+        parole_w = set(_parole(P.detto(w))) | set(_parole(w))
+        if w[-1:] in "+-−⁺⁻":
+            parole_w |= {"meno", "piu"}
+        fr |= parole_w
+        chiave = re.sub(r"[\W_]", "", _norma(w))
+        if chiave and chiave in tutto:
+            scritte |= parole_w
+    if op:
+        # Un'operazione si scrive in cento modi («A-B»): i suoi termini sono lettere, e il meno non si può sentire da solo
+        termini = {_norma(x) for x in re.findall(r"(?<![\w])[A-Za-z](?![\w])", str(testo))} | {"meno", "uguale"}
+        fr |= termini
+        scritte |= termini
+    return fr - _VUOTE, scritte
+
+
+def _valori_sentiti(token: list[str]) -> list[float]:
+    return P.valori_di(" ".join(t.replace(".", ",") if t[-1:].isdigit() else t for t in token))
 
 
 def confronta(battute: list[dict], trascritto: str) -> dict:
-    """{ok, frasi, sbagliate, numeri, numeri_persi, inventate, parole}: il copione di un pezzo contro ciò che si sente. Una
-    battuta con la fonte è a posto se si ritrovano abbastanza parole piene e **tutte** quelle che da sole cambiano la frase: i
-    numeri col loro segno, le negazioni, gli ordinali, i nomi, le formule; e nessuna parola è diventata una che le somiglia e
-    vuol dire un'altra cosa. **I valori si guardano sul testo di prima della pulizia** (`testo`, non `detto`): una pulizia che
-    perde un segno non può dare ragione a sé stessa (revisione della PR #393). I cenni e i titoli non contano (non affermano
-    niente, e MOSS può mangiarne uno). Solo numeri e nomi di motivi: il testo non esce di qui."""
-    from . import riassunto_controllo as C
+    """{ok, frasi, sbagliate, numeri, numeri_persi, inventate, parole}: **MOSS ha detto il copione, o ha saltato, ripetuto, storpiato?**
+    Il significato è già deciso sul testo, prima dell'audio; una voce non scambia «mitosi» con «meiosi» per sbaglio. Per ogni battuta con la
+    fonte: abbastanza parole piene ritrovate (i salti e le storpiature), i numeri del `testo` scritto, col segno, **in ordine, nel suo
+    tratto di audio**, le parole che ribaltano la frase; per il pezzo, non troppe parole in più (le ripetizioni).
+
+    **I nomi e le formule** (`fragili`). Whisper non li conosce, e la fonte è il copione, non il suo orecchio: uno che nel suo posto è stato
+    sentito in un altro modo non butta il pezzo. Uno **saltato** (lì non si è sentito niente) sì: è un salto come gli altri.
+
+    I cenni e i titoli non contano. Solo numeri e nomi di motivi: il testo non esce di qui."""
     att: list[str] = []
     dove: list[int] = []
     for i, b in enumerate(battute):
         w = _parole(b.get("detto") or b.get("testo") or "")
         att += w
         dove += [i] * len(w)
-    sent = _parole(trascritto)
-    valori_sentiti = P.valori_di(trascritto)
+    # Una formula con un numero che Whisper ha scritto («H2O», «CaCO3») sparirebbe da `_parole`: resta come una parola, così al suo posto
+    # si è sentito qualcosa e non è un salto
+    sent = _parole(re.sub(r"(?<![\w])(?=[A-Za-z]*\d)((?:[A-Z][a-z]?\d*){1,8})(?![\w])", " xformula ", str(trascritto or "")))
     trovate = [False] * len(att)
+    posto: list[int | None] = [None] * len(att)   # dove è stata sentita, per i tratti di ogni battuta
     usate = [False] * len(sent)
-    scambiate = [False] * len(att)
+    storpiate = [False] * len(att)                # al suo posto si è sentito altro: non è un salto
+    in_piu = 0
     sm = difflib.SequenceMatcher(None, att, sent, autojunk=False)
     for op, i1, i2, j1, j2 in sm.get_opcodes():
         if op == "equal":
             for k in range(i2 - i1):
                 trovate[i1 + k] = usate[j1 + k] = True
+                posto[i1 + k] = j1 + k
         elif op == "replace":
-            # Le storpiature di Whisper: la parola simile nello stesso tratto
             for k in range(i1, i2):
+                storpiate[k] = True
                 for h in range(j1, j2):
-                    if usate[h]:
-                        continue
-                    if _simile(att[k], sent[h]):
+                    if not usate[h] and _simile(att[k], sent[h]):
                         trovate[k] = usate[h] = True
+                        posto[k] = h
                         break
-                    if _scambio(att[k], sent[h]):
-                        scambiate[k] = True
-    testo_norma = _norma(trascritto)
-    restano = list(valori_sentiti)
-    sent_set = set(sent)
+            # Un nome spezzato in due o tre parole non è testo in più
+            in_piu += max(0, (j2 - j1) - 2 * (i2 - i1))
+        elif op == "insert":
+            in_piu += j2 - j1
     frasi = []
     numeri = numeri_persi = 0
     for i, b in enumerate(battute):
@@ -224,21 +206,26 @@ def confronta(battute: list[dict], trascritto: str) -> dict:
             continue
         idx = [k for k, d in enumerate(dove) if d == i]
         testo = b.get("testo") or b.get("detto") or ""
-        piene = [k for k in idx if att[k] not in _VUOTE or att[k] in _NEGAZIONI]
-        negs = [k for k in idx if att[k] in _NEGAZIONI]
-        ordinali = [k for k in idx if _ORDINALE(att[k])]
-        # I nomi fra le parole sentite, non per posizione: sull'allineamento un nome ripetuto scattava a torto (il banco)
-        nomi_persi = [n for n in nomi_di(testo) if n not in sent_set and not any(_nome_simile(n, x) for x in sent_set)]
+        # I nomi e le formule sentiti male stanno fuori dal conto; quelli saltati dentro
+        fr, scritte = fragili(testo, trascritto)
+        fuori = {k for k in idx if not trovate[k] and ((att[k] in fr and storpiate[k]) or att[k] in scritte)}
+        piene = [k for k in idx if (att[k] not in _VUOTE or att[k] in _NEGAZIONI) and k not in fuori]
+        negs = [k for k in idx if att[k] in _NEGAZIONI and k not in fuori]
         copre = (sum(trovate[k] for k in piene) / len(piene)) if piene else 1.0
-        # I valori del testo scritto, col segno, fra quelli sentiti: mai da ciò che è passato dalla pulizia
-        attesi = P.valori_di(testo)
+        # Il tratto di audio di questa battuta: dopo l'ultima parola ritrovata di quelle prima, fino alla prima di quelle dopo
+        da = max((posto[k] for k in range(len(att)) if dove[k] < i and posto[k] is not None), default=-1) + 1
+        a_ = min((posto[k] for k in range(len(att)) if dove[k] > i and posto[k] is not None), default=len(sent))
+        tratto = _valori_sentiti(sent[da:a_])
+        op = P.e_operazione(testo)
         persi = 0
-        for v in attesi:
-            if v in restano:
-                restano.remove(v)
-            else:
+        for v in P.valori_di(testo):
+            # In ordine: dopo quello trovato prima. Il valore viene dal testo di prima della pulizia
+            c = next((j for j, x in enumerate(tratto) if x == v or (op and abs(x) == abs(v))), None)
+            if c is None:
                 persi += 1
-        numeri += len(attesi)
+            else:
+                tratto = tratto[c + 1:]
+            numeri += 1
         numeri_persi += persi
         motivi = []
         if copre < SOGLIA_FRASE:
@@ -247,19 +234,8 @@ def confronta(battute: list[dict], trascritto: str) -> dict:
             motivi.append("numero")
         if any(not trovate[k] for k in negs):
             motivi.append("negazione")
-        if any(not trovate[k] for k in ordinali):
-            motivi.append("ordinale")
-        if nomi_persi:
-            motivi.append("nome")
-        if any(scambiate[k] for k in idx):
-            motivi.append("scambio")
-        for f in C._formule(testo):
-            from ..pronuncia import _formula_detta
-            d = _formula_detta(f) or ""
-            if _norma(f) not in re.sub(r"[^\w]", "", testo_norma) and _norma(d) not in testo_norma:
-                motivi.append("formula")
         frasi.append({"copre": round(copre, 3), "motivi": motivi})
-    inventate = sum(not u for u in usate)
+    inventate = in_piu
     sbagliate = sum(bool(f["motivi"]) for f in frasi)
     troppe = inventate > max(INVENTATE_POCHE, len(sent) * SOGLIA_INVENTATO)
     return {"ok": bool(frasi) and not sbagliate and not troppe, "frasi": frasi, "sbagliate": sbagliate,
@@ -493,9 +469,21 @@ class Preparatore:
             self._riprova_dopo = self.orologio() + PAUSA_DOPO_GUASTO_S
             self._d = None
             return male
+        # Whisper che non sente niente: si sa adesso, con vLLM acceso. Senza, 8 giri erano 8 `docker stop` (seconda revisione)
+        if not self._whisper_vivo():
+            self.log("   [STUDIO] podcast: Whisper non risponde o non sente, vLLM non si tocca")
+            self._riprova_dopo = self.orologio() + PAUSA_WHISPER_S
+            self._d = None
+            return "whisper_giu"
         # La finestra fra `motivo` e il fermo: prima si dice a tutti che il motore si ferma, poi si riguarda. Un lavoro entrato
         # prima di qui è fra i vivi; uno che entra dopo vede `in_ripresa` e aspetta (revisione della PR #393)
-        self.ripresa.prenota({"verifica": vid})
+        try:
+            self.ripresa.prenota({"verifica": vid})
+        except OSError as e:      # il disco pieno: il segno non c'è, e allora non si ferma niente
+            self.log(f"   [STUDIO] podcast: segno non scritto ({type(e).__name__}), vLLM non si tocca")
+            self._riprova_dopo = self.orologio() + PAUSA_DOPO_GUASTO_S
+            self._d = None
+            return "segno_non_scritto"
         no = self._cede() or ("vllm_occupato" if self.vllm_libero() else None)
         if no:
             self.ripresa.disdici()
@@ -524,7 +512,7 @@ class Preparatore:
         except Guasto as e:
             fine = f"guasto_{e}"
             conti["guasto"] = {k: v for k, v in (getattr(motore, "ultima", None) or {}).items() if k != "messaggio"}
-            self._riprova_dopo = self.orologio() + PAUSA_DOPO_GUASTO_S
+            self._riprova_dopo = self.orologio() + (PAUSA_WHISPER_S if str(e) == "whisper_giu" else PAUSA_DOPO_GUASTO_S)
         except Exception as e:  # noqa: BLE001 — qualunque cosa, vLLM riparte
             fine = f"errore_{type(e).__name__}"
             self._riprova_dopo = self.orologio() + PAUSA_DOPO_GUASTO_S
@@ -563,6 +551,13 @@ class Preparatore:
         if fine == "finito":
             self._finisci(d, c, st)
         return fine
+
+    def _whisper_vivo(self) -> bool:
+        """Una frase detta da Piper, che Whisper deve sentire: distingue Whisper giù da un audio che non si capisce."""
+        try:
+            return bool(self.ritrascrivi(self.voce_calliope.in_wav(S.PODCAST_INTRO)).strip())
+        except Exception:  # noqa: BLE001 — giù è giù
+            return False
 
     def _aspetta_memoria(self) -> str | None:
         """Dopo il fermo di vLLM la memoria deve bastare a MOSS: altrimenti si riparte subito."""
@@ -609,17 +604,14 @@ class Preparatore:
             m = self._cede()
             if m:
                 raise Ceduto(m)      # il pezzo fatto resta: la sessione dopo lo controlla senza rifarlo
-            testo = self.ritrascrivi(wav)
-            if not testo.strip() and ha_voce(wav):
-                # L'audio c'è e Whisper non ha sentito niente: è un guasto suo, non un pezzo sbagliato. Una volta adesso, poi
-                # alla sessione dopo; solo se continua vale un no (revisione della PR #393)
-                self.dorme(5.0)
+            try:
                 testo = self.ritrascrivi(wav)
-                if not testo.strip():
-                    x["vuoti"] = int(x.get("vuoti") or 0) + 1
-                    self._salva(c, firma, st)
-                    if x["vuoti"] <= VUOTI_MAX:
-                        raise Guasto("whisper_vuoto")
+            except Exception as e_w:  # noqa: BLE001 — l'audio resta da controllare
+                raise Guasto("whisper_giu") from e_w
+            # Vuoto su un audio con la voce: se Whisper sente la frase di prova è questo audio a non valere, altrimenti è lui
+            # (seconda revisione della PR #393). Il pezzo resta da controllare, e la sessione dopo non parte finché non torna
+            if not testo.strip() and ha_voce(wav) and not self._whisper_vivo():
+                raise Guasto("whisper_giu")
             e = confronta(p["battute"], testo)
             x["confronto"] = {k: e[k] for k in ("ok", "sbagliate", "numeri", "numeri_persi", "inventate", "parole",
                                                 "sentite", "copre")}

@@ -1073,7 +1073,7 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     anche. `studio_podcast`, «spenta» di serie (il numero si sistema all'unione).
     - **Il copione è quello del punto 57**, stessi cancelli, nessuna validazione umana. **Le battute senza fonte non sono testo del
       modello:** cenni da due elenchi chiusi, attaccati a una battuta con la fonte, che cadono con lei; nessun campo libero, e nessun cenno
-      che conferma (*[storico fino al 05/11: «Esatto.», «Giusto.», «Certo.»]*). Le domande
+      che conferma o afferma un nesso (*[storico fino al 05/11: «Esatto.», «Giusto.», «Certo.», «Perché?», «E quindi?»]*). Le domande
       sulla materia non ci sono: conterrebbero un nome. Il criterio del punto 57 sulle battute passa 3 giri su 3 (ostili 0 su 101,
       scambi e negazioni 1,0–1,7 %, vere 78–83 %).
     - **I titoli passano dagli stessi cancelli**, nel podcast e nel riassunto: il codice, un giudizio loro, il guardiano; altrimenti resta il
@@ -1086,8 +1086,8 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     - **Solo a macchina libera**: nessun turno, nessun lavoro, la voce ferma, memoria; un segno della voce toglie MOSS subito e il
       lavoro fatto resta. **Di notte** di serie, non per la sicurezza: un'interruzione costa 4 minuti a chi chiede un agente, e il primo
       turno dopo paga lo swap (8,6 s misurati).
-    - **Ogni pezzo si ritrascrive e si confronta col testo di prima della pulizia**, numeri col segno, nomi, ordinali e formule compresi: rigenerato un numero limitato di volte, poi a una
-      voce dicendolo; oltre metà, niente podcast. Whisper non è la verità: da solo sbaglia 1 frase su 78.
+    - **Il controllo dell'audio risponde a una domanda sola: MOSS ha detto il copione, o ha saltato, ripetuto, storpiato?** Il significato è già deciso sul testo. Ogni pezzo si ritrascrive e si confronta: i numeri col segno frase per frase dal testo di prima della pulizia; i nomi e le formule che Whisper sente a modo suo non buttano il pezzo, quelli saltati sì (col criterio di prima 21 pezzi su 21 buttati, col nuovo 6, tutti con un difetto vero): rigenerato un numero limitato di volte, poi a una
+      voce dicendolo; oltre metà, niente podcast. Scambi come mitosi e meiosi non sono coperti: una voce non li fa, e nei giri veri non ce n'è.
     - **Due voci che non sono persone**: riferimenti generati con Piper, mai i campioni di MOSS, che sembrano personaggi pubblici.
     - **L'audio resta finché c'è la verifica**: non si rifà a richiesta, perché fermerebbe vLLM. Stessi permessi, prova aperta, firma
       e cancellazione del riassunto.

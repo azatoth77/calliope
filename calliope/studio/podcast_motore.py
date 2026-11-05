@@ -75,6 +75,13 @@ def _esegui(argv: list[str], timeout: float = 60.0) -> subprocess.CompletedProce
     return subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False)
 
 
+def _non_esiste(r) -> bool:
+    """Solo «No such container» vuol dire che non c'è (il testo vero del 05/11: «Error response from daemon: No such container», e
+    «error: no such object» con `inspect`, in minuscolo). Ogni altro errore, Docker giù per un momento compreso, non dice niente sul
+    container (seconda revisione della PR #393)."""
+    return r.returncode != 0 and "no such" in f"{getattr(r, 'stderr', '')}{getattr(r, 'stdout', '')}".lower()
+
+
 ALBERI = ("venv/moss",)      # un'impronta sola: migliaia di file che si controllano insieme
 
 
@@ -154,12 +161,14 @@ class ControlloVllm:
 
     def riavvia(self, tetto_s: float = RIPARTE_MAX_S) -> bool:
         """`docker start` (se è già acceso non fa niente) e l'attesa che risponda, entro `tetto_s`. Un container che non
-        c'è più non si aspetta: `sparito`."""
+        c'è più non si aspetta: `sparito`. Docker che non risponde non vuol dire questo: False, e si riprova."""
         self.sparito = False
         try:
             r = self.esegui(["docker", "start", self.container], timeout=60)
-            if r.returncode != 0 and self._inspect() is None:
+            if _non_esiste(r):
                 self.sparito = True
+                return False
+            if r.returncode != 0:
                 return False
         except (OSError, subprocess.SubprocessError):
             return False
@@ -208,11 +217,12 @@ class Ripresa:
     # ── la sessione ──
     def prenota(self, info: dict) -> None:
         """Da qui chi ha bisogno di vLLM aspetta: il segno su disco e `in_ripresa`, prima di fermare e prima dell'ultimo
-        controllo di chi ferma. Le impostazioni di adesso, per il confronto."""
+        controllo di chi ferma. Le impostazioni di adesso, per il confronto. Il segno prima di tutto: col disco pieno solleva e
+        niente resta acceso."""
         prima = self.vllm.impostazioni()
+        self._scrivi({**info, "quando": time.time(), "prima": prima})
         self._prima = prima
         self._fermo.set()
-        self._scrivi({**info, "quando": time.time(), "prima": prima})
 
     def disdici(self) -> None:
         """Non si ferma più: niente è stato toccato."""
@@ -336,6 +346,8 @@ class Ripresa:
 def togli_container(esegui=_esegui, nome: str = CONTAINER_MOSS) -> None:
     """Solo il nostro container, per il suo nome esatto. Se resta, `Guasto`: ignorarlo lascerebbe MOSS accanto a vLLM."""
     esegui(["docker", "rm", "-f", nome], timeout=60)
+    # Solo se Docker dice che c'è: su un messaggio che non si riconosce vLLM non deve restare fermo per sempre (è successo sul
+    # banco del 05/11). Con Docker giù anche `docker start` fallisce, il segno resta e si riprova
     if esegui(["docker", "inspect", "-f", "{{.State.Running}}", nome]).returncode == 0:
         raise Guasto("moss_non_tolto")
 
