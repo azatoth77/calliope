@@ -215,14 +215,15 @@ for t, atteso in (("Il cloro forma lo ione Cl- in acqua.", "Cl meno"), ("Lo ione
                   ("Si ha 5-3=2.", "cinque meno tre uguale due"), ("Il carbonio-14 decade.", "carbonio quattordici"),
                   ("L'uranio-235 è fissile.", "uranio duecentotrentacinque"), ("La vitamina B-12 serve.", "B dodici"),
                   ("Vale 3x-5 in tutto.", "3x meno cinque"), ("Il termine n-1 cresce.", "n meno uno"), ("Vale y=2x-3 sempre.", "y uguale 2x meno tre"),
-                  ("Si prende x-2 ogni volta.", "x meno due"), ("Si prende 2n-2 ogni volta.", "2n meno due"), ("Mancano T-5 secondi.", "T meno cinque"),
+                  ("Si prende x-2 ogni volta.", "x meno due"), ("Si prende 2n-2 ogni volta.", "2n meno due"), ("Vale T-5=3 qui.", "T meno cinque uguale tre"),
                   ("Risolvi 3x-5=10 per ora.", "3x meno cinque uguale dieci"), ("Il Na-23 è stabile.", "Na ventitré"),
                   ("Dalle pag. 3-5 si legge.", "3".replace("3", "tre a cinque")), ("Durò 3-5 anni.", "tre a cinque"), ("Dal 1519-1521 viaggiò.", "a millecinquecentoventuno"),
                   ("Lo ione Na+ è positivo.", "Na più")):
     verifica(f"«{t}» → «{atteso}»", atteso in P.detto(t), P.detto(t))
     verifica(f"…e si può dire: «{t}»", P.fedele(t), f"{P.detto(t)} {P.valori_di(t)} {P.valori_di(P.detto(t))}")
 for t in ("Il 2-metilpropano è un gas.", "Il modello 3-D cade.", "Pre- e post-bellico.", "Il rapporto 5-3 cala.",
-          "Il risultato di 3-5 è negativo.", "Il legame C-H è forte.", "La formula CnH2n-2 è generale."):
+          "Il risultato di 3-5 è negativo.", "Il legame C-H è forte.", "La formula CnH2n-2 è generale.", "Il carro T-34 avanzò.",
+          "Mancano T-5 secondi."):
     verifica(f"contrario: un trattino che non si sa dire scarta la battuta: «{t}»", not P.fedele(t), P.detto(t))
 for t, atteso in (("Dal 1519-1521 viaggiò.", "millecinquecentodiciannove a millecinquecentoventuno"),
                   ("Sono anni-luce.", "anni luce"), ("Vale 1 metro.", "un metro")):
@@ -385,6 +386,12 @@ verifica("«Boh.» per una frase di soli nomi", not e["ok"], str(e))
 e = PA.confronta(batt("Colombo esplorò le isole e le coste dell'America centrale e poi tornò in Spagna con molte ricchezze."),
                  "Colombo esplorò le isole e le coste dell'America centrale e poi.")
 verifica("una frase troncata non passa", not e["ok"] and "coda" in e["frasi"][0]["motivi"], str(e))
+e = PA.confronta(batt("Il fiume Aurelio sfocia lentamente nel lago salato."), "Il fiume Aurelio sfocia lentamente nel.")
+verifica("quarta revisione: la fine persa, anche se resta una parola vuota", not e["ok"] and "coda" in e["frasi"][0]["motivi"], str(e))
+e = PA.confronta(batt("Il fiume nasce lontano e sfocia a Santarello."), "Il fiume nasce lontano e sfocia a Santarelo.")
+verifica("contrario: l'ultima è un nome che somiglia nel suono", e["ok"], str(e))
+e = PA.confronta(batt("La variazione d=a-b è meno grande del previsto in questo caso."), "La variazione d=a-b è grande del previsto in questo caso.")
+verifica("quarta revisione: in una frase con un'operazione «è meno» saltato non passa", not e["ok"] and "negazione" in e["frasi"][0]["motivi"], str(e))
 e = PA.confronta(batt("Isabeau si rifugiò a Ostrovala con il cancelliere."), "Isabeo si rifugiò a Ostrovalla con il cancelliere.")
 verifica("contrario: un nome sentito male, simile nel suono, va", e["ok"], str(e))
 print("— non coperto, di proposito: il significato è già deciso sul testo")

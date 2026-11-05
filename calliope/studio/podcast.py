@@ -280,8 +280,9 @@ _NUMERO = re.compile(r"(?<![\w,.])(\d{1,3}(?:[. ]\d{3})+|\d+)(?:,(\d+))?(?![\w])
 # e `fedele` scarta la battuta. Prima si toglieva ovunque, e «Cl-», «OH-», «d=a-b» perdevano il meno senza che nessuno lo vedesse.
 _TERMINE = r"(?:\d*[A-Za-z]|\d+(?:[.,]\d+)?)"
 _OPERAZIONE = re.compile(rf"(?<![\w,.])({_TERMINE})\s*[-−–]\s*(?={_TERMINE}(?![A-Za-z0-9]))")
-# Algebra senza uguale: «3x-5», «n-1», «a-b», «T-5». Due maiuscole sole («C-H») sono un legame: non si sa dire, si scarta
-_ALGEBRA = re.compile(r"(?<![\w,.])(?:\d*[a-z]-(?:\d*[a-z]|\d+)|\d*[a-z]\s+[-−–]\s+\d*[a-z]|[b-df-hj-np-z]\s+[-−–]\s+\d+|[A-Z]-\d+)"
+# Algebra senza uguale: «3x-5», «n-1», «a-b». Una maiuscola col numero («T-34», un carro) o due («C-H», un legame) non si sa cos'è: si
+# scarta, e «T-5» è «T meno cinque» solo in un'operazione con l'uguale
+_ALGEBRA = re.compile(r"(?<![\w,.])(?:\d*[a-z]-(?:\d*[a-z]|\d+)|\d*[a-z]\s+[-−–]\s+\d*[a-z]|[b-df-hj-np-z]\s+[-−–]\s+\d+)"
                       r"(?![A-Za-z0-9])")      # non «a -196» né «a - 196»: lì «a» è una preposizione
 # Il nome col numero: un nome intero di almeno due lettere («carbonio-14», «Na-23»), o una sigla di un elenco chiuso. Con una lettera
 # sola è una sottrazione (terza revisione della PR #393)

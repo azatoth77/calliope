@@ -55,7 +55,6 @@ ATTESA_MEMORIA_S = 60.0       # dopo il fermo di vLLM la memoria torna in qualch
 ANCORA_OGNI_S = 5.0
 INVENTATE_POCHE = 4           # in un pezzo corto una manciata non è una percentuale
 SUONA_MIN = 0.55              # un nome sentito male, dal banco del 05/11: «Isabeau» e «Isabeo», non «Cortés» e «ragazzo»
-ULTIME_PAROLE = 3             # almeno una di queste, per battuta: la coda tronca
 PAUSA_WHISPER_S = 1800.0      # Whisper giù: si riguarda fra un po', senza toccare vLLM
 PAUSA_DOPO_GUASTO_S = 3600.0
 PAUSA_FRA_SESSIONI_S = 1800.0
@@ -72,6 +71,9 @@ o ma che si ne ci d c ha hanno e è""".split())       # «ha» e «a» Whisper n
 # Una parola sola che ribalta la frase, se una voce la salta o la storpia: «molto meno calda» → «molto meravigliosa», «a meno 120» →
 # «almeno 120» (visti su MOSS). Non è una lista di significati: sono quelle che la parte ritrovata non vede
 _NEGAZIONI = frozenset(("non", "mai", "nessun", "nessuno", "nessuna", "senza", "meno", "piu"))
+
+
+_UNITA_DETTE = frozenset("gradi grado metri metro chilometri chilometro centimetri grammi litri kelvin secondi minuti ore anni giorni".split())
 
 
 def _pulito(testo: str) -> str:
@@ -221,6 +223,9 @@ def confronta(battute: list[dict], trascritto: str) -> dict:
             continue
         idx = [k for k, d in enumerate(dove) if d == i]
         testo = b.get("testo") or b.get("detto") or ""
+        # Il tratto di audio di questa battuta: dopo l'ultima parola ritrovata di quelle prima, fino alla prima di quelle dopo
+        da = max((posto[k] for k in range(len(att)) if dove[k] < i and posto[k] is not None), default=-1) + 1
+        a_ = min((posto[k] for k in range(len(att)) if dove[k] > i and posto[k] is not None), default=len(sent))
         # I nomi e le formule sentiti in un altro modo stanno fuori dal conto; saltati, o con al posto loro tutt'altro, dentro
         nomi, chim, scritte = fragili(testo, trascritto)
         fr = nomi | chim
@@ -229,24 +234,25 @@ def confronta(battute: list[dict], trascritto: str) -> dict:
 
         def e_segno(k: int) -> bool:
             """Il «meno» o il «più» di uno ione o di un'operazione, subito dopo il suo termine: gli altri contano."""
-            return (att[k] in ("meno", "piu") and k > idx[0] and (att[k - 1] in fr or (op and (att[k - 1][:1].isdigit() or len(att[k - 1]) == 1))))
+            return (att[k] in ("meno", "piu") and k > idx[0] and (att[k - 1] in fr or (op and (att[k - 1][:1].isdigit() or len(att[k - 1]) == 1) and k + 1 < len(att)
+                                                       and dove[k + 1] == i and (att[k + 1][:1].isdigit() or len(att[k + 1]) == 1))))
 
         fuori = {k for k in idx if not trovate[k] and (
             att[k] in scritte or e_segno(k)
             or (att[k] in nomi and _suona(att[k], blocco[k]))
-            or (att[k] in chim and _e_formula_sentita(blocco[k], chiavi)))}
+            or (att[k] in chim and _e_formula_sentita(sent[da:a_], chiavi)))}
         piene = [k for k in idx if (att[k] not in _VUOTE or att[k] in _NEGAZIONI) and k not in fuori]
         negs = [k for k in idx if att[k] in _NEGAZIONI and k not in fuori]
         # Il resto della frase deve esserci, e la sua fine deve tornare: la coda tronca è il difetto vero di MOSS
         resto = [k for k in piene if att[k] not in fr]
         contenuto = [k for k in idx if att[k] not in _VUOTE]
-        ultime = contenuto[-ULTIME_PAROLE:]
-        coda_ok = any(trovate[k] or k in fuori for k in ultime) if ultime else True
+        # L'ultima parola piena: ritrovata, simile, o un nome o una formula sentiti in un altro modo. Un'unità dopo un numero non conta:
+        # «-196 gradi» si sente «-196°C», e il numero ha il suo controllo
+        if len(contenuto) > 1 and att[contenuto[-1]] in _UNITA_DETTE and att[contenuto[-2]].lstrip("-")[:1].isdigit():
+            contenuto = contenuto[:-1]
+        coda_ok = (trovate[contenuto[-1]] or contenuto[-1] in fuori) if contenuto else True
         resto_ok = any(trovate[k] for k in resto) if resto else True
         copre = (sum(trovate[k] for k in piene) / len(piene)) if piene else 1.0
-        # Il tratto di audio di questa battuta: dopo l'ultima parola ritrovata di quelle prima, fino alla prima di quelle dopo
-        da = max((posto[k] for k in range(len(att)) if dove[k] < i and posto[k] is not None), default=-1) + 1
-        a_ = min((posto[k] for k in range(len(att)) if dove[k] > i and posto[k] is not None), default=len(sent))
         tratto = _valori_sentiti(sent[da:a_])
         persi = 0
         for v in P.valori_di(testo):
