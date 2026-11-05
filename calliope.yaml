@@ -1150,10 +1150,11 @@ studio:
   studio_podcast: spenta
   # La cartella di MOSS (pesi, codice e ambiente a versione fissata); vuota: ~/calliope-motore/moss
   studio_podcast_moss: ''
-  # Le due voci, generate da due voci di Piper: mai una persona reale, mai i campioni di MOSS. giorgio è quella
-  # ascoltata sul banco del 04/11, ma ha una licenza ambigua (voices/LEGGIMI.md, nota 3): per uso domestico privato
+  # Le due voci, generate da due voci di Piper: mai una persona reale, mai i campioni di MOSS. serena è la scelta
+  # di Dario all'ascolto del 05/11 (dati sintetici, CC-BY-4.0). Se manca il podcast lo dice e non parte, senza ripieghi;
+  # giorgio non vale più: viene da una persona vera, con una licenza ambigua (voices/LEGGIMI.md, nota 3)
   studio_podcast_voce_a: voices/it_IT-paola-medium.onnx
-  studio_podcast_voce_b: voices/it_IT-giorgio-medium.onnx
+  studio_podcast_voce_b: voices/it_IT-serena-high.onnx
   # Quando può fermare vLLM (ore locali; vuota: a ogni ora). Non per la sicurezza, che è nei controlli: di giorno una
   # sessione interrotta costa 4 minuti di vLLM che riparte a chi chiede un agente, e il primo turno dopo può essere
   # più lento (lo swap del banco del 04/11)

@@ -1121,6 +1121,92 @@ verifica("…e si riprova fra un'ora, non a ogni giro", m.prep.passo() == "pausa
 m = Mondo("riferimenti")
 m.prep.crea_motore = lambda cede: (_ for _ in ()).throw(OSError("voce"))
 verifica("nemmeno i riferimenti: vLLM non si tocca", m.prep.passo() == "motore_OSError" and not m.d.azioni())
+
+print("— le due voci: paola e serena, senza ripieghi (05/11, l'ascolto di Dario)")
+_cf = Config()
+verifica("di serie paola e serena-high", _cf.studio_podcast_voce_a.endswith("it_IT-paola-medium.onnx")
+         and _cf.studio_podcast_voce_b.endswith("it_IT-serena-high.onnx"))
+verifica("il banco di serie con serena", "giorgio" not in (QUI.parent / "prove/manuali/banco_podcast.py").read_text(encoding="utf-8"))
+verifica("il file d'esempio con serena", "studio_podcast_voce_b: voices/it_IT-serena-high.onnx"
+         in (QUI.parent / "calliope.yaml").read_text(encoding="utf-8"))
+verifica("l'attribuzione di serena", "committa" in (QUI.parent / "TERZE-PARTI.md").read_text(encoding="utf-8"))
+
+
+class _VocePiperFinta:
+    fatte = 0
+
+    def __init__(self, voce, pronuncia=None):
+        self.voce = voce
+
+    def in_wav(self, testo):
+        type(self).fatte += 1
+        return PA.in_wav_byte(b"\0\0" * 2205, 22050)
+
+
+def _voci_su_disco(nome, *voci):
+    c = TMP / nome
+    c.mkdir(parents=True, exist_ok=True)
+    for v in voci:
+        (c / f"{v}.onnx").write_bytes(b"x")
+        (c / f"{v}.onnx.json").write_text("{}", encoding="utf-8")
+    return c
+
+
+def _mondo_voci(nome, *voci, voce_b="it_IT-serena-high.onnx"):
+    """Il motore vero con le voci su disco: solo i controlli sui riferimenti, MOSS non è sul disco e non serve arrivarci."""
+    m = Mondo(nome)
+    c = _voci_su_disco(nome + "-voci", *voci)
+    cfg = m.st.cfg
+    cfg.studio_podcast_voce_a, cfg.studio_podcast_voce_b = str(c / "it_IT-paola-medium.onnx"), str(c / voce_b)
+    m.chieste = []
+    m.prep.crea_motore = PA.crea_motore_moss(cfg, lambda p, m=m: m.chieste.append(Path(p).stem) or object())
+    return m, c
+
+
+_vero_vp = PA.S.VocePiper
+PA.S.VocePiper = _VocePiperFinta
+try:
+    registro.clear()
+    m, c = _mondo_voci("senza-serena", "it_IT-paola-medium", "it_IT-giorgio-medium")
+    verifica("manca serena: il podcast non parte e vLLM non si tocca", m.prep.passo() == "voce_mancante"
+             and not m.d.azioni() and not m.r.segno.exists() and not m.r.in_ripresa(), str(m.d.azioni()))
+    verifica("…e non torna a giorgio, che pure è sul disco", "it_IT-giorgio-medium" not in m.chieste, str(m.chieste))
+    verifica("…lo dice, con la voce e come installarla", any("manca la voce it_IT-serena-high" in r
+             and "--installa voce_serena_alta" in r for r in registro), str(registro[-3:]))
+    verifica("…e nei conti", m.prep.misure["voce_non_usabile"] == "it_IT-serena-high")
+    verifica("…e si riprova fra un'ora, non a ogni giro", m.prep.passo() == "pausa" and not m.d.azioni())
+
+    m, c = _mondo_voci("senza-paola", "it_IT-serena-high")
+    verifica("manca paola: lo stesso", m.prep.passo() == "voce_mancante" and not m.d.azioni() and not m.chieste)
+
+    m, c = _mondo_voci("serena-senza-json", "it_IT-paola-medium", "it_IT-serena-high")
+    (c / "it_IT-serena-high.onnx.json").unlink()
+    verifica("il modello senza il suo .json: manca", m.prep.passo() == "voce_mancante" and not m.d.azioni())
+
+    m, c = _mondo_voci("giorgio-a-mano", "it_IT-paola-medium", "it_IT-giorgio-medium", voce_b="it_IT-giorgio-medium.onnx")
+    verifica("giorgio messo a mano nel file locale: non vale", m.prep.passo() == "voce_non_ammessa"
+             and not m.d.azioni() and "it_IT-giorgio-medium" not in m.chieste, str(m.chieste))
+
+    _VocePiperFinta.fatte = 0
+    m, c = _mondo_voci("voci-ci-sono", "it_IT-paola-medium", "it_IT-serena-high")
+    mot = PA.crea_motore_moss(m.st.cfg, lambda p, m=m: m.chieste.append(Path(p).stem) or object())(lambda: None)
+    verifica("con le due voci: i due riferimenti giusti", mot.rif_a.name == "it_IT-paola-medium.wav"
+             and mot.rif_b.name == "it_IT-serena-high.wav" and m.chieste == ["it_IT-paola-medium", "it_IT-serena-high"], str(m.chieste))
+    verifica("il riferimento è la frase fissa, generata una volta", _VocePiperFinta.fatte == 2)
+    PA.crea_motore_moss(m.st.cfg, lambda p, m=m: m.chieste.append(Path(p).stem) or object())(lambda: None)
+    verifica("…e alla sessione dopo non si rigenera", _VocePiperFinta.fatte == 2)
+    (c / "it_IT-serena-high.onnx").unlink()
+    verifica("voce tolta col riferimento rimasto: si dice lo stesso", m.prep.passo() == "voce_mancante" and not m.d.azioni())
+
+    registro.clear()
+    m, c = _mondo_voci("avvio-senza-voce", "it_IT-paola-medium")
+    m.st.cfg.stt_url = "http://127.0.0.1:1/v1"
+    m.st.lettore = types.SimpleNamespace(guardia=None, occupato=lambda: False)
+    pp = PA.prepara(m.st, m.r, None, types.SimpleNamespace(voce_per=lambda p: object()), log=registro.append, avvia=False)
+    verifica("all'avvio si dice subito quale manca", pp is not None and any("manca la voce it_IT-serena-high" in r for r in registro)
+             and not any("paola" in r for r in registro), str(registro))
+finally:
+    PA.S.VocePiper = _vero_vp
 m = Mondo("memoria-giri")
 def _fm(wav, m=m):
     m.mem = 3000 if wav in m.detti else m.mem
