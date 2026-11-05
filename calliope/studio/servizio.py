@@ -370,7 +370,7 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
             return None
         from .. import provenienza
         out = []
-        for i, p in enumerate(self.pagine(chi, vid), 1):
+        for i, p in enumerate(self.pagine_per_chi_studia(vid, self.pagine(chi, vid)), 1):
             if p["stato"] != "letta" or not p["testo"]:
                 continue
             # Il testo di un PDF o di un file importato (#298) è un allegato; quello dell'OCR una foto
@@ -1523,6 +1523,59 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
             if t.get("pagine_fuori") != sorted(ids):
                 t["pagine_fuori"] = sorted(ids)
                 self.dati.scrivi("UPDATE studio_verifiche SET firme_parti = ? WHERE id = ?", (json.dumps(t), int(vid)))
+
+    def segna_terreno(self, vid, verdetti: dict):
+        """Il giudizio del terreno per pagina, su disco: la firma del testo e i numeri delle frasi fermate, mai il testo."""
+        with self.dati.lock:
+            r = self.dati.uno("SELECT firme_parti FROM studio_verifiche WHERE id = ?", (int(vid),))
+            try:
+                t = json.loads((r or {}).get("firme_parti") or "{}")
+            except ValueError:
+                t = {}
+            t = t if isinstance(t, dict) else {}
+            if {**(t.get("terreno") or {}), **verdetti} != t.get("terreno"):
+                t["terreno"] = {**(t.get("terreno") or {}), **verdetti}
+                self.dati.scrivi("UPDATE studio_verifiche SET firme_parti = ? WHERE id = ?", (json.dumps(t), int(vid)))
+
+    def _verdetti_terreno(self, vid) -> dict:
+        r = self.dati.uno("SELECT firme_parti FROM studio_verifiche WHERE id = ?", (int(vid),))
+        try:
+            x = json.loads((r or {}).get("firme_parti") or "{}").get("terreno")
+        except (ValueError, AttributeError):
+            return {}
+        return x if isinstance(x, dict) else {}
+
+    def pagine_per_chi_studia(self, vid, pagine: list[dict]) -> list[dict]:
+        """Le pagine come Calliope può dirle o proporle a chi studia (#384): con la generazione attiva, senza le frasi
+        fermate dal terreno; una pagina fuori o non ancora giudicata non ha testo, e `_saltata` dice perché. La foto la
+        persona la vede comunque: qui è ciò che dice Calliope. Con la generazione spenta il terreno non gira: come prima."""
+        if not self.generazione_attiva():
+            return pagine
+        from . import genera as G
+        from . import voce_sicura as VS
+        verdetti = self._verdetti_terreno(vid)
+        out = []
+        for p in pagine:
+            if p.get("stato") != "letta" or not str(p.get("testo") or "").strip():
+                out.append(p)
+                continue
+            testo, perche = VS.testo_da_dire(p["testo"], verdetti.get(str(p["id"])), G.frasi_di)
+            out.append({**p, "testo": testo, "_saltata": perche} if perche else {**p, "testo": testo})
+        return out
+
+    def verifiche_per_terreno(self) -> list[dict]:
+        """La prima verifica con una pagina letta senza un giudizio valido del terreno: nessun altro passo la guarderebbe
+        se la sua generazione è già fatta, e finché non è giudicata non si dice."""
+        if not self.generazione_attiva() or not self.dati.scrivibile:
+            return []
+        from . import argomenti as A
+        from . import voce_sicura as VS
+        for v in self.dati.tutti("SELECT * FROM studio_verifiche ORDER BY id"):
+            pagine = self._pagine_di(v["id"])
+            verdetti = self._verdetti_terreno(v["id"])
+            if any((verdetti.get(str(p["id"])) or {}).get("firma") != VS.firma_testo(p["testo"]) for p in A.lette(pagine)):
+                return [{**v, "_pagine": pagine}]
+        return []
 
     def pagine_fuori_di(self, vid) -> list[str]:
         """I nomi delle pagine non usate per preparare il materiale («p. 12», «foto 3»): mai testo né motivo."""

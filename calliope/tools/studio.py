@@ -1368,6 +1368,11 @@ def _pagina_leggi(ctx: ToolContext, pagina: str = "", verifica=None, materia: st
         frase = lett.get("frase") or ("Questa pagina non l'ho ancora letta." if p["stato"] in (
             "da_leggere", "in_lettura") else "Questa pagina non sono riuscita a leggerla.")
         return _f(frase, ok=False)
+    # Ciò che il terreno ferma non arriva nemmeno al modello che risponde a voce (#384)
+    p = svc.pagine_per_chi_studia(v["id"], [p])[0]
+    if p.get("_saltata"):
+        return _f("Questa pagina non l'ho usata." if p["_saltata"] == "fuori" else "Questa pagina non è ancora pronta.",
+                  ok=False)
     num = P.numero_leggibile(p["numero"])
     # Il testo nudo: Brain lo mette nella busta della fonte «foto» (politica.CLASSI) con la
     # quarantena, e la conversazione resta contaminata finché c'è (decisione 0035, punto 6)

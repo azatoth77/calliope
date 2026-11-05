@@ -833,7 +833,8 @@ class Lettore:
         loro, su una verifica che si è aperta da sola, ognuno col suo interruttore. Dopo gli argomenti e prima delle pagine
         di un'altra verifica. Le domande prima delle mappe (#384): «mi interroghi?» arriva subito dopo
         la scansione, e le mappe sono tante richieste."""
-        return [("carte", self.studio.verifiche_per_carte, self.genera_carte),
+        return [("terreno", self.studio.verifiche_per_terreno, self.passo_terreno),
+                ("carte", self.studio.verifiche_per_carte, self.genera_carte),
                 ("domande", self.studio.verifiche_per_domande, self.genera_domande),
                 # Un passo alla volta (la generale o una parte): fra un passo e l'altro passano
                 # prima gli argomenti e le carte di una verifica nuova (#385)
@@ -1524,7 +1525,9 @@ class Lettore:
                 m["token_out"] += int(r.get("eval") or 0)
                 cache[frase] = VS.passa(r.get("content"))
             return cache[frase]
-        pagine, conti = VS.terreno(v["_pagine"], giudica, G.frasi_di)
+        verdetti: dict = {}
+        pagine, conti = VS.terreno(v["_pagine"], giudica, G.frasi_di, verdetti)
+        self.studio.segna_terreno(v["id"], verdetti)
         for k, n in conti.items():
             m[f"terreno_{k}"] = m.get(f"terreno_{k}", 0) + n
         if conti["nocive"]:
@@ -1535,6 +1538,29 @@ class Lettore:
             int(p["id"]) for p in pagine
             if p is not prima[int(p["id"])] and p.get("testo") == prima[int(p["id"])].get("testo")])
         return {**v, "_pagine": pagine}
+
+    def passo_terreno(self, v: dict) -> str:
+        """Il giudizio di una verifica per ciò che si dice a chi studia. Un guasto non scrive niente: la pagina resta non
+        giudicata, quindi non si dice, e si riprova."""
+        vid = int(v["id"])
+        m = self.misure.setdefault("terreno", {"token_in": 0, "token_out": 0})
+        try:
+            self._terreno(v, m)
+        except Ceduta:
+            return "ceduta"
+        except _Giu:
+            return "giu"
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            attesa = self._attendi_errore()
+            self._registra(f"verifica {vid}: terreno, errore del server ({e}), riprovo fra {attesa:.0f} s")
+            return "errore_server"
+        except Exception as e:  # noqa: BLE001
+            self.misure["errori"] += 1
+            self._registra(f"verifica {vid}: terreno non riuscito ({type(e).__name__})")
+            self._attendi_errore()
+            return "errore"
+        return "fatto"
 
     def _guida_ferma(self, grezzi: dict, testo: str, persona, m: dict) -> str | None:
         """Il primo avviso dei cancelli sulla guida di un esercizio, o None."""

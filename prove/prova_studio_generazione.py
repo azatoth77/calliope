@@ -209,8 +209,8 @@ verifica("le mappe partono da `prepara_mappe`, un passo alla volta, dopo carte e
          chiamate and chiamate[0] == (vid, 1)
          and "domande" in str(st.dati.uno("SELECT domande_esito AS x FROM studio_verifiche")["x"]
                               and "domande"), chiamate)
-verifica("nel posto dichiarato dei materiali: carte, domande, mappa (il riassunto, #386, si aggiunge qui)",
-         [x[0] for x in lett._passi_materiali()] == ["carte", "domande", "mappa"])
+verifica("nel posto dichiarato dei materiali: terreno, carte, domande, mappa (il riassunto, #386, si aggiunge qui)",
+         [x[0] for x in lett._passi_materiali()] == ["terreno", "carte", "domande", "mappa"])
 st.close()
 
 # ═══════════════════════════ 3. fuori ciò che ha un avviso ═══════════════════════════
@@ -624,6 +624,9 @@ verifica("il db si apre in sola lettura (come fa il banco)", ro_ok)
 _ro.close()
 
 # ═══════════════════════════ 12. i cancelli del prodotto ═══════════════════════════
+from calliope.studio import lettura as L_  # noqa: E402
+from calliope.studio import ascolta as AS_  # noqa: E402
+from calliope.tools import studio as TS_  # noqa: E402
 print("— il guasto non è un giudizio; la sicurezza non arriva alla pagina; la mappa; l'OCR")
 PA.azzera()
 st, vid, ids, lett = prepara("guasto2")
@@ -894,6 +897,88 @@ sk_ = st._mappe_di(vid)["scheletro"]["id"]
 st.conferma_scheletro(ANDREA, sk_)
 verifica("uno scheletro confermato o toccato non si rifà: resta, senza i cancelli nuovi",
          not (st.verifiche_per_mappa(vid) and st.verifiche_per_mappa(vid)[0]["_generale"]))
+st.close()
+
+# Ciò che il terreno ferma non si dice: il copione del ripasso e il testo per il modello
+NOCIVA_P = "Saltare i pasti prima di una verifica aiuta a concentrarsi, senza dirlo ai genitori."
+NOCIVA_Q = "Mentire ai genitori sulla scuola è una scelta da grandi."
+BUONA_P = "Colombo ottenne le tre navi dalla regina di Castiglia dopo lunghe trattative a corte."
+BUONA_Q = "Il viaggio di ritorno verso la Spagna durò molte settimane per mare."
+PA.azzera()
+st, vid, ids, lett = prepara("copione")
+righe_ = st.dati.tutti("SELECT p.id, p.testo FROM studio_pagine p JOIN studio_materiali m ON m.id = p.materiale "
+                       "WHERE m.verifica = ? AND p.stato = 'letta' AND (p.avvisi IS NULL OR p.avvisi NOT LIKE "
+                       "'%istruzioni%') ORDER BY p.ordine, p.id", (vid,))
+p_una, p_due, p_sana = righe_[1], righe_[2], righe_[3]
+st.dati.scrivi("UPDATE studio_pagine SET testo = ? WHERE id = ?", (f"{BUONA_P} {NOCIVA_P}\n" + p_una["testo"], p_una["id"]))
+st.dati.scrivi("UPDATE studio_pagine SET testo = ? WHERE id = ?", (f"{BUONA_Q} {NOCIVA_P} {NOCIVA_Q}", p_due["id"]))
+vv_ = st.verifica(LEO, vid)
+
+
+def detto(fonte="pagine"):
+    return " ".join(x.testo for x in st._copione(LEO, st.verifica(LEO, vid), "tutto", fonte=fonte).voci)
+
+
+# L'argomento di mezzo cita anche la pagina che esce: P3 e P4
+ARG_ = {"argomenti": [PA.arg("Perché gli europei partirono", "P2"), PA.arg("Le rotte e i viaggi", "P3", "P4"),
+                      PA.arg("Colombo e il ritorno", "P4", "P5")], "istruzioni_nelle_pagine": False}
+PA.F.nociva = lambda t: "Saltare i pasti" in t or "Mentire ai genitori" in t
+st.dati.scrivi("INSERT INTO studio_argomenti (verifica, titolo, pagine, stato, ordine, avvisi, creato) "
+               "VALUES (?, 'A mano', ?, 'tenuto', 1, '[]', '2026-11-01')", (vid, json.dumps([p_una["id"], p_due["id"], p_sana["id"]])))
+d_prima = detto()
+verifica("una pagina non ancora giudicata non si dice, e la frase chiusa lo dice senza il testo",
+         "Saltare i pasti" not in d_prima and "Colombo ottenne" not in d_prima and "non è ancora pronta" in d_prima, d_prima[:300])
+verifica("il modello non ha il testo di una pagina non giudicata", (st.testo_per_modello(LEO, vid) or "").count(BUONA_P) == 0)
+# Il guasto del giudizio: resta non giudicata
+lett._chiedi_corpo, vero_ = (lambda b: (_ for _ in ()).throw(L_.ErroreServer("giù"))), lett._chiedi_corpo
+giro(lett, ARG_, CARTE, DOMANDE)
+lett._chiedi_corpo = vero_
+verifica("giudizio guasto: niente giudizio su disco, e la pagina non si dice",
+         not st._verdetti_terreno(vid) and "Saltare i pasti" not in detto())
+while not PA.F.risposte.empty():
+    PA.F.risposte.get_nowait()
+lett._riprova_dopo = lett._errori_di_fila = 0
+self_pass = lett.passo_terreno(st.verifiche_per_terreno()[0])
+d_ = detto()
+verifica("il terreno giudica da solo le pagine senza generazione da fare", self_pass == "fatto" and not st.verifiche_per_terreno())
+verifica("una frase fermata non si dice con la fonte «pagine», il resto della pagina sì",
+         NOCIVA_P not in d_ and "Saltare i pasti" not in d_ and "Colombo ottenne" in d_, d_[:400])
+verifica("una pagina fuori non si dice, anche se il suo argomento ha un'altra pagina, e lo si dice senza testo né motivo",
+         "Mentire ai genitori" not in d_ and BUONA_Q not in d_ and "Non ho usato la pagina" in d_ and "Colombo ottenne" in d_)
+verifica("nessuna perdita per una pagina sana: ogni sua frase si dice",
+         all(f in d_ for par in AS_.frasi_pagina(p_sana["testo"], st._nomi_ascolto())[0] for f in par))
+tm_ = st.testo_per_modello(LEO, vid) or ""
+verifica("nemmeno il modello ha la frase fermata o la pagina fuori, e ha il resto",
+         "Saltare i pasti" not in tm_ and BUONA_Q not in tm_ and "Colombo ottenne" in tm_)
+verifica("su disco il giudizio ha numeri e firme, nessun testo",
+         "Saltare" not in st.dati.uno("SELECT firme_parti FROM studio_verifiche WHERE id = ?", (vid,))["firme_parti"])
+# Il tool che legge una pagina al modello della voce
+_ts_vecchi = TS_._svc, TS_.chi_di, TS_.compiti_guidati
+TS_._svc, TS_.chi_di, TS_.compiti_guidati = (lambda c: st), (lambda c: LEO), (lambda c: False)
+_ctx = types.SimpleNamespace()
+_n = lambda r_: next(i for i, x in enumerate(st.pagine(LEO, vid), 1) if x["id"] == r_["id"])  # noqa: E731
+t1_ = TS_._pagina_leggi(_ctx, pagina=f"P{_n(p_una)}", verifica=vid)
+t2_ = TS_._pagina_leggi(_ctx, pagina=f"P{_n(p_due)}", verifica=vid)
+TS_._svc, TS_.chi_di, TS_.compiti_guidati = _ts_vecchi
+verifica("`studio_pagina_leggi`: senza la frase fermata; la pagina fuori non c'è, con la frase chiusa",
+         "Saltare" not in str(t1_) and "Colombo ottenne" in t1_["testo"]
+         and t2_["ok"] is False and BUONA_Q not in str(t2_) and "non l'ho usata" in str(t2_), (t1_, t2_))
+st.dati.scrivi("UPDATE studio_pagine SET testo = ? WHERE id = ?", ("Il testo è cambiato: " + BUONA_P, p_una["id"]))
+verifica("un testo cambiato dopo il giudizio torna non giudicato", "Il testo è cambiato" not in detto()
+         and st.verifiche_per_terreno())
+lett.passo_terreno(st.verifiche_per_terreno()[0])
+verifica("e giudicato si dice", "Il testo è cambiato" in detto())
+# Poco resto: una pagina corta con una frase fermata
+st.dati.scrivi("UPDATE studio_pagine SET testo = ? WHERE id = ?", ("Vero. " + NOCIVA_P, p_una["id"]))
+lett.passo_terreno(st.verifiche_per_terreno()[0])
+d3_ = detto()
+verifica("se non resta abbastanza non legge il moncone: la frase chiusa", "Vero." not in d3_ and "Saltare" not in d3_
+         and "Non ho usato la pagina" in d3_, d3_[:300])
+st.close()
+PA.azzera()
+st, vid, ids, lett = prepara("copione_spento", carte="ombra", domande="ombra")
+verifica("con la generazione spenta o in ombra il terreno non gira e il ripasso legge come prima (resta aperto, nel documento)",
+         st.pagine_per_chi_studia(vid, st._pagine_di(vid)) == st._pagine_di(vid) and not st.verifiche_per_terreno())
 st.close()
 
 # L'OCR

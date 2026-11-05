@@ -18,6 +18,7 @@ modello vede, e con troppe frasi nocive esce la pagina. Giudicate una per una, u
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 SISTEMA = (
@@ -50,28 +51,56 @@ def corpo(modello: str, testo: str) -> dict:
 
 # Quante frasi nocive fanno una pagina che non si usa: una può essere un falso allarme, e toglie solo sé stessa
 PAGINA_NOCIVE, PAGINA_QUOTA = 2, 0.2
+# Sotto questi caratteri, tolte le frasi fermate, una pagina non si legge: la voce non dice un moncone
+RESTO_MIN_CAR = 40
+# Perché una pagina non si dice a chi studia
+FUORI, NON_GIUDICATA = "fuori", "non_giudicata"
 
 
-def terreno(pagine: list[dict], giudica, frasi_di) -> tuple[list[dict], dict]:
+def firma_testo(testo) -> str:
+    return hashlib.sha256(str(testo or "").encode()).hexdigest()
+
+
+def testo_da_dire(testo, verdetto: dict | None, frasi_di) -> tuple[str | None, str | None]:
+    """(il testo che si può dire a chi studia, perché no). Dal giudizio del terreno salvato: solo la firma del testo e il
+    numero delle frasi fermate, mai il loro testo. Una pagina non giudicata, o cambiata dopo il giudizio, non si dice."""
+    if not isinstance(verdetto, dict) or verdetto.get("firma") != firma_testo(testo):
+        return None, NON_GIUDICATA
+    if verdetto.get("fuori"):
+        return None, FUORI
+    ferme = set(verdetto.get("ferme") or ())
+    if not ferme:
+        return testo, None
+    resto = "\n".join(f for i, f in enumerate(frasi_di(testo)) if i not in ferme)
+    return (resto, None) if len(resto) >= RESTO_MIN_CAR else (None, FUORI)
+
+
+def terreno(pagine: list[dict], giudica, frasi_di, verdetti: dict | None = None) -> tuple[list[dict], dict]:
     """(le pagine da dare al modello, {frasi, nocive, pagine_fuori}). `giudica(frase) -> True se passa`, un guasto risale.
     Una copia in memoria: le righe delle pagine e il testo per la lettura restano come sono. Una pagina con troppe frasi
     nocive ha l'avviso «istruzioni», come una con un messaggio per un assistente: non si usa. Solo conti."""
     from . import dati as D
     out, conti = [], {"frasi": 0, "nocive": 0, "pagine_fuori": 0}
+    verdetti = {} if verdetti is None else verdetti
     for p in pagine:
         testo = p.get("testo")
         if not testo or "istruzioni" in D.da_j(p.get("avvisi")):
+            if testo:
+                verdetti[str(p["id"])] = {"firma": firma_testo(testo), "fuori": True, "ferme": []}
             out.append(p)
             continue
         ff = frasi_di(testo)
-        buone = []
-        for f in ff:
+        buone, ferme = [], []
+        for i, f in enumerate(ff):
             conti["frasi"] += 1
             if giudica(f):
                 buone.append(f)
             else:
+                ferme.append(i)
                 conti["nocive"] += 1
         tolte = len(ff) - len(buone)
+        verdetti[str(p["id"])] = {"firma": firma_testo(testo), "ferme": ferme, "fuori": bool(
+            tolte and (tolte >= PAGINA_NOCIVE or tolte >= PAGINA_QUOTA * max(1, len(ff)) and len(ff) > 1))}
         if not tolte:
             out.append(p)
         elif tolte >= PAGINA_NOCIVE or tolte >= PAGINA_QUOTA * max(1, len(ff)) and len(ff) > 1:
