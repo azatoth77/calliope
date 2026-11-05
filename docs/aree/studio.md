@@ -409,6 +409,23 @@ voce è ferma per definizione. **Whisper.** Una passata sola con `verbose_json`,
 su 18 audio (6 pezzi e 7 tentativi con Serena, 5 pezzi con giorgio senza l'intro e senza la parte a una voce): 0 parole diverse da `json`, solo gli spazi, e `confronta` dà lo stesso esito in 18 su 18, compresi i due «no». Un server che rifiuta `verbose_json` non è giù: si ricade su `json`, senza tratti, e manca solo
 questa misura; se non risponde nemmeno così è `whisper_giu`. Non provato: un server vero senza quel formato. Il pezzo aspetta la misura: spostarla dopo la ripartenza complicherebbe lo stato per risparmiare 0,5 %.
 
+### Il giro su una seconda Calliope (05/11)
+
+Col codice installato e MOSS adottato (`calliope motore moss adotta ~/prove-voci`, hash a posto), ma su **una seconda Calliope**, con dati suoi e una persona di fantasia: con `attiva` sulla vera si sarebbero preparate le verifiche vere. Copione del lettore vero, paola e Serena, Whisper dei turni attraverso un proxy che ne ha tagliato tre risposte per far scattare il ripiego. Due pezzi, 99 s.
+
+- **Sessioni**: due, vLLM fermo 632 s e 471 s, ogni volta ripartito con le stesse impostazioni, non in pausa. Fattore 1,27–1,34, torch 23,6 GB, RSS 5,9 GB.
+- **Ripiego**: il pezzo 1, con le tre trascrizioni tagliate, è andato a una voce, con la frase che lo dice. Il podcast è uscito «pronto» con 1 pezzo su 2 a una voce.
+- **Whisper con `verbose_json`, dal vivo**: il pezzo 2 è passato al primo tentativo. È un pezzo solo: la controprova larga resta quella dei 18 audio qui sopra.
+- **Agente durante la sessione**: la richiesta a voce ha fatto cedere MOSS («voce»); il lavoro ha detto che il motore stava ripartendo, ha aspettato vLLM ed è finito; a lavoro finito la sessione è ripresa da sola dal pezzo che mancava. È la modalità sviluppo: si è fermato al collaudo, come deve.
+- **Lettura dal satellite**: l'avviso è quello del file, una volta sola. La **prima** richiesta d'ascolto non è partita: il modello ha chiamato `studio_ascolta` e ha chiesto quale argomento; la seconda, uguale, è partita.
+- **Secondo scambio sospetto**: la misura in ombra segna il pezzo 2, voce A, 27,3–31 s, margine −0,78, su 8 tratti giudicati e 4 misti. Non è stato ascoltato. Con chimica-01 sono due casi su 7 pezzi misurati: troppo pochi per un tasso.
+- **Riscaldamento**: dopo ogni sessione nel registro la conversazione ripresa in cache (1,0–1,4 s).
+- **Ollama**: il ripristino di fine prova della e2e (`ripristina_ollama`) ha lasciato il servizio vero senza il modello della voce e ha ricaricato `llama-guard3:8b` senza il suo contesto (39 GB) per circa un minuto; rimesso a mano. D'ora in poi nessun ripristino di Ollama sul servizio vero. Il difetto della e2e resta da correggere.
+
+**Non provati**: «Calliope, basta» e «riprendi» sul podcast (nel giro il «basta» è arrivato a lettura finita, per colpa del tempo del banco, non del codice), il telefono, una notte vera con la fascia. La #387 resta aperta per questi.
+
+Dal 05/11 alle 13:09 `studio_podcast: attiva` sulla DGX, per scelta di Dario: tabella «Interruttori sulla DGX» di [setup-dgx](setup-dgx.md#interruttori-sulla-dgx).
+
 ### La revisione indipendente della PR #393 (05/11)
 
 Ha detto «da correggere» su quattordici punti, che qui sopra restano come erano solo dove non cambiano.

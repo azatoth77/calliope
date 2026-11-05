@@ -63,6 +63,7 @@ scritta nei documenti; «non scritta» dove nessun documento la dice.
 | `studio_carte_genera` | `attiva` | `ombra` | 05/11: dopo il criterio della PR #396 (#384), subito a chi studia | [studio](studio.md) |
 | `studio_domande_genera` | `attiva` | `ombra` | 05/11: dopo il criterio della PR #396 (#384) | [studio](studio.md) |
 | `studio_riassunto` | `attiva` | `ombra` | 05/11: criterio del banco, 0035 punto 57 (#386) | [studio](studio.md) |
+| `studio_podcast` | `attiva` (fascia di serie, 00:30–07:00; copia di prima in `calliope.locale.yaml.prima-podcast`) | `spenta` | 05/11, 13:09: chiesto da Dario dopo il giro su una seconda Calliope (#387); «basta», «riprendi» e una notte vera da provare | [studio](studio.md) |
 
 *Gli altri interruttori dello Studio* (31/10, tappa dell'epic #251; ricontrollati su
 `calliope/config.py`): sulla DGX non sono nel locale e valgono di serie. Accesi con lo Studio:
