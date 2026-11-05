@@ -272,9 +272,12 @@ FINESTRA_MAX = 3
 CONTESTO = 2
 
 
-_SILLABA_V = re.compile(r"(?<=[^\W\d_])-\n(?=[a-zà-ÿ])")
-# Un numero a inizio riga continua la frase, a meno che sia il numero di un elenco («2. Mazzini»)
-_A_CAPO_V = re.compile(r"(?<![.:;!?])\n(?=[a-zà-ÿ(«]|\d(?!\d*[.)]\s))")
+_SILLABA_V = re.compile(r"(?<=[^\W\d_])-\n([a-zà-ÿ]+)")
+# Un numero a inizio riga continua la frase, a meno che sia il numero di un elenco («2. Mazzini»). Solo dopo una riga
+# lunga: un titolo, una didascalia o una colonna stretta non sono la frase dopo (se no «Le mitosi la cellula…»)
+_A_CAPO_V = re.compile(r"(?m)^(.{25,}[^.:;!?\n])\n(?=[a-zà-ÿ(«]|\d(?!\d*[.)]\s))")
+# Le parole che si legano col trattino senza essere una sillaba: se la seconda parte è una di queste, il trattino resta
+PAROLE_COMPOSTE = frozenset("nord sud est ovest forma tipo base chiave limite".split())
 # Una riga lunga che non finisce con un segno, seguita da una maiuscola: è la stessa frase («… Giuseppe\nGaribaldi»)
 _A_CAPO_LUNGA_V = re.compile(r"(?m)^(.{35,}[^\W\d_,])\n(?=[A-ZÀ-Ý][a-zà-ÿ])")
 
@@ -283,8 +286,18 @@ def ricuci(testo) -> str:
     """Il testo di una pagina con gli a capo dell'OCR ricuciti: la parola spezzata dal trattino torna intera, la riga
     che continua si unisce a quella dopo. Il giro vero: pagine di libro a capo ogni 40 caratteri, e la frase d'appoggio
     non c'era mai. Gli appunti a righe corte e gli elenchi restano a righe."""
-    t = _SILLABA_V.sub("", str(testo or ""))
-    t = _A_CAPO_V.sub(" ", t)
+    t = str(testo or "")
+    intere = set(re.findall(r"(?<![-\w])(?<!-\n)[a-zà-ÿ]{4,}(?![-\w])", t))
+
+    def spezzata(m: re.Match) -> str:
+        # «est-\novest», «peso-\nforma»: una parola che sta da sola nella pagina, o una dell'elenco, non è una sillaba
+        w = m.group(1)
+        return f"-{w}" if w in PAROLE_COMPOSTE or w in intere else w
+    t = _SILLABA_V.sub(spezzata, t)
+    for _ in range(3):           # una frase può stare su più righe
+        t, k = _A_CAPO_V.subn(r"\1 ", t)
+        if not k:
+            break
     return _A_CAPO_LUNGA_V.sub(r"\1 ", t)
 
 

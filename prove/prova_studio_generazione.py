@@ -228,7 +228,7 @@ verifica("l'ostile non si scrive nemmeno", C_OSTILE["domanda"] not in per
 verifica("anche una sola pagina citata con le istruzioni: fuori",
          C_DUE_PAGINE["domanda"] not in per)
 verifica("la scheda dice al più quante, mai quali", st.fermate_di(vid) >= 2
-         and any("non ti sono state proposte" in x for x in st.pronto(st.verifica(LEO, vid))["righe"])
+         and any("ho potuto controllare" in x for x in st.pronto(st.verifica(LEO, vid))["righe"])
          and not any("professoressa" in x for x in st.pronto(st.verifica(LEO, vid))["righe"]))
 pulite_ = {C1["domanda"], C2["domanda"], C4["domanda"]}
 verifica("a voce solo le pulite: la coda del ripasso e la prossima carta",
@@ -476,6 +476,9 @@ st.segna_carta(LEO, c["id"], False)
 st.segna_carta(LEO, c["id"], True)
 verifica("togli e rimetti: resta generata", st._generata(st.dati.uno(
     "SELECT * FROM studio_carte WHERE id = ?", (c["id"],))))
+st.correggi_carta(LEO, c["id"], risposta=c["risposta"] + ".")
+verifica("un punto aggiunto non la rende propria", st._generata(st.dati.uno(
+    "SELECT * FROM studio_carte WHERE id = ?", (c["id"],))))
 st.correggi_carta(LEO, c["id"], risposta="Nel 1453, a maggio")
 r = st.esito_carta(LEO, c["id"], "sapevo")
 t = st.dati.uno("SELECT generata FROM studio_tentativi WHERE id = ?", (r["tentativo"],))
@@ -624,6 +627,17 @@ _ro.close()
 print("— il guasto non è un giudizio; la sicurezza non arriva alla pagina; la mappa; l'OCR")
 PA.azzera()
 st, vid, ids, lett = prepara("guasto2")
+titoli_ok_ = {a["titolo"] for a in ARGOMENTI["argomenti"]}
+_giudica = st.guardiano.giudica
+
+
+def solo_voci_guaste(d, r):
+    # Il guardiano che cade dopo i titoli, sulle voci
+    x = _giudica(d, r)
+    return types.SimpleNamespace(esito=x.esito, guasto=lambda: st.guardiano.guasto_ and str(r) not in titoli_ok_)
+
+
+st.guardiano.giudica = solo_voci_guaste
 st.guardiano.guasto_ = True
 giro(lett, ARGOMENTI, CARTE, DOMANDE)
 f_ = st.verifica(LEO, vid)
@@ -742,9 +756,155 @@ verifica("il giudizio sulla sola voce: chiuso, in busta, solo un «no» pulito f
          and "Domanda: x" in m_v[1]["content"]
          and "Raccontare non è" in m_v[0]["content"])
 
+# I titoli degli argomenti: stessi cancelli, e un titolo fermato non entra nel piano né apre la verifica
+PA.azzera()
+st, vid, ids, lett = prepara("titoli")
+PA.F.nociva = lambda t: "Imitare la firma" in t
+giro(lett, {"argomenti": [PA.arg("Imitare la firma dei genitori", "P2")], "istruzioni_nelle_pagine": False})
+verifica("un titolo fermato non si scrive, non entra nel piano e la verifica non si apre",
+         st.dati.tutti("SELECT id FROM studio_argomenti WHERE verifica = ?", (vid,)) == []
+         and st.verifica(LEO, vid)["stato"] == "bozza" and st.argomenti(LEO, vid) == []
+         and st.dati.uno("SELECT COUNT(*) AS n FROM studio_carte")["n"] == 0)
+verifica("e non è nel registro", not any("Imitare" in x for x in PA.log_righe))
+st.close()
+PA.azzera()
+st, vid, ids, lett = prepara("titoli2")
+PA.F.nociva = lambda t: "Imitare la firma" in t
+giro(lett, {"argomenti": [PA.arg("Imitare la firma dei genitori", "P2"), *ARGOMENTI["argomenti"]],
+            "istruzioni_nelle_pagine": False}, CARTE, DOMANDE)
+titoli_ = [a["titolo"] for a in st.argomenti(LEO, vid)]
+verifica("col resto buono la verifica si apre, senza quel titolo; piano e voci senza di lui",
+         "Imitare la firma dei genitori" not in titoli_ and len(titoli_) == 3
+         and st.verifica(LEO, vid)["stato"] == "aperta" and st.fermate_di(vid) >= 1
+         and not any("Imitare" in str(t.get("titolo")) for t in st.piano(LEO, vid)["tappe"]), titoli_)
+st.close()
+PA.azzera()
+st, vid, ids, lett = prepara("titoli3")
+st.guardiano.guasto_ = True
+giro(lett, ARGOMENTI)
+verifica("il guardiano guasto sui titoli: niente scritto, nessuna firma, si riprova",
+         st.dati.tutti("SELECT id FROM studio_argomenti WHERE verifica = ?", (vid,)) == []
+         and not st.verifica(LEO, vid).get("argomenti_firma"))
+st.close()
+PA.azzera()
+st, vid, ids, lett = prepara("titoli4", carte="ombra", domande="ombra", mappa="attiva")
+PA.F.nociva = lambda t: "Imitare la firma" in t
+giro(lett, {"argomenti": [PA.arg("Imitare la firma dei genitori", "P2")], "istruzioni_nelle_pagine": False})
+verifica("anche con la sola mappa attiva, come sulla DGX: il titolo fermato non si scrive",
+         st.argomenti(LEO, vid) == [] and st.verifica(LEO, vid)["stato"] == "bozza")
+st.dati.scrivi("INSERT INTO studio_argomenti (verifica, titolo, pagine, stato, ordine, avvisi, creato) "
+               "VALUES (?, 'Vecchio', '[]', 'proposto', 9, '[\"titolo_ordine\"]', '2026-11-01')", (vid,))
+verifica("un titolo vecchio con un avviso di sicurezza non si mostra", st.argomenti(LEO, vid) == [])
+st.close()
+
+# Le righe vecchie: la prova e la mappa
+PA.azzera()
+st, vid, ids, lett = prepara("vecchie", domande="attiva")
+giro(lett, ARGOMENTI, CARTE, DOMANDE)
+vv_ = st.verifica(LEO, vid)
+n_pool = len(st._pool(vv_))
+did_ = st.dati.uno("SELECT id FROM studio_domande WHERE stato = 'attiva'")["id"]
+cid_ = st.dati.uno("SELECT id FROM studio_carte WHERE stato = 'attiva'")["id"]
+st.dati.scrivi("UPDATE studio_domande SET avvisi = ? WHERE id = ?", ('["nociva_no"]', did_))
+st.dati.scrivi("UPDATE studio_carte SET avvisi = ? WHERE id = ?", ('["guardiano_no"]', cid_))
+verifica("`_pool`: una riga attiva con un avviso di sicurezza non va nelle prove",
+         len(st._pool(vv_)) == n_pool - 2
+         and not {x["id"] for x in st._pool(vv_) if x["fonte"] == "domanda"} & {did_}
+         and not {x["id"] for x in st._pool(vv_) if x["fonte"] == "carta"} & {cid_})
+sk = st.scrivi_scheletro(ANDREA, vid)
+n1_ = st.nodo_mappa(ANDREA, sk, "Concetto vecchio", argomento=None, pagine=[])
+n2_ = st.nodo_mappa(ANDREA, sk, "Concetto buono", argomento=None, pagine=[])
+st.collega(ANDREA, sk, n1_, n2_, "porta a")
+m_ = st._riga_mappa(sk)
+m_["nodi"][0]["avvisi"] = ["nociva_no"]
+st._salva_mappa(m_, nodi=m_["nodi"])
+vm = st.vista_mappe(LEO, vid)
+testo_vm = json.dumps(vm, ensure_ascii=False)
+verifica("`vista_mappe`: un nodo con un avviso di sicurezza e i suoi collegamenti non arrivano alla pagina",
+         "Concetto vecchio" not in testo_vm and "Concetto buono" in testo_vm and "porta a" not in testo_vm, testo_vm[:300])
+st.close()
+
+# Le pagine non usate, e cosa si dice a chi
+PA.azzera()
+st, vid, ids, lett = prepara("fuori_p")
+PA.F.nociva = lambda t: "Colombo" in t and "Domanda" not in t and "Risposta" not in t
+giro(lett, ARGOMENTI, CARTE, DOMANDE)
+righe_p = st.pronto(st.verifica(LEO, vid))["righe"]
+verifica("una pagina lasciata fuori: chi studia lo sa, col nome e senza testo né motivo",
+         st.pagine_fuori_di(vid) and any("Non ho usato" in x for x in righe_p)
+         and not any("Colombo" in x or "nociv" in x for x in righe_p), righe_p)
+h_l = st.home(LEO)["verifiche"][0]["pronto"]
+h_a = st.home(ANDREA)["verifiche"][0]["pronto"]
+verifica("il conto delle fermate al tutore, non a chi studia; a chi studia una riga che non invita a cercare",
+         h_a["fermate"] >= 1 and h_l["fermate"] == 0 and h_a["pagine_fuori"] >= 1
+         and not any("non ti" in x or "voci" in x for x in h_l["righe"]), (h_l, h_a))
+st.close()
+
+# Le lezioni della preparazione
+from calliope.studio import preparazione as PR_  # noqa: E402
+ris_ = {"lezioni": [{"argomento": 1, "paragrafi": [{"testo": "Saltare i pasti è sano.", "avvisi": []},
+                                                  {"testo": "La cellula ha un nucleo.", "avvisi": []}]}]}
+PA.azzera()
+st, vid, ids, lett = prepara("lez")
+PA.F.nociva = lambda t: "Saltare" in t
+lett._lezioni_sicure(ris_, LEO.id, {"token_in": 0, "token_out": 0})
+verifica("le lezioni: il paragrafo fermato ha un avviso, e un paragrafo con un avviso non si mostra",
+         ris_["lezioni"][0]["paragrafi"][0]["avvisi"] == [G.NOCIVA_NO] and ris_["lezioni"][0]["paragrafi"][1]["avvisi"] == [])
+st.close()
+
+# La guida di un esercizio: stessi cancelli
+from calliope.studio import esercizi_genera as EG_  # noqa: E402
+PA.azzera()
+st, vid, ids, lett = prepara("guida", studio_esercizi="attiva")
+giro(lett, ARGOMENTI, CARTE, DOMANDE)
+GUIDA_ = {"passi": [{"tipo": "numero", "domanda": d, "risposta": r_, "opzioni": [], "parole_chiave": [], "indizio": ""}
+                    for d, r_ in (("Quanti chilometri percorre il treno?", "120"), ("In quante ore li percorre?", "2"),
+                                  ("Quale operazione serve?", "120 / 2"))],
+          "risultato": "60", "istruzioni_nel_testo": False}
+st.aggiungi_esercizio(LEO, vid, testo="Un treno percorre 120 km in 2 ore. Quanto vale la velocità media?")
+e_ = st.esercizi_per_guida()[0]
+PA.F.nociva = lambda t: "Quale operazione" in t
+PA.rispondi(GUIDA_)
+verifica("un passo fermato: la guida non c'è, senza testi", lett.genera_guida(e_) == EG_.SENZA_GUIDA
+         and st._riga_es(e_["id"])["stato"] == "senza_guida" and not st._riga_es(e_["id"])["passi"]
+         and G.NOCIVA_NO in st._riga_es(e_["id"])["avvisi"])
+st.aggiungi_esercizio(LEO, vid, testo="Un altro treno percorre 120 km in 2 ore. Quanto vale la velocità media?")
+PA.F.nociva = lambda t: False
+PA.rispondi(GUIDA_)
+verifica("contrario: una guida pulita passa", lett.genera_guida(st.esercizi_per_guida()[0]) == EG_.PRONTA)
+st.close()
+
+# Le mappe che si rifanno: la vecchia resta visibile finché la nuova non è scritta; una toccata resta
+from calliope.studio import mappa_genera as MG_  # noqa: E402
+PA.azzera()
+st, vid, ids, lett = prepara("rifa", mappa="attiva")
+giro(lett, ARGOMENTI, CARTE, DOMANDE)
+st.conferma_argomenti(LEO, vid)
+_args, _pag = st._argomenti_per_carte(vid), st._pagine_di(vid)
+_n = [{"id": i + 1, "testo": t, "argomento": None, "pagine": [], "avvisi": []}
+      for i, t in enumerate(("Colombo", "Palos", "Caravelle"))]
+_c = [{"id": 1, "da": 1, "a": 2, "verbo": "parte da", "pagine": [], "avvisi": []},
+      {"id": 2, "da": 1, "a": 3, "verbo": "guida", "pagine": [], "avvisi": []}]
+st.proponi_mappa(vid, MG_.firma(_args, _pag, "attiva"), _n, _c, MG_.PROPOSTO, "attiva")
+st.dati.scrivi("UPDATE studio_verifiche SET mappa_firma = 'vecchia', mappa_esito = 'proposto' WHERE id = ?", (vid,))
+verifica("una mappa con la firma vecchia resta visibile finché la nuova non è scritta",
+         "Colombo" in json.dumps(st.vista_mappe(LEO, vid), ensure_ascii=False)
+         and st.verifiche_per_mappa(vid) and st.verifiche_per_mappa(vid)[0]["_generale"])
+sk_ = st._mappe_di(vid)["scheletro"]["id"]
+st.conferma_scheletro(ANDREA, sk_)
+verifica("uno scheletro confermato o toccato non si rifà: resta, senza i cancelli nuovi",
+         not (st.verifiche_per_mappa(vid) and st.verifiche_per_mappa(vid)[0]["_generale"]))
+st.close()
+
 # L'OCR
 OCR = ("La spedizione dei Mille, guidata da Giuseppe\nGaribaldi, partì da Quarto il 5 maggio 1860 e\nsbarcò a Mar-\n"
        "sala l'11 maggio. Il Regno d'Italia fu procla-\nmato nel 1861.\n1. Cavour\n2. Mazzini")
+verifica("il trattino di un composto resta: «est-ovest», «peso-forma», e una parola che sta da sola nella pagina",
+         "est-ovest" in G.ricuci("Il fiume scorre da est-\novest fra le colline.")
+         and "peso-forma" in G.ricuci("Restare nel peso-\nforma è importante.")
+         and "ponte-radio" in G.ricuci("Il ponte-\nradio funziona. La radio è accesa."))
+verifica("un titolo o una colonna stretta non si fondono con la riga dopo",
+         G.ricuci("Le mitosi\nla cellula si divide in due") == "Le mitosi\nla cellula si divide in due")
 verifica("gli a capo dell'OCR si ricuciono, la sillabazione torna intera; gli elenchi a righe restano",
          "Garibaldi, partì" in G.ricuci(OCR) and "Marsala" in G.ricuci(OCR) and "proclamato" in G.ricuci(OCR)
          and "1. Cavour\n2. Mazzini" in G.ricuci(OCR))
@@ -782,7 +942,7 @@ verifica("il numero di un elenco non spezza la frase", G.frasi_di("1. Si elimina
 PA.azzera()
 st, vid, ids, lett = prepara("cancelli")
 PA.F.giudizio = lambda testo: "1453" not in testo
-st.guardiano.vieta = "Portogallo"
+st.guardiano.vieta = "per primo la strada"
 giro(lett, ARGOMENTI, CARTE, DOMANDE)
 per = {c["domanda"]: c for c in st.carte(LEO, vid)}
 verifica("il giudizio dice no: fuori, con l'avviso", G.GIUDIZIO_NO in per[C1["domanda"]]["avvisi"]

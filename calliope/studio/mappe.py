@@ -215,7 +215,8 @@ class Mappe:
         for r in self.dati.tutti("SELECT id, tipo FROM studio_mappe WHERE verifica = ? AND "
                                  "stato != 'ombra' AND tipo != 'parte' ORDER BY id", (int(vid),)):
             out[r["tipo"]] = r["id"]
-        return {t: self._riga_mappa(i) for t, i in out.items()}
+        # Da qui leggono lo schermo, la voce e il riferimento: mai una voce fermata per sicurezza (#384)
+        return {t: self._senza_ferme(m) if (m := self._riga_mappa(i)) else m for t, i in out.items()}
 
     def _scheletro_confermato(self, vid) -> dict | None:
         s = self._mappe_di(vid).get(M.SCHELETRO)
@@ -1086,8 +1087,7 @@ class Mappe:
         """Quante voci di una mappa sono state fermate per sicurezza: solo un conto (`Studio.fermate_di`)."""
         with self.dati.lock:
             db = self.dati.db
-            self._scrivi_fermate(db, vid, "mappe", {chiave: int(n)} if n else {},
-                                 {int(chiave)} if chiave.isdecimal() else None)
+            self._scrivi_fermate(db, vid, "mappe", {chiave: int(n)} if n else {}, {chiave})
             db.commit()
 
     def _scheletro_toccabile(self, db, vid) -> tuple[bool, list[int]]:
@@ -1391,6 +1391,7 @@ class Mappe:
         def per_schermo(m, senza_testi=False):
             if m is None:
                 return None
+            m = self._senza_ferme(m)
             if senza_testi:
                 return {"id": m["id"], "tipo": m["tipo"], "stato": m["stato"],
                         "origine": m["origine"], "nascosta": True, "parole": [], "nodi": [],
@@ -1487,6 +1488,18 @@ class Mappe:
                             "testo": M.NODO_MAX, "verbo": M.VERBO_MAX},
                 "prova": not self.per_schermi()}
 
+    @staticmethod
+    def _senza_ferme(m: dict) -> dict:
+        """Una mappa senza le voci con un avviso di sicurezza (#384), coi collegamenti che ne dipendono: non vanno a nessuna
+        pagina, nemmeno da decidere. Anche una riga scritta prima dei cancelli."""
+        from .genera import SICUREZZA
+        sic = set(SICUREZZA)
+        via = {x["id"] for x in m.get("nodi") or [] if set(x.get("avvisi") or ()) & sic}
+        return {**m, "nodi": [x for x in m.get("nodi") or [] if x["id"] not in via],
+                "collegamenti": [c for c in m.get("collegamenti") or []
+                                 if c.get("da") not in via and c.get("a") not in via
+                                 and not set(c.get("avvisi") or ()) & sic]}
+
     def _parti_mostrabili(self, vid) -> list[tuple]:
         """[(numero, argomento, riga o None, pagine lette dell'argomento)] di ciò che può andare alla
         persona: niente con le parti spente o in ombra, solo gli argomenti del piano con una pagina
@@ -1500,7 +1513,8 @@ class Mappe:
         for i, a in enumerate(self._argomenti_per_carte(vid), 1):
             sue = {int(x) for x in a["pagine"]} & lette
             if sue:
-                out.append((i, a, righe.get(int(a["id"])), sue))
+                r = righe.get(int(a["id"]))
+                out.append((i, a, self._senza_ferme(r) if r else r, sue))
         return out
 
     def _parti_per_schermo(self, v, nascoste: bool, per_schermo) -> dict:

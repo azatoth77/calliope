@@ -970,6 +970,9 @@ class Lettore:
                     break
                 self._registra(f"esercizio {eid}: guida in tondo fino a max_tokens"
                                + (", la richiedo" if not prova else ""))
+            # I passi sono testo generato che arriva a chi studia: una voce fermata e la guida non c'è (#384)
+            ferma = grezzi is not None and self.studio.generazione_attiva() and self._guida_ferma(
+                grezzi, testo, riga.get("persona"), m)
         except Ceduta:
             m["cedute"] += 1
             return "ceduta"
@@ -992,6 +995,10 @@ class Lettore:
             m["rotte"] += 1
             self.studio.scrivi_guida(eid, firma, [], None, ["guida_illeggibile"], EG.ROTTO)
             return "rotto"
+        if ferma:
+            self._registra(f"esercizio {eid}: guida fermata per sicurezza")
+            self.studio.scrivi_guida(eid, firma, [], None, [ferma], EG.SENZA_GUIDA)
+            return EG.SENZA_GUIDA
         passi, risultato, avvisi = EG.proposte(grezzi, testo)
         m["scartati"] += max(0, len(grezzi.get("passi") or ()) - len(passi))
         m["indizi_tolti"] += sum(EG.INDIZIO_TOLTO in p["avvisi"] for p in passi)
@@ -1279,10 +1286,17 @@ class Lettore:
         vid = int(v["id"])
         pagine = v["_pagine"]
         firma = A.firma(pagine)
-        rif = A.riferimenti(pagine)
         t0 = time.monotonic()
         grezzi = None
+        # I titoli vanno a chi studia, nel piano e nelle mappe delle parti: stessi cancelli delle voci (#384), con una
+        # generazione qualsiasi su «attiva», compresa la sola mappa
+        cancelli = self.studio.generazione_attiva()
+        fermati = 0
         try:
+            if cancelli:
+                v = self._terreno(v, m)
+                pagine = v["_pagine"]
+            rif = A.riferimenti(pagine)
             for prova in range(2):
                 r = self._chiedi_corpo(A.corpo(self.modello, v, rif))
                 m["token_in"] += int(r.get("prompt") or 0)
@@ -1297,6 +1311,11 @@ class Lettore:
                     break
                 self._registra(f"verifica {vid}: argomenti in tondo fino a max_tokens"
                                + (", li richiedo" if not prova else ""))
+            proposte = None
+            if grezzi is not None:
+                proposte = A.proposte(grezzi, rif)
+                if cancelli:
+                    proposte, fermati = self._titoli_sicuri(proposte, v["persona"], m)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: argomenti, ceduto il passo a un lavoro dell'agente")
@@ -1316,11 +1335,10 @@ class Lettore:
             self._attendi_errore()
             return "errore"
         s = time.monotonic() - t0
-        if grezzi is None:
-            proposte, esito = [], A.ROTTO
-        else:
-            proposte, esito = A.proposte(grezzi, rif), A.PROPOSTI
+        proposte, esito = ([], A.ROTTO) if proposte is None else (proposte, A.PROPOSTI)
         n = self.studio.proponi_argomenti(vid, firma, proposte, esito)
+        if n is not None and cancelli:
+            self.studio.segna_fermate_mappa(vid, "argomenti", fermati)
         if n is None:
             m["cambiate"] += 1
             self._registra(f"verifica {vid}: pagine cambiate durante gli argomenti, li richiedo")
@@ -1512,7 +1530,45 @@ class Lettore:
         if conti["nocive"]:
             self._registra(f"verifica {v['id']}: {conti['nocive']} frasi nocive su {conti['frasi']}, "
                            f"{conti['pagine_fuori']} pagine fuori dal terreno")
+        prima = {int(p["id"]): p for p in v["_pagine"]}
+        self.studio.segna_pagine_fuori(v["id"], [
+            int(p["id"]) for p in pagine
+            if p is not prima[int(p["id"])] and p.get("testo") == prima[int(p["id"])].get("testo")])
         return {**v, "_pagine": pagine}
+
+    def _guida_ferma(self, grezzi: dict, testo: str, persona, m: dict) -> str | None:
+        """Il primo avviso dei cancelli sulla guida di un esercizio, o None."""
+        from . import esercizi_genera as EG
+        passi, risultato, _ = EG.proposte(grezzi, testo)
+        for t in [risultato] + [x for p in passi for x in (p.get("testo"), p.get("indizio"))]:
+            ferma = self._sicura(t, persona, m) if t else None
+            if ferma:
+                return ferma
+        return None
+
+    def _lezioni_sicure(self, ris: dict, persona, m: dict):
+        """I paragrafi delle lezioni, con «attiva»: quelli fermati hanno un avviso, e un paragrafo con un avviso non si
+        mostra (punto 53). Il testo resta sul disco del lettore solo così, mai a una pagina."""
+        for lz in ris["lezioni"]:
+            for p in lz["paragrafi"]:
+                ferma = None if p["avvisi"] else self._sicura(p["testo"], persona, m)
+                if ferma:
+                    p["avvisi"].append(ferma)
+        # Il nome del materiale è una parola presa dalla pagina e si mostra nell'attività
+        val = ris.get("valori") or {}
+        val["misure"] = [x for x in val.get("misure") or [] if not self._sicura(x["materiale"], persona, m)]
+
+    def _titoli_sicuri(self, proposte: list[dict], persona, m: dict) -> tuple[list[dict], int]:
+        """I titoli degli argomenti che possono arrivare a chi studia: un titolo da una pagina con le istruzioni, un ordine
+        o fermato dai cancelli non si scrive, quindi non entra nel piano e non apre la verifica. (i titoli, quanti fermati)."""
+        from . import argomenti as A
+        tieni, ferme = [], 0
+        for a in proposte:
+            if set(a["avvisi"]) & set(A.SICUREZZA) or self._sicura(a["titolo"], persona, m):
+                ferme += 1
+            else:
+                tieni.append(a)
+        return tieni, ferme
 
     def _sicura(self, testo: str, persona, m: dict) -> str | None:
         """I due cancelli di sicurezza su un testo generato: il giudizio sulla sola voce, senza la pagina
@@ -1795,15 +1851,22 @@ class Lettore:
             "reazioni": 0, "misure": 0, "scartati": 0, "secondi": 0.0, "token_in": 0,
             "token_out": 0})
         vid, modo, firma = int(v["id"]), v["_modo"], v["_firma"]
-        rif = A.riferimenti(v["_pagine"])
         arif = G.argomenti_rif(v["_argomenti"])
         t0 = time.monotonic()
-        grezzo = None
+        grezzo = ris_sicuro = None
         try:
+            # La lezione è testo generato che arriva a chi studia: stessi cancelli di sicurezza (#384)
+            if modo == PR.ATTIVA:
+                v = self._terreno(v, m)
+            rif = A.riferimenti(v["_pagine"])
             grezzo, finita = self._chiedi_lista(
                 lambda ar: PR.corpo(self.modello, v, rif, ar), arif, m, vid, "preparazione",
                 PR.leggi, PR.parziale,
                 lambda voci: _lezioni_pulite(PR.valida(voci, rif, arif)))
+            if grezzo is not None:
+                ris_sicuro = PR.valida(grezzo, rif, arif)
+                if modo == PR.ATTIVA:
+                    self._lezioni_sicure(ris_sicuro, v["persona"], m)
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: preparazione, ceduto il passo a un lavoro "
@@ -1825,7 +1888,7 @@ class Lettore:
             if grezzo is None:
                 ris, esito = None, G.ROTTO
             else:
-                ris, esito = PR.valida(grezzo, rif, arif), PR.PRONTE
+                ris, esito = ris_sicuro, PR.PRONTE
             n = self.studio.proponi_preparazione(vid, firma, ris, esito, modo)
         except Exception as e:  # noqa: BLE001
             return self._errore_generazione("preparazione", vid, e, lambda: (

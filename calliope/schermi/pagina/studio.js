@@ -869,6 +869,9 @@
       sez.append(nodo("p", "studio-h-riga", "Fra carte e domande ne ho preparate " + Number(v.pronto.generate) +
         " dalle pagine: le vedi in «Le carte» e «Le domande» qui sotto, e puoi togliere quelle che non vanno."));
     }
+    if (v.pronto && (Number(v.pronto.fermate) || 0)) {
+      sez.append(nodo("p", "studio-h-riga", "I controlli automatici ne hanno fermate " + Number(v.pronto.fermate) + ": non le vede nessuno."));
+    }
     const aperta = tut && tut.vid === v.id;
     const t = nodo("div", "studio-h-tasti");
     t.append(tastoTutore(aperta ? "Chiudi la vista del tutore" : "Vista del tutore", aperta ? "chiudi" : "apri",

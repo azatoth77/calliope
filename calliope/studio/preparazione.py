@@ -607,11 +607,23 @@ class Preparazioni:
             in_corso = in_corso or da_fare
         if in_corso and getattr(getattr(self, "lettore", None), "in_attesa", None):
             righe.append("La DGX adesso è occupata: continuo appena è libera.")
+        # A chi studia una riga che non invita a cercare e non allarma; il conto al tutore (`_pronto_per`) (#384)
         if fermate:
-            righe.append("Una voce non ti è stata proposta." if fermate == 1
-                         else f"{fermate} voci non ti sono state proposte.")
+            righe.append("Ho preparato ciò che ho potuto controllare sulle pagine.")
+        fuori = self.pagine_fuori_di(v["id"])
+        if fuori:
+            righe.append(("Non ho usato " + ("la pagina " if len(fuori) == 1 else "le pagine ")
+                          + ", ".join(fuori) + " per preparare il materiale."))
         return {"in_corso": in_corso, "righe": righe, "generate": generate, "da_guardare": guardare,
-                "fermate": fermate}
+                "fermate": fermate, "pagine_fuori": len(fuori)}
+
+    def _pronto_per(self, v: dict, chi) -> dict | None:
+        """`pronto` per la scheda: quante voci sono state fermate lo sa solo chi non è la persona minorenne che studia."""
+        from .. import minori
+        p = self.pronto(v)
+        if p is not None and minori.e_minore(chi) and getattr(chi, "id", None) == v["persona"]:
+            p = {**p, "fermate": 0}
+        return p
 
     def scoperti_di(self, vid) -> dict:
         r = self.dati.uno("SELECT scoperti FROM studio_verifiche WHERE id = ?", (int(vid),))

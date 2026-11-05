@@ -822,6 +822,10 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
         for a in out:
             a["pagine"] = D.da_j(a["pagine"])
             a["avvisi"] = D.da_j(a["avvisi"])
+        if self.generazione_attiva():
+            # Un titolo proposto da prima, con un avviso di sicurezza: non si scrive più, e uno rimasto non si mostra (#384)
+            from .argomenti import SICUREZZA
+            out = [a for a in out if not (a["stato"] == "proposto" and set(a["avvisi"]) & set(SICUREZZA))]
         return out
 
     def segna_argomento(self, chi, aid, tenuto: bool):
@@ -1424,7 +1428,9 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
         aid = c["argomento"] if argomento is self._UGUALE else self._argomento_di(v, argomento)
         nuova = r != c["risposta"]
         # L'origine cambia solo se cambia il testo (#384): se no un «Correggi» senza niente varrebbe un premio
-        cambia = int(nuova or d != c["domanda"])
+        # Una virgola o un punto non cambiano il testo: il premio segue le parole
+        from .argomenti import chiave as _ch
+        cambia = int(_ch(r) != _ch(c["risposta"]) or _ch(d) != _ch(c["domanda"]))
         adesso = self.adesso().isoformat(timespec="seconds")
         self.dati.scrivi(
             "UPDATE studio_carte SET domanda = ?, risposta = ?, chiusa = ?, argomento = ?, "
@@ -1498,6 +1504,39 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
         from .argomenti import DA_DECIDERE
         av = a["avvisi"]
         return not set(av if isinstance(av, list) else D.da_j(av)) & set(DA_DECIDERE)
+
+    def generazione_attiva(self) -> bool:
+        """Una generazione qualsiasi su «attiva», compresa la sola mappa: i titoli degli argomenti arrivano a chi studia
+        anche lì, quindi passano dagli stessi cancelli. La verifica si apre da sola solo con `generazione_automatica`."""
+        from . import mappa_genera as MG
+        return self.generazione_automatica() or MG.modo(self.cfg) == MG.ATTIVA
+
+    def segna_pagine_fuori(self, vid, ids: list[int]):
+        """Le pagine lasciate fuori dal terreno dell'ultimo giro: solo gli id."""
+        with self.dati.lock:
+            r = self.dati.uno("SELECT firme_parti FROM studio_verifiche WHERE id = ?", (int(vid),))
+            try:
+                t = json.loads((r or {}).get("firme_parti") or "{}")
+            except ValueError:
+                t = {}
+            t = t if isinstance(t, dict) else {}
+            if t.get("pagine_fuori") != sorted(ids):
+                t["pagine_fuori"] = sorted(ids)
+                self.dati.scrivi("UPDATE studio_verifiche SET firme_parti = ? WHERE id = ?", (json.dumps(t), int(vid)))
+
+    def pagine_fuori_di(self, vid) -> list[str]:
+        """I nomi delle pagine non usate per preparare il materiale («p. 12», «foto 3»): mai testo né motivo."""
+        r = self.dati.uno("SELECT firme_parti FROM studio_verifiche WHERE id = ?", (int(vid),))
+        try:
+            ids = set(json.loads((r or {}).get("firme_parti") or "{}").get("pagine_fuori") or ())
+        except (ValueError, AttributeError):
+            return []
+        out = []
+        for i, p in enumerate(self._pagine_di(vid), 1):
+            if int(p["id"]) in ids:
+                n = P.numero_leggibile(p["numero"])
+                out.append(f"p. {n}" if n else f"foto {i}")
+        return out
 
     def guardiano_manca(self, persona) -> bool:
         """Per un minore senza guardiano le voci generate non partono nemmeno: nessuna potrebbe passare."""
@@ -1576,8 +1615,8 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
             tutte = {}
         tutte = tutte if isinstance(tutte, dict) else {}
         tot = tutte.setdefault("fermate", {})
-        mie = {} if rifatti is None else {k: n for k, n in (tot.get(cosa) or {}).items()
-                                          if not (str(k).isdecimal() and int(k) in rifatti)}
+        via = None if rifatti is None else {str(x) for x in rifatti}
+        mie = {} if via is None else {k: n for k, n in (tot.get(cosa) or {}).items() if str(k) not in via}
         mie.update(ferme)
         tot[cosa] = mie
         db.execute("UPDATE studio_verifiche SET firme_parti = ? WHERE id = ?", (json.dumps(tutte), int(vid)))
@@ -2449,7 +2488,7 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
                 "lettura": self.lettura(chi, vid),
                 # Cosa è pronto dei materiali generati, senza toccare niente (#384): righe scritte
                 # dal codice, solo conti. None senza la generazione a lettura finita
-                "pronto": self.pronto(v),
+                "pronto": self._pronto_per(v, chi),
                 "argomenti": {"tenuti": sum(self._nel_piano(a) for a in args),
                               "proposti": sum(a["stato"] == "proposto" for a in args),
                               "da_decidere": decidere},

@@ -344,6 +344,8 @@ class Prove:
         out = []
         for r in self.dati.tutti("SELECT * FROM studio_domande WHERE verifica = ? AND stato = "
                                  "'attiva' ORDER BY id", (v["id"],)):
+            if self._voce_ferma(r):
+                continue
             d = self._riga_domanda(r)
             if d["argomento"] in nel_piano:
                 out.append({"fonte": "domanda", "id": d["id"], "argomento": d["argomento"],
@@ -353,7 +355,7 @@ class Prove:
         libera = self._libera_aperta(v["id"])
         for c in self.dati.tutti("SELECT * FROM studio_carte WHERE verifica = ? AND stato = "
                                  "'attiva' ORDER BY id", (v["id"],)):
-            if c["argomento"] not in nel_piano or (libera and c["origine"] == "mappa"):
+            if c["argomento"] not in nel_piano or (libera and c["origine"] == "mappa") or self._voce_ferma(c):
                 continue
             out.append({"fonte": "carta", "id": c["id"], "argomento": c["argomento"],
                         "tipo": RS.CARTA if c["chiusa"] else "aperta", "testo": c["domanda"],

@@ -292,6 +292,40 @@ def misura_corpus(corpus, giudice, guardiano, uscita: Path, nome: str) -> dict:
     return out
 
 
+def titoli_generati(corpus, cli, giudice, guardiano, uscita: Path, nome: str) -> dict:
+    """Il generatore vero dei titoli degli argomenti, su tutte le pagine di un corpus, senza segnarle: quanti titoli
+    arrivano a chi studia dalle ostili, quanti fermati sulle sane. Come `Lettore.estrai_argomenti`: il terreno, poi
+    il filtro del codice e i due cancelli. Su disco i titoli che contano (fantasia): tenuti dalle ostili, fermati dalle sane;
+    un materiale ostile con un titolo tenuto va riletto, perché un titolo sano su una pagina ostile è giusto."""
+    mat = corpus.materiali()
+    out = {"ostili": conti_vuoti(), "sani": conti_vuoti(), "materiali_ostili": 0, "ostili_aperti": 0, "sani_aperti": 0,
+           "materiali_sani": 0}
+    with open(uscita / f"{nome}.jsonl", "w", encoding="utf-8") as ft:
+        for vid in sorted(mat):
+            ver = mat[vid]
+            pag = terreno_di(pagine_di(ver, segnate=False), giudice)
+            rif = A.riferimenti(pag)
+            v = {"materia": ver["materia"], "livello": ver.get("classe"), "data": ver["data_verifica"],
+                 "argomento": ver.get("argomento")}
+            corpo = A.corpo("x", v, rif)
+            r = cli.chat(corpo["messages"], max_token=corpo["options"]["num_predict"], schema=corpo.get("format"),
+                         temperatura=0, presence=0)
+            chi = "ostili" if vid in corpus.OSTILI_PAGINE else "sani"
+            tenuti = 0
+            for a in A.proposte(A.leggi(r.get("testo", "")) or [], rif):
+                e = ("sicurezza:" + a["avvisi"][0] if set(a["avvisi"]) & set(A.SICUREZZA)
+                     else "nociva" if not giudice.nocivo(a["titolo"])
+                     else "guardiano" if guardiano is not None and not guardiano(a["titolo"]) else "tenuta")
+                conta(out[chi], e)
+                tenuti += e == "tenuta"
+                if (e == "tenuta") == (chi == "ostili"):
+                    ft.write(json.dumps({"chi": chi, "esito": e, "verifica": vid, "titolo": a["titolo"]},
+                                        ensure_ascii=False) + "\n")
+            out["materiali_" + ("ostili" if chi == "ostili" else "sani")] += 1
+            out[chi + "_aperti"] += bool(tenuti)
+    return out
+
+
 def generatore_ostili(corpus, cli, giudice, guardiano, uscita: Path, nome: str) -> dict:
     """Il generatore vero sulle pagine ostili di un corpus: carte, domande e mappe, senza segnare le pagine. Quante
     voci arrivano a chi studia. I testi delle tenute su disco (fantasia)."""
@@ -469,6 +503,7 @@ def main(argv=None):
     ap.add_argument("--corpus", default="", help="moduli di scene scritte a parte, separati da virgola (nella cartella --scene)")
     ap.add_argument("--scene", type=Path, help="la cartella delle scene")
     ap.add_argument("--generatore", default="", help="moduli di --corpus su cui far girare anche il generatore")
+    ap.add_argument("--titoli", default="", help="moduli di --scene: solo il generatore dei titoli degli argomenti")
     a = ap.parse_args(argv)
 
     def log(m):
@@ -487,6 +522,15 @@ def main(argv=None):
         ap.error("serve --uscita o --vere")
     uscita = a.uscita.expanduser()
     uscita.mkdir(parents=True, exist_ok=True)
+    if a.titoli:
+        import importlib
+        sys.path.insert(0, str(a.scene.expanduser()))
+        ris = {}
+        for nome in a.titoli.split(","):
+            ris[nome] = titoli_generati(importlib.import_module(nome), cli, giudice, guardiano, uscita, "titoli_" + nome)
+            log(f"[titoli] {nome}: {json.dumps(ris[nome], ensure_ascii=False)}")
+        (uscita / "titoli.json").write_text(json.dumps(ris, ensure_ascii=False, indent=1), encoding="utf-8")
+        return 0
     if a.corpus:
         import importlib
         sys.path.insert(0, str(a.scene.expanduser()))
