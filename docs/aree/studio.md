@@ -165,7 +165,7 @@ nel locale, una riga per chiave, e un riavvio. **Niente migrazioni a mano**: il 
 le righe in ombra (le 23 carte vere comprese) vanno via e si rigenerano col codice di adesso; una richiesta per tipo. Si
 torna indietro rimettendo «ombra»: le generate mai toccate vanno via, quelle toccate restano. `studio_preparazione` è a
 parte e **questo banco non la misura**: le lezioni restano com'erano misurate il 04/11 (#383), e la scelta di accenderla è
-separata. Di serie resta tutto in ombra.
+separata. Di serie resta tutto in ombra; cosa è acceso sulla DGX: [Interruttori sulla DGX](setup-dgx.md#interruttori-sulla-dgx).
 
 **Cosa cambia per chi studia.** Fotografa, e sulla scheda vede «Sto preparando» con ciò che manca, che si aggiorna da solo
 ogni 15 secondi a home ferma, poi «Cosa è pronto»: carte e domande con i conti, le mappe, quante sono da guardare. Ogni voce
@@ -232,6 +232,8 @@ Prove: `prova_studio_generazione.py` (nuova, a secco, ogni punto coi contrari), 
 - **Le lezioni nel banco del revisore**: la tabella è `studio_preparazioni` (tipo `lezione`); `studio_lezioni` non esiste, e in `prove/manuali/` nessuno cerca quel nome.
 
 **Ciò che il terreno ferma non si dice (05/11, terza revisione).** Il giudizio resta su disco per pagina (`firme_parti.terreno`: firma del testo e numeri delle frasi, mai il testo), con un passo suo nel giro (`passo_terreno`) perché una verifica già generata lo abbia. `Studio.pagine_per_chi_studia` è l'unico posto: il copione del ripasso («fammi ascoltare», a voce, la lettura sullo schermo e il file scaricato passano tutti da `_copione`), `studio_pagina_leggi` e `testo_per_modello` non hanno la frase fermata né la pagina fuori. Se restano meno di 40 caratteri la pagina non si legge. La voce dice «Non ho usato la pagina p. N» senza testo né motivo. **Strada sicura**: una pagina non giudicata (lettura finita da poco, giudizio guasto, testo cambiato) non si dice, «non è ancora pronta». Interrogazione e prove usano solo le voci già generate; la libreria è materiale nostro; nessuna pagina mostra il testo letto (restano la foto per chi l'ha scattata e le etichette). **Resta aperto**: con tutte le generazioni spente o in ombra il terreno non gira e il ripasso legge le pagine com'era (la DGX ha le mappe attive); l'enunciato di un esercizio si mostra senza terreno; il riassunto ha il giudizio per frase, non il terreno; una foto mandata come messaggio nella conversazione non passa di qui.
+
+La firma del giudizio ha una versione (`voce_sicura.VERSIONE_TERRENO`): i numeri delle frasi valgono con la divisione con cui sono stati scritti, e una prova tiene ferma la divisione. Se sale, le pagine non si dicono finché il lettore non le rigiudica.
 
 **Le mappe che si rifanno** (`prova_studio_generazione`, a secco, non sulla copia vera): la vecchia resta visibile finché la nuova non è scritta; uno scheletro confermato o toccato non si rifà e resta com'è, senza i cancelli nuovi tranne il filtro delle voci con un avviso. Le parti si rifanno sempre.
 

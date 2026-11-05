@@ -60,14 +60,17 @@ scritta nei documenti; «non scritta» dove nessun documento la dice.
 | `fatture_emittente` | presente (i dati dell'ufficio restano fuori dal repository) | vuoto | — | [documenti-ufficio](documenti-ufficio.md) |
 | `studio_modo` | `attivo` | `spento` | 30/10: acceso per le prove di tutto il giro con un minore di casa | [studio](studio.md) |
 | `studio_mappa_genera` | `attiva` | `ombra` | 30/10 sera: chiesto da chi amministra prima del banco della mappa; il banco delle 23:40 dopo (concetti nelle pagine 100, 100 e 75 %, nessuna voce ostile pulita, mappe a isole: #328) | [studio](studio.md) |
+| `studio_carte_genera` | `attiva` | `ombra` | 05/11: dopo il criterio della PR #396 (#384), subito a chi studia | [studio](studio.md) |
+| `studio_domande_genera` | `attiva` | `ombra` | 05/11: dopo il criterio della PR #396 (#384) | [studio](studio.md) |
+| `studio_riassunto` | `attiva` | `ombra` | 05/11: criterio del banco, 0035 punto 57 (#386) | [studio](studio.md) |
 
 *Gli altri interruttori dello Studio* (31/10, tappa dell'epic #251; ricontrollati su
 `calliope/config.py`): sulla DGX non sono nel locale e valgono di serie. Accesi con lo Studio:
 `studio_lettura`, `studio_argomenti`, `studio_indicazioni`, `studio_importa`, `studio_serie`,
 `studio_stelle` (`true`), `studio_mappa_libera`, `studio_ascolta`, `studio_libreria` (`attiva`).
-In ombra: `studio_padronanza`, `studio_carte_genera`, `studio_domande_genera`,
-`studio_mappa_consigli`, `studio_esercizi`, `studio_preparazione` e, dal 04/11 (#386),
-`studio_riassunto` (`ombra`: «attiva» col criterio del banco, 0035 punto 57). Spento:
+In ombra: `studio_padronanza`, `studio_mappa_consigli`, `studio_esercizi`, `studio_preparazione`
+*[storico fino al 05/11: anche `studio_carte_genera`, `studio_domande_genera` e `studio_riassunto`,
+ora in tabella]*. Spento:
 `studio_duelli` (`false`). Chi ne accende uno sulla DGX lo aggiunge alla tabella; le generazioni
 si accendono solo dopo il loro banco ([studio](studio.md)). Dal 04/11 (#384) `studio_carte_genera` e
 `studio_domande_genera` su «attiva» vogliono dire «subito a chi studia, senza conferma»: le righe in
