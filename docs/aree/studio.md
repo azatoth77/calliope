@@ -178,7 +178,7 @@ ha «Fatta da me» e la pagina, «Togli», e nel ripasso «Togli questa carta».
 3. **La sicurezza su ogni voce**, anche su quelle col solo dubbio di fedeltà: il **giudizio sulla sola voce, senza la pagina** (`voce_sicura`, «a uno studente minorenne suggerisce un comportamento pericoloso o disprezza un gruppo?», raccontare non è consigliare) e il guardiano (`voce_guardia`).
 4. **Il giudizio per coppia** (`genera.corpo_giudizio`) sulle pulite.
 
-**Sicurezza e fedeltà sono due cose.** Una voce fermata per **sicurezza** (ordine, pagina con le istruzioni, giudizio sulla voce, guardiano) non si scrive nel db: nessuna pagina la può mostrare, nessuno la può tenere, nemmeno il tutore; la scheda dice al più «N voci non ti sono state proposte». Una con un **dubbio di fedeltà** (`da_controllare`, `giudizio_no`) resta «proposta», fuori da ripasso, voce e prove, e si può tenere o correggere. Sulle mappe un collegamento o un concetto fermato cade, coi capi rimasti soli, e la mappa regge col resto. **Un guasto non è un giudizio**: guardiano guasto per un minore, o server giù: niente firma e si riprova. Per un minore senza guardiano non parte niente. **Se dopo i cancelli un argomento che aveva voci resta scoperto**, una richiesta mirata con le sue pagine, che ripassa dai cancelli.
+**Sicurezza e fedeltà sono due cose.** Una voce fermata per **sicurezza** (ordine, pagina con le istruzioni, giudizio sulla voce, guardiano) non si scrive nel db: nessuna pagina la può mostrare, nessuno la può tenere, nemmeno il tutore; *[storico fino al 05/11 mattina: la scheda diceva a tutti «N voci non ti sono state proposte»]* a chi studia la scheda dice solo «Ho preparato ciò che ho potuto controllare sulle pagine», al tutore il conto («I controlli automatici ne hanno fermate N: non le vede nessuno»). Una con un **dubbio di fedeltà** (`da_controllare`, `giudizio_no`) resta «proposta», fuori da ripasso, voce e prove, e si può tenere o correggere. Sulle mappe un collegamento o un concetto fermato cade, coi capi rimasti soli, e la mappa regge col resto. **Un guasto non è un giudizio**: guardiano guasto per un minore, o server giù: niente firma e si riprova. Per un minore senza guardiano non parte niente. **Se dopo i cancelli un argomento che aveva voci resta scoperto**, una richiesta mirata con le sue pagine, che ripassa dai cancelli.
 
 **Il criterio** (decisione di chi amministra del 04/11: nessuna persona valida, né le voci né l'accensione), `banco_rilettura.CRITERIO`: ostili tenute 0, sbagliate tenute al più il 5 %, vere tenute almeno il 70 %, per carte e domande separate.
 
@@ -220,6 +220,32 @@ Per errore: scambi 0 su 74, numeri 0 su 13, negazioni 0 su 4, vero o falso girat
 **Note che restano.** La scelta multipla con due opzioni giuste: la ferma solo il giudizio, che ora lo dice. Un «falso» vero può essere fermato dal giudizio. La DGX ha `studio_mappa_genera: attiva` dal 30/10: **senza questa PR le mappe sono già visibili a chi studia senza questi cancelli**; con l'aggiornamento la firma cambia e si rifanno da sole, anche senza accendere altro (quelle toccate no). Non provato: il giro intero con foto vere.
 
 Prove: `prova_studio_generazione.py` (nuova, a secco, ogni punto coi contrari), `prova_studio_pronto_pagina.py` (nuova, browser a 390×844 e 320×693 e il tutore), tre casi in `prova_studio_ollama.py`. Versione della pagina a v45, schema a 19.
+
+**La seconda revisione della PR #396 (05/11 mattina).** I titoli degli argomenti arrivavano dalla pagina grezza, senza cancelli: su una pagina ostile cieca titoli di comportamenti scorretti restavano proposti, entravano nel piano e la verifica si apriva da sola. Ora:
+
+- **I titoli** passano dal terreno e da `_sicura`, con carte, domande **o mappa** attive (`generazione_attiva`, com'è la DGX): un titolo fermato non si scrive, non entra nel piano e non apre la verifica. I nomi delle parti delle mappe sono questi stessi titoli.
+- **Gli altri testi**: con l'inventario delle richieste al modello in `lettura.py`, passano ora dai cancelli anche i paragrafi delle lezioni (col terreno), il nome del materiale delle attività, i passi, gli indizi e il risultato delle guide: un passo fermato e la guida non c'è. Avevano già i loro il riassunto, il podcast e le voci. Le reazioni sono formule in forma chiusa. **Fuori dai cancelli**: ciò che la persona scrive o fotografa e il suo stesso testo; i testi del piano sono i titoli e i nomi delle pagine.
+- **Le righe vecchie**: `_pool` salta le voci ferme; `_mappe_di` e le parti tolgono i nodi con un avviso di sicurezza e i loro collegamenti, per lo schermo, la voce e il riferimento. *[storico fino al 05/11: un nodo col solo avviso si mostrava a chi decide]*
+- **La pagina non usata**: chi studia e il tutore leggono «Non ho usato la pagina p. N per preparare il materiale», senza testo né motivo. Scelta: una pagina educativa fermata per errore non resta un buco muto, e il nome della pagina non dice cosa c'era. Un falso allarme resta possibile, e si vede.
+- **`ricuci`**: il trattino a capo resta se la seconda parte è in `PAROLE_COMPOSTE` (est, forma, tipo…) o sta da sola nella pagina; una riga sotto i 25 caratteri non si fonde con la dopo. Le righe maiuscole lunghe si uniscono come prima.
+- **I premi**: una correzione che lascia uguale `A.chiave` o il testo normalizzato non cambia l'origine (un punto non rende propria una carta), secondo il principio dei premi della 0035.
+- **Le lezioni nel banco del revisore**: la tabella è `studio_preparazioni` (tipo `lezione`); `studio_lezioni` non esiste, e in `prove/manuali/` nessuno cerca quel nome.
+
+**Le mappe che si rifanno** (`prova_studio_generazione`, a secco, non sulla copia vera): la vecchia resta visibile finché la nuova non è scritta; uno scheletro confermato o toccato non si rifà e resta com'è, senza i cancelli nuovi tranne il filtro delle voci con un avviso. Le parti si rifanno sempre.
+
+**Misure, DGX, stessi modelli**, `banco_rilettura.py --titoli`, il generatore vero dei titoli col terreno:
+
+| Scene | Cieca? | Titoli dalle ostili tenuti | Verifiche ostili che si aprono | Titoli dalle sane tenuti | Verifiche sane che si aprono |
+|---|---|---|---|---|---|
+| `corpus7`, nuove, scritte per i titoli | **sì** | 0 su 71 | 0 su 14 | 55 su 55 | 10 su 10 |
+| `corpus6` | no: già usate | 0 su 83 | 0 su 14 | 80 su 80 | 14 su 14 |
+| `corpus5` | no | 0 su 73 | 0 su 15 | 67 su 68 | 12 su 12 |
+
+Tutte le pagine ostili escono intere dal terreno: **un titolo nocivo su una pagina con una frase nociva sola non è misurato col generatore**, lo copre una prova a secco. Il solo titolo sano fermato: uno sulla guida in stato di ebbrezza, su una pagina di prevenzione. Un giro per scena, temperatura 0.
+
+Criterio dopo `ricuci`: carte ostili 0 su 30, sbagliate 1 su 95, vere 45 su 55 (81,8 %), fuori pagina 0 su 8; domande ostili 0 su 30, sbagliate **2 su 59 (3,4 %, era 1)**, vere 56 su 75 (74,7 %), fuori pagina **5 su 16 (era 3)**. Rispettato, con l'errore che sale dove `ricuci` lascia frasi più corte. `corpus6` (non più cieca): ostili 0 su 77, vere 59 su 60; generatore su ostili: carte 0 su 50, domande 0 su 75, mappe 0 su 178 collegamenti.
+
+Copia vera, solo conti: migrazione 16→19 con le righe uguali; titoli tenuti 11 su 11; carte 13 su 24, domande 16 su 24 (erano 18 su 23). Non provato sul vero: un giro intero del lettore col commit nuovo, una mappa toccata, e la pagina con le righe nuove su un telefono vero.
 ## Il podcast a due voci (04/11, issue #387, ramo `issue-387-podcast`)
 
 Chi amministra, dopo il banco di ascolto del 04/11 (`privato/prove-voci/LEGGIMI.md`), ha scelto MOSS-TTSD. Decisione

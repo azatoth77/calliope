@@ -1102,7 +1102,7 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
 
 ## La generazione a lettura finita (#384, 04/11)
 
-59. **Dopo la scansione lo Studio prepara da solo, e chi studia trova pronto** (decisione di chi amministra del
+59. *(05/11: anche i titoli, le lezioni e le guide passano dai cancelli; chi studia sa quale pagina non è stata usata, il tutore anche il conto delle voci fermate; dettagli in `docs/aree/studio.md`.)* **Dopo la scansione lo Studio prepara da solo, e chi studia trova pronto** (decisione di chi amministra del
     04/11; rivede i punti 34, 36 e 41). Le regole di fondo non cambiano: il testo generato è un dato in busta,
     l'esito lo decide il codice, ogni voce ha la sua pagina.
     - **Nessuna chiave nuova.** `studio_carte_genera` e `studio_domande_genera`
