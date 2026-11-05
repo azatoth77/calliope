@@ -829,8 +829,8 @@ class Podcast:
             return None
         cp = S.Copione("tutto")
         cp.fonte, cp.cartella, cp.firma_file = "podcast", cartella, a["firma"]
-        if per_voce:
-            cp.voci.append(S.Voce(S.CALLIOPE, S.PODCAST_INTRO, parti[0]["n"], cp.nuovo_par()))
+        # A voce l'avviso non si dice mai dal vivo, con la voce che Calliope ha in quel momento (che può non essere ammessa, anche
+        # cambiata a voce): è quello in testa ai file. Si salta da tutti, e `ascolto_prepara` lo lascia alla prima parte ascoltata
         for p in parti:
             cp.voci.append(S.Voce(S.AUDIO, f"podcast {a['firma']} parte {p['n']}", p["n"], cp.nuovo_par(),
                                   secondi=float(p["secondi"]), file=str(cartella / S.nome_file(a["firma"], p["n"])),

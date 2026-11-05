@@ -385,6 +385,7 @@ giudicano; con giorgio 0 su 59, sugli stessi copioni): non è un blocco, resta u
 - **La firma comprende le voci.** Sono gli SHA-256 dei due modelli: con un'altra voce il podcast pronto scade, il copione si rifà e i pezzi vecchi non si
   mescolano ai nuovi. Una voce **tolta** tiene l'ultima impronta vista (`podcast_riferimenti/impronte.json`): il podcast già fatto resta, e il giro dice `voce_mancante`. La voce
   di Calliope (`piper_voice`) non è nella firma: dice l'avviso e i pezzi a una voce, composti tutti insieme alla fine, e cambiarla non deve far riscrivere ogni copione.
+- **L'avviso a voce.** Mai dal vivo: con la voce di quel momento poteva uscire una voce esclusa, anche cambiata a voce o con «riprendi» (revisione della PR #401). È quello nel file della prima parte ascoltata, anche riprendendo; dagli altri file si salta.
 - **Lo schermo.** Senza una voce usabile `podcast_nota` dice «adesso non si può preparare», non «si prepara da solo». E il modello non scrive copioni che nessuno può dire.
 - **Le voci per contenuto.** L'elenco dei nomi lasciava passare `giorgio.onnx`, un'altra qualità e le copie. Ora `hash_ammessi` accetta gli SHA-256 del catalogo: `voce_paola` e `voce_serena_alta` per le
   due voci. La voce di Calliope (`piper_voice`) non ferma il podcast: dice solo l'avviso e i pezzi a una voce, e fermare tutto per una voce sana come aurora non valeva. Se non è del catalogo quel poco lo dice la voce A,
