@@ -1134,8 +1134,6 @@ class Ascolti:
                 # Ogni inizio di ascolto dice che può sbagliare, anche una ripresa a metà parte
                 if cp.fonte == "riassunto" and cp.voci[pos].testo != RIASSUNTO_INTRO:
                     intro.append(RIASSUNTO_INTRO)
-                elif cp.fonte == "podcast" and cp.voci[pos].testo != PODCAST_INTRO:
-                    intro.append(PODCAST_INTRO)
                 cosa, numero = s["cosa"], s["numero"]
             else:
                 v = self._ascoltabile(chi, vid)
@@ -1158,6 +1156,9 @@ class Ascolti:
                     self._misure_riassunto()["detti"] += 1
             for k, n in cp.saltate.items():
                 m["saltate"][k] = m["saltate"].get(k, 0) + n
+            # Ogni inizio di ascolto dice che può sbagliare, anche «riprendi»: l'avviso del podcast è quello del file
+            if cp.fonte == "podcast" and pos < len(cp.voci):
+                cp.voci[pos].salta = 0.0
         resto = cp.voci[pos:]
         return {"chi": str(getattr(chi, "id", "")), "verifica": v["id"], "cosa": cosa,
                 "numero": numero, "firma": cp.firma, "voci": cp.voci, "da": pos, "intro": intro,

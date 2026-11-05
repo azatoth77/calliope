@@ -829,15 +829,12 @@ class Podcast:
             return None
         cp = S.Copione("tutto")
         cp.fonte, cp.cartella, cp.firma_file = "podcast", cartella, a["firma"]
-        # A voce l'avviso lo dice Calliope, solo se la sua voce è ammessa: altrimenti resta quello in testa alla prima parte, già
-        # detto dalla voce A, e dalle altre si salta
-        calliope_ammessa = voce_di_servizio(self.cfg)[1]
-        if per_voce and calliope_ammessa:
-            cp.voci.append(S.Voce(S.CALLIOPE, S.PODCAST_INTRO, parti[0]["n"], cp.nuovo_par()))
-        for i, p in enumerate(parti):
+        # A voce l'avviso non si dice mai dal vivo, con la voce che Calliope ha in quel momento (che può non essere ammessa, anche
+        # cambiata a voce): è quello in testa ai file. Si salta da tutti, e `ascolto_prepara` lo lascia alla prima parte ascoltata
+        for p in parti:
             cp.voci.append(S.Voce(S.AUDIO, f"podcast {a['firma']} parte {p['n']}", p["n"], cp.nuovo_par(),
                                   secondi=float(p["secondi"]), file=str(cartella / S.nome_file(a["firma"], p["n"])),
-                                  salta=float(p.get("intro_s") or 0) if per_voce and (calliope_ammessa or i > 0) else 0.0))
+                                  salta=float(p.get("intro_s") or 0) if per_voce else 0.0))
             cp.parti.append({"n": p["n"], "tipo": "podcast", "argomento": None, "titolo": "", "pagine": [],
                              "frasi": p.get("frasi"), "secondi": int(round(p["secondi"])),
                              "argomenti": list(p.get("argomenti") or ()), "una_voce": bool(p.get("una_voce")),
