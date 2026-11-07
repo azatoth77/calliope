@@ -290,8 +290,7 @@ def scoperte(ris: dict, M: C.Materiale, rif: list, arif: list, piano_: dict) -> 
     pagine = _pagine_utili(rif, arif, M)
     frazione, cod = copertura_pagine(ris, M, pagine)
     c = ris["conti"]
-    corta = c["durata_s"] < c["obiettivo_s"] * DURATA_SCOPERTE
-    if frazione >= COPERTURA_PAGINA_MIN and not corta:
+    if frazione >= COPERTURA_PAGINA_MIN:
         return None
     if frazione >= COPERTURA_PAGINA_MIN or not cod:
         citate = {x for s in ris["sezioni"] for f in s["frasi"] for x in f["fonti"]}
@@ -584,7 +583,10 @@ def giudica(ris: dict) -> str:
     c = ris["conti"]
     if not ris["sezioni"]:
         return SCARSO if c["proposte"] else G.VUOTO
-    persa = 1 - c["car_tenuti"] / max(1, c["car_proposti"] - c["car_durata"])
+    proposto_pulito = c["car_proposti"] - c["car_durata"]
+    # Le frasi delle richieste mirate entrano in car_tenuti ma non in car_proposti:
+    # se il totale tenuto supera le proposte, la perdita è zero, non negativa (#402).
+    persa = max(0.0, 1 - c["car_tenuti"] / max(1, proposto_pulito))
     if persa > PERSA_MAX or c["copertura"] < COPERTURA_MIN:
         return SCARSO
     if c["durata_s"] < c["obiettivo_s"] * DURATA_MIN_FRAZIONE:
