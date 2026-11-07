@@ -359,7 +359,7 @@ def modelli_ollama(url: str = "http://127.0.0.1:11434") -> dict[str, dict]:
         r = httpx.get(url + "/api/ps", timeout=5).json()
     except Exception:  # noqa: BLE001
         return {}
-    return {m["name"]: {"ctx": m.get("context_length"),
+    return {m["name"]: {"ctx": int(m.get("context_length")) or None,
                         "sempre": str(m.get("expires_at", ""))[:4] > "2100"}
             for m in r.get("models") or []}
 
@@ -369,10 +369,15 @@ def ripristina_ollama(prima: dict, log=print, url: str = "http://127.0.0.1:11434
     3 e l'archivio delle conversazioni dell'istanza caricava qwen3-embedding, che scacciava il
     guardiano della Calliope vera): toglie quelli caricati dopo, ricarica quelli scacciati con
     lo stesso contesto e lo stesso keep_alive. Solo carico e scarico di modelli, nessuna
-    configurazione."""
+    configurazione.
+
+    404 (07/11): se un modello era già residente prima, è ancora resident ma ha keep_alive o
+    num_ctx diversi, lo si scarica e ricarica per ripristinarlo esattamente come prima.
+    """
     import httpx
     fatti = []
     ora = modelli_ollama(url)
+    # Scarica i modelli caricati dalla prova (non c'erano prima)
     for nome in ora:
         if nome not in prima:
             try:
@@ -381,11 +386,26 @@ def ripristina_ollama(prima: dict, log=print, url: str = "http://127.0.0.1:11434
                 fatti.append(f"scaricato {nome}")
             except Exception as e:  # noqa: BLE001
                 fatti.append(f"{nome}: non scaricato ({e})")
+    # Ricarica i modelli che c'erano prima ma sono stati scacciati
+    # Oppure (404) che ci sono ancora ma con settings diversi
     for nome, m in prima.items():
+        ctx = m.get("ctx")
         if nome in ora:
-            continue
+            # (404) Settings diversi? Scarica e ricarica per ripristinare esattamente come prima.
+            o_ctx = ora[nome].get("ctx")
+            o_sempre = ora[nome].get("sempre", m["sempre"])
+            if o_ctx == ctx and o_sempre == m["sempre"]:
+                continue  # impostazioni uguali, non serve toccare
+            # Settings diversi: scarica e ricarica
+            log(f"[ollama] {nome}: settings diversi (ctx {o_ctx}->{ctx}, "
+                f"sempre {o_sempre}->{m['sempre']}): ricarico")
+            try:
+                httpx.post(url + "/api/generate", json={"model": nome, "keep_alive": 0},
+                           timeout=60)
+            except Exception as e:  # noqa: BLE001
+                fatti.append(f"{nome}: non scaricato per ricarico ({e})")
         corpo = {"model": nome, "keep_alive": "-1m" if m["sempre"] else "30m",
-                 "options": {"num_ctx": m["ctx"]} if m.get("ctx") else {}}
+                 "options": {"num_ctx": ctx} if ctx else {}}
         try:
             if "embed" in nome:
                 httpx.post(url + "/api/embed", json={**corpo, "input": "x"}, timeout=300)

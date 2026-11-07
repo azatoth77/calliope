@@ -351,9 +351,11 @@ def _verifica(svc, ctx, chi, verifica=None, materia=None, anche_passate=False) -
             return svc.verifica(chi, int(vid))
         except (NonTrovata, NonPermesso, TypeError, ValueError):
             # Un id inventato dal modello con la materia detta (02/11, #376; 03/11, #383, «verifica
-            # 1» prima che ci fosse una verifica): vale la materia. Il tocco no: il suo id è quello
-            if b or not materia:
-                return None
+            # 1» prima che ci fosse una verifica): vale la materia. Il tocco no: il suo id è quello.
+            # Se un id è stato fornito ma non esiste, non cade mai sulla verifica «più vicina»
+            # (#390): il modello non può inventare un numero e avere l'effetto di archiviare
+            # l'ultima verifica aperta per materia, anche se la materia bata.
+            return None
     tutte = svc.home(chi)["verifiche"]
     if anche_passate:
         # Le sue e, da tutore, quelle dei suoi minori (revisione della PR #321, nota 3), con gli

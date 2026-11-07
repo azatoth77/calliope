@@ -614,6 +614,29 @@ class Preparazioni:
         if fuori:
             righe.append(("Non ho usato " + ("la pagina " if len(fuori) == 1 else "le pagine ")
                           + ", ".join(fuori) + " per preparare il materiale."))
+        # Riassunto: le pagine non coperte dal copione (#392)
+        rs = self.riassunto_stato(v["id"])
+        if rs.get("esito") == "pronto" and rs.get("conti"):
+            coperte = set()
+            try:
+                c = json.loads(rs["conti"])
+                # Le pagine coperte le trovo dal contenuto, non dai conti
+                riga = self._riga_riassunto(v["id"])
+                if riga and riga.get("contenuto"):
+                    for s in json.loads(riga["contenuto"]):
+                        for f in s.get("frasi", []):
+                            for p in f.get("pagine", []):
+                                coperte.add(int(p))
+            except (ValueError, TypeError):
+                pass
+            tutte = {int(p["id"]) for p in self._pagine_di(v["id"])}
+            non_coperte = tutte - coperte
+            if non_coperte:
+                from . import argomenti as A
+                numeri = {p["id"]: A.numero_pagina(p["numero"]) for p in self._pagine_di(v["id"])}
+                nomi = [str(numeri.get(pid, f"P{pid}")) for pid in sorted(non_coperte)]
+                righe.append(("Non è entrata nel riassunto " + ("la pagina " if len(nomi) == 1 else "le pagine ")
+                              + ", ".join(nomi)))
         return {"in_corso": in_corso, "righe": righe, "generate": generate, "da_guardare": guardare,
                 "fermate": fermate, "pagine_fuori": len(fuori)}
 
